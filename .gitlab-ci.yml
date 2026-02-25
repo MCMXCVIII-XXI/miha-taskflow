@@ -3,7 +3,4 @@ include:
 
 stages:
   - quality
-  - test
-  - build
-  - deploy
 
