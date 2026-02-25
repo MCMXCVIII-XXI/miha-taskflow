@@ -23,5 +23,6 @@ jobs:
         run: |
           uv sync 
           cd backend
+          uv tool install ruff
           uv run ruff format . --check
           uv run ruff check . --fix
