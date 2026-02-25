@@ -17,7 +17,7 @@ jobs:
         uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          cache-dependency-path: backend/pyproject.toml
+          cache-dependency-path: pyproject.toml
 
       - name: Lint & Format
         run: |
