@@ -1,0 +1,9 @@
+include:
+  - local: 'cicd/lint-and-formatting.yml'
+
+stages:
+  - quality
+  - test
+  - build
+  - deploy
+

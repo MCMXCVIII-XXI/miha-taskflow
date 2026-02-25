@@ -1,0 +1,25 @@
+stages:
+  - quality
+
+workflow:
+  auto_cancel:
+    on_new_commit: interruptible
+
+quality:
+  stage: quality
+  image: python:3.12-alpine 
+  interruptible: true
+  before_script:
+    - apk add --no-cache uv 
+    - uv cache dir
+  script:
+    - cd backend
+    - uv tool run ruff@latest format . --check
+    - uv tool run ruff@latest check . --output-format=gitlab_codequality
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - ~/.cache/uv/
+  artifacts:
+    reports:
+      codequality: backend/ruff-report.json
