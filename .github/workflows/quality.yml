@@ -19,9 +19,4 @@ jobs:
           enable-cache: true
 
       - name: Lint & Format
-        run: |
-          uv sync 
-          cd backend
-          uv tool install ruff
-          uv run ruff format . --check
-          uv run ruff check . --fix
+        run: make lint
