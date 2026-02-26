@@ -13,19 +13,26 @@ logs-backend:
 	docker-compose logs -f backend
 
 test-backend:
-	cd backend && uv sync --group test && uv run pytest
+	cd backend
+	uv sync --group test
+	uv run pytest
 
 lint:
-	uv sync --group lint && ruff check . && ruff format --check . && mypy .
+	uv sync --group lint
+	uv run ruff check .
+	uv run ruff format --check .
+	uv run mypy .
 
 test:
 	make test-backend
 
 dev:
-	make lint && make test-backend
+	make lint
+	make test-backend
 
 clean:
-	docker-compose down -v && docker system prune -f
+	docker-compose down -v
+	docker system prune -f
 
 down:
 	docker-compose down -v
