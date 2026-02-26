@@ -13,23 +13,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Set up Python
-        uses: actions/setup-python@v5  # v5!
-        with:
-          python-version: '3.12'
-
-      - name: Cache uv
-        uses: actions/cache@v5
-        with:
-          key: uv-${{ hashFiles('backend/pyproject.toml') }}
-          path: ~/.cache/uv/
-          restore-keys: uv-
-
       - name: Install uv
-        run: pipx install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
       - name: Lint & Format
-        run: |
-          cd backend
-          uv tool run ruff@latest format . --check
-          uv tool run ruff@latest check . --fix
+        run: make lint
