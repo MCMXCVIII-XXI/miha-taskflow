@@ -19,4 +19,4 @@ jobs:
           enable-cache: true
 
       - name: Lint & Format
-        run: cd backend/ && make lint
+        run: make lint
