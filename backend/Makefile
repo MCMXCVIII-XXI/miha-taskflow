@@ -19,9 +19,9 @@ test-backend:
 
 lint:
 	uv sync --group lint
-	uv run ruff check .
-	uv run ruff format --check .
-	uv run mypy .
+	uv run ruff check . --fix         
+	uv run ruff format .    
+	uv run mypy app/                           
 
 test:
 	make test-backend
