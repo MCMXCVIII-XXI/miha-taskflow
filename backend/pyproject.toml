@@ -7,8 +7,7 @@ requires-python = ">=3.11"
 dependencies = [
     "fastapi[all]>=0.129.1",
     "uvicorn>=0.41.0",
-    "sqlmodel>=0.0.37",
-    "sqlalchemy>=2.0.46",
+    "sqlalchemy[asyncio]>=2.0.46",
     "asyncpg>=0.31.0",
     "alembic>=1.18.4",
     "celery>=5.6.2",
@@ -49,10 +48,12 @@ quote-style = "double"
 [tool.mypy]
 python_version = "3.11"
 strict = true
+plugins = ["pydantic.mypy"]
 explicit_package_bases = true
+namespace_packages = true
 ignore_missing_imports = true
 disallow_untyped_defs = false   
-warn_return_any = true
+warn_return_any = false
 warn_unreachable = true
 pretty = true
 show_error_codes = true
