@@ -1,7 +1,7 @@
 from collections.abc import Sequence
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel.ext.asyncio.session import AsyncSession
+from sqlalchemy.ext.asyncio.session import AsyncSession
 
 from app.crud.task_logic import (
     create_task,
@@ -11,35 +11,37 @@ from app.crud.task_logic import (
     update_task,
 )
 from app.db.session import async_session
-from app.models.task import Task, TaskCreate, TaskUpdate
+from app.schemas.task_schemas import TaskBase, TaskCreate, TaskUpdate
 
 router = APIRouter(prefix="/tasks", tags=["tasks"])
 
 
-@router.post("/", response_model=Task, status_code=status.HTTP_201_CREATED)
-async def create_new_task(task_in: TaskCreate, db: AsyncSession = Depends(async_session)) -> Task:
+@router.post("/", response_model=TaskBase, status_code=status.HTTP_201_CREATED)
+async def create_new_task(
+    task_in: TaskCreate, db: AsyncSession = Depends(async_session)
+) -> TaskBase:
     return await create_task(db, task_in)
 
 
-@router.get("/", response_model=list[Task], status_code=status.HTTP_200_OK)
+@router.get("/", response_model=list[TaskBase], status_code=status.HTTP_200_OK)
 async def read_tasks(
     skip: int = 0, limit: int = 100, db: AsyncSession = Depends(async_session)
-) -> Sequence[Task]:
+) -> Sequence[TaskBase]:
     return await get_tasks(db, skip, limit)
 
 
-@router.get("/{task_id}", response_model=Task, status_code=status.HTTP_200_OK)
-async def read_task(task_id: int, db: AsyncSession = Depends(async_session)) -> Task:
+@router.get("/{task_id}", response_model=TaskBase, status_code=status.HTTP_200_OK)
+async def read_task(task_id: int, db: AsyncSession = Depends(async_session)) -> TaskBase:
     task = await get_task(db, task_id)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
 
 
-@router.put("/{task_id}", response_model=Task, status_code=status.HTTP_200_OK)
+@router.put("/{task_id}", response_model=TaskBase, status_code=status.HTTP_200_OK)
 async def update_task_endpoint(
     task_id: int, task_in: TaskUpdate, db: AsyncSession = Depends(async_session)
-) -> Task:
+) -> TaskBase:
     task = await update_task(db, task_id, task_in)
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
