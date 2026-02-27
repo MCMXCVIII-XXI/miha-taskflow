@@ -105,3 +105,6 @@ celerybeat.pid
 coverage/
 .cover/
 
+# Lint & Format
+.ruff_cache/
+.mypy_cache/
