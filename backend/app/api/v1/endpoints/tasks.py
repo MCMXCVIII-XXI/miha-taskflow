@@ -1,5 +1,3 @@
-from collections.abc import Sequence
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio.session import AsyncSession
 
@@ -26,7 +24,7 @@ async def create_new_task(
 @router.get("/", response_model=list[TaskBase], status_code=status.HTTP_200_OK)
 async def read_tasks(
     skip: int = 0, limit: int = 100, db: AsyncSession = Depends(async_session)
-) -> Sequence[TaskBase]:
+) -> list[TaskBase]:
     return await get_tasks(db, skip, limit)
 
 
