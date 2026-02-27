@@ -1,10 +1,12 @@
+from collections.abc import Sequence
+
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
-from sqlalchemy import select
-from typing import List
-from backend.app.models.task import Task, TaskCreate, TaskUpdate
+
+from app.models.task import Task, TaskCreate, TaskUpdate
 
 
-async def get_tasks(db: AsyncSession, skip: int = 0, limit: int = 100) -> List[Task]:
+async def get_tasks(db: AsyncSession, skip: int = 0, limit: int = 100) -> Sequence[Task]:
     result = await db.scalars(select(Task).offset(skip).limit(limit))
     return result.all()
 
@@ -21,9 +23,7 @@ async def create_task(db: AsyncSession, task_in: TaskCreate) -> Task:
     return task
 
 
-async def update_task(
-    db: AsyncSession, task_id: int, task_in: TaskUpdate
-) -> Task | None:
+async def update_task(db: AsyncSession, task_id: int, task_in: TaskUpdate) -> Task | None:
     task = await db.get(Task, task_id)
     if not task:
         return None
