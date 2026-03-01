@@ -6,6 +6,9 @@ dev-up:
 backend-up:
 	docker-compose up backend -d --build
 
+db-up:
+	docker-compose up db -d --build
+
 logs:
 	docker-compose logs -f
 
