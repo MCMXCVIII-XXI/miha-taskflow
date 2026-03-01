@@ -9,7 +9,7 @@ dependencies = [
     "uvicorn>=0.41.0",
     "sqlalchemy[asyncio]>=2.0.46",
     "asyncpg>=0.31.0",
-    "alembic>=1.18.4",
+    "alembic[asyncio]>=1.18.4",
     "celery>=5.6.2",
     "redis>=7.2.0",
     "prometheus-client>=0.24.1",
@@ -44,6 +44,7 @@ exclude = [".venv", ".git", "__pycache__", ".mypy_cache", ".pytest_cache", ".vsc
 [tool.ruff.format]
 indent-style = "space"
 quote-style = "double"
+
 
 [tool.mypy]
 python_version = "3.11"
