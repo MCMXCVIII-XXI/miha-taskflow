@@ -22,8 +22,18 @@ test-backend:
 
 lint:
 	uv sync --group lint
+	uv run ruff check .
+	uv run mypy app/
+
+format:
+	uv sync --group lint  
+	uv run ruff format .
 	uv run ruff check . --fix         
+
+lint-all:
+	uv sync --group lint
 	uv run ruff format .    
+	uv run ruff check . --fix
 	uv run mypy app/                           
 
 test:
@@ -47,9 +57,12 @@ help:
 	@echo "Miha-TaskFlow:"
 	@echo "  make dev-up       Docker всё"
 	@echo "  make backend-up   Только backend"
+	@echo "  make db-up        Только db"
 	@echo "  make test-backend pytest backend"
 	@echo "  make logs-backend Логи backend"
-	@echo "  make lint         Ruff + mypy"
+	@echo "  make lint         Ruff check + mypy"
+	@echo "  make format       Ruff format + mypy"
+	@echo "  make lint-all     Ruff check + mypy + Ruff format"
 	@echo "  make dev          lint + test"
 	@echo "  make down         Остановить"
 	@echo "  make clean        Всё чисто"
