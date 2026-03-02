@@ -33,10 +33,11 @@ class UserCreate(BaseModel):
     """
     User registration.
     """
-    username: str = Field(..., description="User username")
-    email: EmailStr = Field(..., description="User email")
-    password: SecretStr = Field(..., description="User password")
-    
+
+    username: str = Field(description="User username")
+    email: EmailStr = Field(description="User email")
+    password: SecretStr = Field(description="User password")
+
     @field_validator("username", mode="before")
     @classmethod
     def validate_username(cls, v: str) -> str:
@@ -45,7 +46,7 @@ class UserCreate(BaseModel):
         if not re.fullmatch(r"^[A-Za-z0-9][A-Za-z0-9_\-.]*[A-Za-z0-9]$", v):
             raise ValueError("Username: letters, digits, _, -, . (no start/end)")
         return v
-    
+
     @field_validator("password", mode="before")
     @classmethod
     def validate_password(cls, v: str) -> str:
@@ -60,6 +61,6 @@ class UserUpdate(BaseModel):
     """
     Update user profile.
     """
+
     username: str | None = Field(None, description="User username")
     email: EmailStr | None = Field(None, description="User email")
-
