@@ -24,6 +24,10 @@ class TaskBase(BaseModel):
     description: str | None = Field(None, description="Task description")
     status: TaskStatus = Field(TaskStatus.PENDING, description="Task status")
     priority: TaskPriority = Field(TaskPriority.MEDIUM, description="Task priority")
+    group_id: int | None = Field(None, description="Group ID")
+    group_name: str | None = Field(None, description="Group name")
+    owner_id: int = Field(description="Task owner ID")
+    username: str = Field(description="Task owner username")
     created_at: datetime = Field(description="Task creation date")
     
     model_config = ConfigDict(from_attributes=True)
@@ -34,7 +38,8 @@ class TaskCreate(BaseModel):
     title: str = Field(..., max_length=200, description="Task title")
     description: str | None = Field(None, max_length=1000, description="Task description")
     priority: TaskPriority = Field(TaskPriority.MEDIUM, description="Task priority")
-    
+    group_id: int | None = Field(None, description="Put task in group")
+
     @field_validator("title", mode="before")
     @classmethod
     def validate_title(cls, v: str) -> str:

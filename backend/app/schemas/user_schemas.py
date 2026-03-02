@@ -23,7 +23,9 @@ class UserBase(BaseModel):
     role: UserRole = Field(description="User role")
     created_at: datetime = Field(description="User creation date")
     updated_at: datetime | None = Field(None, description="User update date")
-    
+    admin_group_ids: list[int] = Field(default_factory=list, description="Admin")
+    member_group_ids: list[int] = Field(default_factory=list, description="Participant")
+
     model_config = ConfigDict(from_attributes=True)
 
 
