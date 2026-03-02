@@ -64,7 +64,7 @@ pnp-*.yaml
 .dockerignore
 
 # Dependencies
-uv.lock
+
 pnpm-lock.yaml
 yarn.lock
 package-lock.json
