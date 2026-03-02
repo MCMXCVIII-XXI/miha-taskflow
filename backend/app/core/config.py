@@ -1,16 +1,14 @@
-import os
-
-from pydantic_settings import BaseSettings
+from pydantic import PostgresDsn
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    DATABASE_URL: str = "postgresql+asyncpg://user:pass@localhost:5432/taskflow"
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
+    DATABASE_URL: PostgresDsn
+    echo: bool = False
+    echo_pool: bool = False
+    pool_size: int = 5
+    max_overflow: int = 10
+    model_config = SettingsConfigDict(env_file=".env")
 
-    @property
-    def async_database_url(self) -> str:
-        return self.DATABASE_URL.replace("localhost", os.getenv("DB_HOST", "localhost"))
 
-    class Config:
-        env_file = "backend/.env"
+settings = Settings()
