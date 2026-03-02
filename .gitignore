@@ -70,7 +70,6 @@ yarn.lock
 package-lock.json
 
 # Backend specific
-backend/uv.lock
 backend/.env
 backend/__pycache__/
 backend/venv/
