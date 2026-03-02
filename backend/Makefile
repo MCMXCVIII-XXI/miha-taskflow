@@ -28,14 +28,8 @@ lint:
 format:
 	uv sync --group lint  
 	uv run ruff format .
-	uv run ruff check . --fix         
-
-lint-all:
-	uv sync --group lint
-	uv run ruff format .    
 	uv run ruff check . --fix
-	uv run mypy app/                           
-
+                         
 test:
 	make test-backend
 
