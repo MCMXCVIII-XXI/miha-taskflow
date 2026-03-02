@@ -27,10 +27,14 @@ def upgrade() -> None:
         sa.Column("title", sa.String(length=200), nullable=False),
         sa.Column("description", sa.String(length=1000), nullable=True),
         sa.Column(
-            "status", sa.Enum("PENDING", "IN_PROGRESS", "DONE", name="taskstatus"), nullable=False
+            "status",
+            sa.Enum("PENDING", "IN_PROGRESS", "DONE", name="taskstatus"),
+            nullable=False,
         ),
         sa.Column(
-            "priority", sa.Enum("LOW", "MEDIUM", "HIGH", name="taskpriority"), nullable=False
+            "priority",
+            sa.Enum("LOW", "MEDIUM", "HIGH", name="taskpriority"),
+            nullable=False,
         ),
         sa.Column(
             "created_at",
