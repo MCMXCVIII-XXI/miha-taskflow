@@ -5,8 +5,12 @@ from app.models import Task
 from app.schemas.task_schemas import TaskBase, TaskCreate, TaskUpdate
 
 
-async def get_tasks(db: AsyncSession, skip: int = 0, limit: int = 100) -> list[TaskBase]:
-    result = await db.scalars(select(Task).where(Task.is_active).offset(skip).limit(limit))
+async def get_tasks(
+    db: AsyncSession, skip: int = 0, limit: int = 100
+) -> list[TaskBase]:
+    result = await db.scalars(
+        select(Task).where(Task.is_active).offset(skip).limit(limit)
+    )
     tasks = result.all()
     return [TaskBase.model_validate(task) for task in tasks]
 
@@ -26,7 +30,9 @@ async def create_task(db: AsyncSession, task_in: TaskCreate) -> TaskBase:
     return TaskBase.model_validate(task)
 
 
-async def update_task(db: AsyncSession, task_id: int, task_in: TaskUpdate) -> TaskBase | None:
+async def update_task(
+    db: AsyncSession, task_id: int, task_in: TaskUpdate
+) -> TaskBase | None:
     task = await db.get(Task, task_id)
     if not task:
         return None
