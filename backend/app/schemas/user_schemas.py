@@ -18,6 +18,7 @@ class UserBase(BaseModel):
     """
     User API response.
     """
+
     id: int = Field(description="User ID")
     username: str = Field(description="User username")
     email: str = Field(description="User email")
