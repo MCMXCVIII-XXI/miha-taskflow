@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_va
 class UserRole(Enum):
     GUEST = "guest"
     MEMBER = "member"
+    GROUP_ADMIN = "group_admin"
     LEAD = "lead"
     MANAGER = "manager"
     ADMIN = "admin"
@@ -21,6 +22,7 @@ class UserBase(BaseModel):
     username: str = Field(description="User username")
     email: str = Field(description="User email")
     role: UserRole = Field(description="User role")
+    is_active: bool = Field(description="User is active")
     created_at: datetime = Field(description="User creation date")
     updated_at: datetime | None = Field(None, description="User update date")
     admin_group_ids: list[int] = Field(default_factory=list, description="Admin")
