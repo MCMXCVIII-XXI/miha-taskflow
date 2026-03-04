@@ -11,7 +11,9 @@ from app.schemas.task_schemas import TaskPriority, TaskStatus
 class Task(Base, IdPkMixin):
     title: Mapped[str] = mapped_column(String(200), index=True)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
-    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus), index=True)
+    status: Mapped[TaskStatus] = mapped_column(
+        Enum(TaskStatus), default=TaskStatus.PENDING, index=True
+    )
     priority: Mapped[TaskPriority] = mapped_column(Enum(TaskPriority), index=True)
     owner_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     created_at: Mapped[datetime] = mapped_column(
