@@ -43,6 +43,7 @@ class TaskCreate(BaseModel):
     )
     priority: TaskPriority = Field(TaskPriority.MEDIUM, description="Task priority")
     group_id: int | None = Field(None, description="Put task in group")
+    owner_id: int = Field(description="Task owner ID")
 
     @field_validator("title", mode="before")
     @classmethod
