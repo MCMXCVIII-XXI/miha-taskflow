@@ -4,7 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserGroupBase(BaseModel):
-    name: str = Field(..., max_length=50, description="Group name")
+    name: str = Field(max_length=50, description="Group name")
 
 
 class UserGroupCreate(UserGroupBase):
