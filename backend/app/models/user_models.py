@@ -10,6 +10,9 @@ from app.schemas.user_schemas import UserRole
 
 class User(Base, IdPkMixin):
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
+    first_name: Mapped[str] = mapped_column(String(50))
+    last_name: Mapped[str] = mapped_column(String(50))
+    patronymic: Mapped[str] = mapped_column(String(50), nullable=True)
     email: Mapped[str] = mapped_column(String(320), unique=True, index=True)
     hashed_password: Mapped[str] = mapped_column(String(255))
     role: Mapped[UserRole] = mapped_column(
