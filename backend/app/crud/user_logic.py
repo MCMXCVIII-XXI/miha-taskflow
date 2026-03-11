@@ -28,15 +28,21 @@ from .crud_result import CrudResultUser
 
 async def get_users(
     db: AsyncSession, skip: int = 0, limit: int = 100
-) -> Sequence[User]:
+) -> Sequence[UserModel]:
     users = await db.scalars(
-        select(User).order_by(User.id).where(User.is_active).offset(skip).limit(limit)
+        select(UserModel)
+        .order_by(UserModel.id)
+        .where(UserModel.is_active)
+        .offset(skip)
+        .limit(limit)
     )
     return users.all()
 
 
-async def get_user(user_id: int, db: AsyncSession) -> User | CrudResultUser:
-    result = await db.scalars(select(User).where(User.id == user_id, User.is_active))
+async def get_user(user_id: int, db: AsyncSession) -> UserModel | CrudResultUser:
+    result = await db.scalars(
+        select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
+    )
     user = result.first()
 
     if not user:
@@ -45,11 +51,14 @@ async def get_user(user_id: int, db: AsyncSession) -> User | CrudResultUser:
     return user
 
 
-async def create_user(user_in: UserCreate, db: AsyncSession) -> User | CrudResultUser:
+async def create_user(
+    user_in: UserCreate, db: AsyncSession
+) -> UserModel | CrudResultUser:
     result = await db.scalars(
-        select(User).where(
-            (User.email == user_in.email) | (User.username == user_in.username),
-            User.is_active,
+        select(UserModel).where(
+            (UserModel.email == user_in.email)
+            | (UserModel.username == user_in.username),
+            UserModel.is_active,
         )
     )
     check = result.first()
@@ -59,7 +68,7 @@ async def create_user(user_in: UserCreate, db: AsyncSession) -> User | CrudResul
         elif check.email == user_in.email:
             return CrudResultUser.EMAIL_CONFLICT
 
-    user = User(
+    user = UserModel(
         username=user_in.username,
         email=user_in.email,
         first_name=user_in.first_name,
@@ -75,8 +84,10 @@ async def create_user(user_in: UserCreate, db: AsyncSession) -> User | CrudResul
 
 async def update_user(
     user_id: int, user_in: UserUpdate, db: AsyncSession
-) -> User | CrudResultUser:
-    result = await db.scalars(select(User).where(User.id == user_id, User.is_active))
+) -> UserModel | CrudResultUser:
+    result = await db.scalars(
+        select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
+    )
     user = result.first()
 
     if not user:
@@ -87,11 +98,11 @@ async def update_user(
     # Check if user with this email or username already exists
     ###########################################################################
     result = await db.scalars(
-        select(User).where(
-            (User.email == update_data["email"])
-            | (User.username == update_data["username"]),
-            User.id != user_id,
-            User.is_active,
+        select(UserModel).where(
+            (UserModel.email == update_data["email"])
+            | (UserModel.username == update_data["username"]),
+            UserModel.id != user_id,
+            UserModel.is_active,
         )
     )
     check = result.first()
@@ -111,7 +122,9 @@ async def update_user(
 
 
 async def delete_user(user_id: int, db: AsyncSession) -> bool | CrudResultUser:
-    result = await db.scalars(select(User).where(User.id == user_id, User.is_active))
+    result = await db.scalars(
+        select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
+    )
     user = result.first()
 
     if not user:
