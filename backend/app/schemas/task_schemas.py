@@ -17,7 +17,7 @@ class TaskPriority(Enum):
     HIGH = "high"
 
 
-class TaskBase(BaseModel):
+class Task(BaseModel):
     """Task API response."""
 
     id: int = Field(description="Task ID")

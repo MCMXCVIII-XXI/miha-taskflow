@@ -14,7 +14,7 @@ class UserRole(Enum):
     ADMIN = "admin"
 
 
-class UserBase(BaseModel):
+class User(BaseModel):
     """User API response."""
 
     model_config = ConfigDict(from_attributes=True)
