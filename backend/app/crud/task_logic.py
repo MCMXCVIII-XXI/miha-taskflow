@@ -13,15 +13,21 @@ from .crud_result import CrudResultTask
 
 async def get_tasks(
     db: AsyncSession, skip: int = 0, limit: int = 100
-) -> Sequence[Task]:
+) -> Sequence[TaskModel]:
     tasks = await db.scalars(
-        select(Task).order_by(Task.id).where(Task.is_active).offset(skip).limit(limit)
+        select(TaskModel)
+        .order_by(TaskModel.id)
+        .where(TaskModel.is_active)
+        .offset(skip)
+        .limit(limit)
     )
     return tasks.all()
 
 
-async def get_task(task_id: int, db: AsyncSession) -> Task | CrudResultTask:
-    result = await db.scalars(select(Task).where(Task.id == task_id, Task.is_active))
+async def get_task(task_id: int, db: AsyncSession) -> TaskModel | CrudResultTask:
+    result = await db.scalars(
+        select(TaskModel).where(TaskModel.id == task_id, TaskModel.is_active)
+    )
     task = result.first()
 
     if not task:
@@ -30,12 +36,14 @@ async def get_task(task_id: int, db: AsyncSession) -> Task | CrudResultTask:
     return task
 
 
-async def create_task(task_in: TaskCreate, db: AsyncSession) -> Task | CrudResultTask:
+async def create_task(
+    task_in: TaskCreate, db: AsyncSession
+) -> TaskModel | CrudResultTask:
     result = await db.scalars(
-        select(Task).where(
-            (Task.title == task_in.title),
-            (Task.group_id == task_in.group_id),
-            Task.is_active,
+        select(TaskModel).where(
+            (TaskModel.title == task_in.title),
+            (TaskModel.group_id == task_in.group_id),
+            TaskModel.is_active,
         )
     )
 
@@ -44,7 +52,7 @@ async def create_task(task_in: TaskCreate, db: AsyncSession) -> Task | CrudResul
     if check:
         return CrudResultTask.TITLE_CONFLICT
 
-    task = Task(**task_in.model_dump())
+    task = TaskModel(**task_in.model_dump())
     db.add(task)
     await db.commit()
     await db.refresh(task)
@@ -53,11 +61,10 @@ async def create_task(task_in: TaskCreate, db: AsyncSession) -> Task | CrudResul
 
 async def update_task(
     task_id: int, task_in: TaskUpdate, db: AsyncSession
-) -> Task | CrudResultTask:
-    result = await db.scalars(select(Task).where(Task.id == task_id, Task.is_active))
-    task = result.first()
+) -> TaskModel | CrudResultTask:
+    task = await get_task(task_id, db)
 
-    if not task:
+    if task == CrudResultTask.NOT_FOUND:
         return CrudResultTask.NOT_FOUND
 
     update_data = task_in.model_dump(exclude_unset=True)
@@ -65,11 +72,11 @@ async def update_task(
     # Check if task with this title or group already exists
     ###########################################################################
     result = await db.scalars(
-        select(Task).where(
-            (Task.title == update_data["title"]),
-            (Task.group_id == update_data["group_id"]),
-            Task.id != task_id,
-            Task.is_active,
+        select(TaskModel).where(
+            (TaskModel.title == update_data["title"]),
+            (TaskModel.group_id == update_data["group_id"]),
+            TaskModel.id != task_id,
+            TaskModel.is_active,
         )
     )
     check = result.first()
@@ -86,12 +93,11 @@ async def update_task(
 
 
 async def delete_task(task_id: int, db: AsyncSession) -> bool | CrudResultTask:
-    result = await db.scalars(select(Task).where(Task.id == task_id, Task.is_active))
-    task = result.first()
+    result = await get_task(task_id, db)
 
-    if not task:
+    if isinstance(result, CrudResultTask):
         return CrudResultTask.NOT_FOUND
 
-    task.is_active = False
+    result.is_active = False
     await db.commit()
     return True
