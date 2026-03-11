@@ -3,7 +3,9 @@ from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Task
+from app.models import Task as TaskModel
+from app.models import User as UserModel
+from app.models import UserGroup as UserGroupModel
 from app.schemas.task_schemas import TaskCreate, TaskUpdate
 
 from .crud_result import CrudResultTask
