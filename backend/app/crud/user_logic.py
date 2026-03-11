@@ -133,3 +133,178 @@ async def delete_user(user_id: int, db: AsyncSession) -> bool | CrudResultUser:
     user.is_active = False
     await db.commit()
     return True
+
+
+async def login(
+    from_data: OAuth2PasswordRequestForm,
+    db: AsyncSession,
+) -> TokenResponse | SecurityResultAuth | CrudResultUser:
+    result = await db.scalars(
+        select(UserModel).where(
+            (UserModel.email == from_data.username),
+            UserModel.is_active,
+        )
+    )
+    user = result.first()
+    if not user:
+        return CrudResultUser.NOT_FOUND
+    if not verify_password(from_data.password, user.hashed_password):
+        return SecurityResultAuth.COULD_NOT_VERIFY
+
+    access_token = create_access_token(
+        data={
+            "sub": str(user.id),
+            "username": user.username,
+            "email": user.email,
+            "role": str(user.role),
+        }
+    )
+    refresh_token = create_refresh_token(
+        data={
+            "sub": str(user.id),
+            "email": user.email,
+            "username": user.username,
+            "role": str(user.role),
+        }
+    )
+    return TokenResponse(
+        access_token=access_token,
+        refresh_token=refresh_token,
+    )
+
+
+async def access_token(
+    body: AccessTokenRequest,
+    db: AsyncSession,
+) -> TokenResponse | SecurityResultAuth:
+    access_token = body.access_token
+
+    try:
+        payload = decode_token(access_token)
+        user_id = payload.get("sub")
+        email = payload.get("email")
+        token_type = payload.get("token_type")
+
+        if user_id is None or token_type != "access":  # noqa: S105
+            return SecurityResultAuth.ACCESS_TOKEN_ERROR
+
+    except jwt.ExpiredSignatureError:
+        return SecurityResultAuth.EXPIRED
+    except jwt.PyJWTError:
+        return SecurityResultAuth.ACCESS_TOKEN_ERROR
+
+    result = await db.scalars(
+        select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
+    )
+    user = result.first()
+
+    if user is None:
+        return SecurityResultAuth.REFRESH_TOKEN_ERROR
+    if user.email != email:
+        return SecurityResultAuth.REFRESH_TOKEN_ERROR
+
+    access_token = create_access_token(
+        data={
+            "sub": str(user.id),
+            "username": user.username,
+            "email": user.email,
+            "role": str(user.role),
+        }
+    )
+
+    return TokenResponse(access_token=access_token)
+
+
+async def refresh_token(
+    body: RefreshTokenRequest,
+    db: AsyncSession,
+) -> TokenResponse | SecurityResultAuth:
+    old_refresh_token = body.refresh_token
+
+    try:
+        payload = decode_token(old_refresh_token)
+        user_id = payload.get("sub")
+        email = payload.get("email")
+        token_type = payload.get("token_type")
+
+        if user_id is None or token_type != "refresh":  # noqa: S105
+            return SecurityResultAuth.REFRESH_TOKEN_ERROR
+
+    except jwt.ExpiredSignatureError:
+        return SecurityResultAuth.EXPIRED
+    except jwt.PyJWTError:
+        return SecurityResultAuth.REFRESH_TOKEN_ERROR
+
+    result = await db.scalars(
+        select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
+    )
+    user = result.first()
+
+    if user is None:
+        return SecurityResultAuth.REFRESH_TOKEN_ERROR
+    if user.email != email:
+        return SecurityResultAuth.REFRESH_TOKEN_ERROR
+
+    new_refresh_token = create_refresh_token(
+        data={
+            "sub": str(user.id),
+            "username": user.username,
+            "email": user.email,
+            "role": str(user.role),
+        }
+    )
+
+    return TokenResponse(
+        refresh_token=new_refresh_token,
+    )
+
+
+async def get_group_users(
+    group_id: int, db: AsyncSession, skip: int = 0, limit: int = 100
+) -> Sequence[UserModel]:
+    users = await db.scalars(
+        select(UserModel)
+        .join(
+            UserGroupMembershipModel, UserModel.id == UserGroupMembershipModel.user_id
+        )
+        .where(UserGroupMembershipModel.group_id == group_id)
+        .where(UserModel.is_active)
+        .order_by(UserModel.id)
+        .offset(skip)
+        .limit(limit)
+    )
+    return users.all()
+
+
+async def get_group_user(
+    group_id: int, user: UserModel, db: AsyncSession
+) -> UserModel | CrudResultUser:
+    result = await db.scalars(
+        select(UserModel)
+        .join(
+            UserGroupMembershipModel, UserModel.id == UserGroupMembershipModel.user_id
+        )
+        .where(UserModel.is_active)
+    )
+    users = result.first()
+
+    if not users:
+        return CrudResultUser.NOT_FOUND
+
+    return users
+
+
+async def set_user_role(
+    user_id: int,
+    role: UserRole,
+    db: AsyncSession = Depends(db_helper.get_session),
+) -> UserModel | CrudResultUser:
+    result = await get_user(user_id, db)
+
+    if isinstance(result, CrudResultUser):
+        return result
+
+    result.role = role
+    await db.commit()
+    await db.refresh(result)
+    return result
