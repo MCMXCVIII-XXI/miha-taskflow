@@ -3,7 +3,8 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class UserGroupBase(BaseModel):
+class UserGroup(BaseModel):
+    id: int = Field(description="Group ID")
     name: str = Field(max_length=50, description="Group name")
 
 
