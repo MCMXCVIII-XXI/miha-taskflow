@@ -101,3 +101,31 @@ async def delete_task(task_id: int, db: AsyncSession) -> bool | CrudResultTask:
     result.is_active = False
     await db.commit()
     return True
+
+
+async def get_user_tasks(
+    user: UserModel, db: AsyncSession, skip: int = 0, limit: int = 100
+) -> Sequence[TaskModel]:
+    tasks = await db.scalars(
+        select(TaskModel)
+        .join(UserModel, UserModel.id == TaskModel.owner_id)
+        .where(UserModel.id == user.id, TaskModel.is_active)
+        .order_by(TaskModel.id)
+        .offset(skip)
+        .limit(limit)
+    )
+    return tasks.all()
+
+
+async def get_group_tasks(
+    group_id: int, db: AsyncSession, skip: int = 0, limit: int = 100
+) -> Sequence[TaskModel]:
+    tasks = await db.scalars(
+        select(TaskModel)
+        .join(UserGroupModel, UserGroupModel.id == TaskModel.group_id)
+        .where(UserGroupModel.id == group_id, TaskModel.is_active)
+        .order_by(TaskModel.id)
+        .offset(skip)
+        .limit(limit)
+    )
+    return tasks.all()
