@@ -28,5 +28,6 @@ class UserGroup(Base, IdPkMixin):
 class UserGroupMembership(Base, IdPkMixin):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     group_id: Mapped[int] = mapped_column(ForeignKey("user_groups.id"))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     user: Mapped["User"] = relationship("User", back_populates="group_memberships")
     group: Mapped["UserGroup"] = relationship("UserGroup", back_populates="users")
