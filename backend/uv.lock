@@ -1891,7 +1891,7 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "alembic", extras = ["asyncio"], specifier = ">=1.18.4" },
+    { name = "alembic", extras = ["async", "asyncio"], specifier = ">=1.18.4" },
     { name = "argon2-cffi", specifier = ">=25.1.0" },
     { name = "asyncpg", specifier = ">=0.31.0" },
     { name = "celery", specifier = ">=5.6.2" },
