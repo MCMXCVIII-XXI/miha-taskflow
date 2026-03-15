@@ -1,8 +1,9 @@
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends
 
 from app.models import User
 from app.schemas.user_schemas import UserRole
 
+from ..exceptions import security_exc
 from .auth import get_current_user
 
 
@@ -25,13 +26,8 @@ class RoleCurrentUser:
             raise self.EXCEPTION
         return current_user
 
-    def lead(self, current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role != UserRole.LEAD:
-            raise self.EXCEPTION
-        return current_user
-
-    def manager(self, current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role != UserRole.MANAGER:
+    def task_leader(self, current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role != UserRole.TASK_LEADER:
             raise self.EXCEPTION
         return current_user
 
