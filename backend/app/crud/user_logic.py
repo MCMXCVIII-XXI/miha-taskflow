@@ -1,8 +1,6 @@
 from collections.abc import Sequence
 
-import jwt
 from fastapi import Depends
-from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,11 +8,6 @@ from app.core.security.hash import get_password_hash
 from app.db import db_helper
 from app.models import User as UserModel
 from app.models import UserGroupMembership as UserGroupMembershipModel
-from app.schemas.token_schemas import (
-    AccessTokenRequest,
-    RefreshTokenRequest,
-    TokenResponse,
-)
 from app.schemas.user_schemas import UserCreate, UserRole, UserUpdate
 
 from .exceptions import user_exc
@@ -120,130 +113,6 @@ async def delete_user(user_id: int, db: AsyncSession) -> bool:
     user.is_active = False
     await db.commit()
     return True
-
-
-async def login(
-    from_data: OAuth2PasswordRequestForm,
-    db: AsyncSession,
-) -> TokenResponse | SecurityResultAuth | CrudResultUser:
-    result = await db.scalars(
-        select(UserModel).where(
-            (UserModel.email == from_data.username),
-            UserModel.is_active,
-        )
-    )
-    user = result.first()
-    if not user:
-        return CrudResultUser.NOT_FOUND
-    if not verify_password(from_data.password, user.hashed_password):
-        return SecurityResultAuth.COULD_NOT_VERIFY
-
-    access_token = create_access_token(
-        data={
-            "sub": str(user.id),
-            "username": user.username,
-            "email": user.email,
-            "role": str(user.role),
-        }
-    )
-    refresh_token = create_refresh_token(
-        data={
-            "sub": str(user.id),
-            "email": user.email,
-            "username": user.username,
-            "role": str(user.role),
-        }
-    )
-    return TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-    )
-
-
-async def access_token(
-    body: AccessTokenRequest,
-    db: AsyncSession,
-) -> TokenResponse | SecurityResultAuth:
-    access_token = body.access_token
-
-    try:
-        payload = decode_token(access_token)
-        user_id = payload.get("sub")
-        email = payload.get("email")
-        token_type = payload.get("token_type")
-
-        if user_id is None or token_type != "access":  # noqa: S105
-            return SecurityResultAuth.ACCESS_TOKEN_ERROR
-
-    except jwt.ExpiredSignatureError:
-        return SecurityResultAuth.EXPIRED
-    except jwt.PyJWTError:
-        return SecurityResultAuth.ACCESS_TOKEN_ERROR
-
-    result = await db.scalars(
-        select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
-    )
-    user = result.first()
-
-    if user is None:
-        return SecurityResultAuth.REFRESH_TOKEN_ERROR
-    if user.email != email:
-        return SecurityResultAuth.REFRESH_TOKEN_ERROR
-
-    access_token = create_access_token(
-        data={
-            "sub": str(user.id),
-            "username": user.username,
-            "email": user.email,
-            "role": str(user.role),
-        }
-    )
-
-    return TokenResponse(access_token=access_token)
-
-
-async def refresh_token(
-    body: RefreshTokenRequest,
-    db: AsyncSession,
-) -> TokenResponse | SecurityResultAuth:
-    old_refresh_token = body.refresh_token
-
-    try:
-        payload = decode_token(old_refresh_token)
-        user_id = payload.get("sub")
-        email = payload.get("email")
-        token_type = payload.get("token_type")
-
-        if user_id is None or token_type != "refresh":  # noqa: S105
-            return SecurityResultAuth.REFRESH_TOKEN_ERROR
-
-    except jwt.ExpiredSignatureError:
-        return SecurityResultAuth.EXPIRED
-    except jwt.PyJWTError:
-        return SecurityResultAuth.REFRESH_TOKEN_ERROR
-
-    result = await db.scalars(
-        select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
-    )
-    user = result.first()
-
-    if user is None:
-        return SecurityResultAuth.REFRESH_TOKEN_ERROR
-    if user.email != email:
-        return SecurityResultAuth.REFRESH_TOKEN_ERROR
-
-    new_refresh_token = create_refresh_token(
-        data={
-            "sub": str(user.id),
-            "username": user.username,
-            "email": user.email,
-            "role": str(user.role),
-        }
-    )
-
-    return TokenResponse(
-        refresh_token=new_refresh_token,
-    )
 
 
 async def get_group_users(

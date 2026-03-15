@@ -97,68 +97,7 @@ async def update_user(
 async def delete_user(
     user_id: int, db: AsyncSession = Depends(db_helper.get_session)
 ) -> None:
-    result = await delete_user_logic(user_id, db)
-    if result == CrudResultUser.NOT_FOUND:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND, detail=CrudResultUser.NOT_FOUND.value
-        )
-
-
-@router.post("/token", response_model=dict[str, str], status_code=status.HTTP_200_OK)
-async def login(
-    from_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(db_helper.get_session),
-) -> TokenResponse:
-    result = await login_logic(from_data, db)
-
-    if isinstance(result, TokenResponse):
-        return result
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Incorrect username or password",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-
-@router.post(
-    "/access-token", response_model=TokenResponse, status_code=status.HTTP_200_OK
-)
-async def access_token(
-    body: AccessTokenRequest,
-    db: AsyncSession = Depends(db_helper.get_session),
-) -> TokenResponse:
-    result = await access_token_logic(body, db)
-
-    if isinstance(result, TokenResponse):
-        return result
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid token",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
-
-
-@router.post(
-    "/refresh-token",
-    response_model=TokenResponse,
-    status_code=status.HTTP_200_OK,
-)
-async def refresh_token(
-    body: RefreshTokenRequest,
-    db: AsyncSession = Depends(db_helper.get_session),
-) -> TokenResponse:
-    result = await refresh_token_logic(body, db)
-
-    if isinstance(result, TokenResponse):
-        return result
-
-    raise HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Invalid token",
-        headers={"WWW-Authenticate": "Bearer"},
-    )
+    await delete_user_logic(user_id, db)
 
 
 @router.get("/me", response_model=UserSchemas, status_code=status.HTTP_200_OK)
