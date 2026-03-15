@@ -6,6 +6,24 @@ from app.core.config import db_settings
 
 
 class DatabaseHelper:
+    """
+    Database helper class
+    This class is responsible for creating and disposing of the database.
+    It also provides an async generator for getting a session.
+
+    Args:
+        url (str): Database URL
+        echo (bool): Whether to echo SQL statements
+        echo_pool (bool): Whether to echo SQL statements for pool
+        pool_size (int): Number of connections in the pool
+        max_overflow (int): Maximum number of connections in the pool
+
+    Methods:
+        dispose: Dispose of the database
+        get_session: Async generator for getting a session
+        get_session_ctx: Async context manager for getting a session
+    """
+
     def __init__(
         self,
         url: str,
