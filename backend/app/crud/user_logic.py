@@ -6,13 +6,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.security.hash import get_password_hash, verify_password
-from app.core.security.security_result import SecurityResultAuth
-from app.core.security.token import (
-    create_access_token,
-    create_refresh_token,
-    decode_token,
-)
+from app.core.security.hash import get_password_hash
 from app.db import db_helper
 from app.models import User as UserModel
 from app.models import UserGroupMembership as UserGroupMembershipModel
@@ -23,7 +17,7 @@ from app.schemas.token_schemas import (
 )
 from app.schemas.user_schemas import UserCreate, UserRole, UserUpdate
 
-from .crud_result import CrudResultUser
+from .exceptions import user_exc
 
 
 async def get_users(
@@ -39,21 +33,19 @@ async def get_users(
     return users.all()
 
 
-async def get_user(user_id: int, db: AsyncSession) -> UserModel | CrudResultUser:
+async def get_user(user_id: int, db: AsyncSession) -> UserModel:
     result = await db.scalars(
         select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
     )
     user = result.first()
 
     if not user:
-        return CrudResultUser.NOT_FOUND
+        raise user_exc.UserNotFound()
 
     return user
 
 
-async def create_user(
-    user_in: UserCreate, db: AsyncSession
-) -> UserModel | CrudResultUser:
+async def create_user(user_in: UserCreate, db: AsyncSession) -> UserModel:
     result = await db.scalars(
         select(UserModel).where(
             (UserModel.email == user_in.email)
@@ -64,9 +56,9 @@ async def create_user(
     check = result.first()
     if check:
         if check.username == user_in.username:
-            return CrudResultUser.USERNAME_CONFLICT
+            raise user_exc.UserUsernameConflict()
         elif check.email == user_in.email:
-            return CrudResultUser.EMAIL_CONFLICT
+            raise user_exc.UserEmailConflict()
 
     user = UserModel(
         username=user_in.username,
@@ -82,16 +74,14 @@ async def create_user(
     return user
 
 
-async def update_user(
-    user_id: int, user_in: UserUpdate, db: AsyncSession
-) -> UserModel | CrudResultUser:
-    result = await db.scalars(
-        select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
-    )
-    user = result.first()
+async def update_user(user_id: int, user_in: UserUpdate, db: AsyncSession) -> UserModel:
+    try:
+        user = await get_user(user_id, db)
+    except user_exc.UserNotFound as e:
+        raise e
 
     if not user:
-        return CrudResultUser.NOT_FOUND
+        raise user_exc.UserNotFound()
 
     update_data = user_in.model_dump(exclude_unset=True)
 
@@ -108,9 +98,9 @@ async def update_user(
     check = result.first()
     if check:
         if check.email == update_data["email"]:
-            return CrudResultUser.EMAIL_CONFLICT
+            raise user_exc.UserEmailConflict()
         elif check.username == update_data["username"]:
-            return CrudResultUser.USERNAME_CONFLICT
+            raise user_exc.UserUsernameConflict()
     ###########################################################################
 
     for field, value in update_data.items():
@@ -121,14 +111,11 @@ async def update_user(
     return user
 
 
-async def delete_user(user_id: int, db: AsyncSession) -> bool | CrudResultUser:
-    result = await db.scalars(
-        select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
-    )
-    user = result.first()
-
-    if not user:
-        return CrudResultUser.NOT_FOUND
+async def delete_user(user_id: int, db: AsyncSession) -> bool:
+    try:
+        user = await get_user(user_id, db)
+    except user_exc.UserNotFound as e:
+        raise e
 
     user.is_active = False
     await db.commit()
@@ -276,9 +263,7 @@ async def get_group_users(
     return users.all()
 
 
-async def get_group_user(
-    group_id: int, user: UserModel, db: AsyncSession
-) -> UserModel | CrudResultUser:
+async def get_group_user(group_id: int, user: UserModel, db: AsyncSession) -> UserModel:
     result = await db.scalars(
         select(UserModel)
         .join(
@@ -289,7 +274,7 @@ async def get_group_user(
     users = result.first()
 
     if not users:
-        return CrudResultUser.NOT_FOUND
+        raise user_exc.UserNotFound()
 
     return users
 
@@ -298,11 +283,11 @@ async def set_user_role(
     user_id: int,
     role: UserRole,
     db: AsyncSession = Depends(db_helper.get_session),
-) -> UserModel | CrudResultUser:
-    result = await get_user(user_id, db)
-
-    if isinstance(result, CrudResultUser):
-        return result
+) -> UserModel:
+    try:
+        result = await get_user(user_id, db)
+    except user_exc.UserNotFound as e:
+        raise e
 
     result.role = role
     await db.commit()

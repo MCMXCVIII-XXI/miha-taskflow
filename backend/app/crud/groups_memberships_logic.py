@@ -3,9 +3,10 @@ from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud.crud_result import CrudResultGroupMembership
 from app.models import UserGroupMembership as UserGroupMembershipModel
 from app.schemas.group_schemas import UserGroupMembershipCreate
+
+from .exceptions import group_membership_exc
 
 
 async def get_group_memberships(
@@ -26,7 +27,7 @@ async def get_group_memberships(
 
 async def add_to_group(
     group_id: int, membership_in: UserGroupMembershipCreate, db: AsyncSession
-) -> UserGroupMembershipModel | CrudResultGroupMembership:
+) -> UserGroupMembershipModel:
     result = await db.scalars(
         select(UserGroupMembershipModel).where(
             (UserGroupMembershipModel.user_id == membership_in.user_id),
@@ -38,7 +39,7 @@ async def add_to_group(
     check = result.first()
 
     if check:
-        return CrudResultGroupMembership.MEMBER_CONFLICT
+        raise group_membership_exc.GroupMembershipMemberConflict()
 
     membership = UserGroupMembershipModel(**membership_in.model_dump())
     db.add(membership)
@@ -47,9 +48,7 @@ async def add_to_group(
     return membership
 
 
-async def delete_group_membership(
-    membership_id: int, db: AsyncSession
-) -> bool | CrudResultGroupMembership:
+async def delete_group_membership(membership_id: int, db: AsyncSession) -> bool:
     result = await db.scalars(
         select(UserGroupMembershipModel).where(
             UserGroupMembershipModel.id == membership_id,
@@ -59,7 +58,7 @@ async def delete_group_membership(
     membership = result.first()
 
     if not membership:
-        return CrudResultGroupMembership.NOT_FOUND
+        raise group_membership_exc.GroupMembershipNotFound()
 
     membership.is_active = False
     await db.commit()

@@ -9,15 +9,8 @@ from .auth import get_current_user
 class RoleCurrentUser:
     """Roles for current user."""
 
-    EXCEPTION = HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Only admins can perform this action",
-    )
-
-    def guest(self, current_user: User = Depends(get_current_user)) -> User:
-        if current_user.role != UserRole.GUEST:
-            raise self.EXCEPTION
-        return current_user
+    def __init__(self):
+        self.EXCEPTION = security_exc.SecurityNotAuthorized
 
     def member(self, current_user: User = Depends(get_current_user)) -> User:
         if current_user.role != UserRole.MEMBER:

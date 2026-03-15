@@ -3,9 +3,10 @@ from collections.abc import Sequence
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.crud.crud_result import CrudResultGroup
 from app.models import UserGroup as UserGroupModel
 from app.schemas.group_schemas import UserGroupCreate, UserGroupUpdate
+
+from .exceptions import group_exc
 
 
 async def get_groups(
@@ -21,9 +22,7 @@ async def get_groups(
     return groups.all()
 
 
-async def get_group(
-    group_id: int, db: AsyncSession
-) -> UserGroupModel | CrudResultGroup:
+async def get_group(group_id: int, db: AsyncSession) -> UserGroupModel:
     result = await db.scalars(
         select(UserGroupModel).where(
             UserGroupModel.id == group_id, UserGroupModel.is_active
@@ -32,14 +31,12 @@ async def get_group(
     group = result.first()
 
     if not group:
-        return CrudResultGroup.NOT_FOUND
+        raise group_exc.GroupNotFound()
 
     return group
 
 
-async def create_group(
-    group_in: UserGroupCreate, db: AsyncSession
-) -> UserGroupModel | CrudResultGroup:
+async def create_group(group_in: UserGroupCreate, db: AsyncSession) -> UserGroupModel:
     result = await db.scalars(
         select(UserGroupModel).where(
             UserGroupModel.name == group_in.name, UserGroupModel.is_active
@@ -49,7 +46,7 @@ async def create_group(
     check = result.first()
 
     if check:
-        return CrudResultGroup.NAME_CONFLICT
+        raise group_exc.GroupNameConflict()
 
     group = UserGroupModel(**group_in.model_dump())
     db.add(group)
@@ -60,11 +57,11 @@ async def create_group(
 
 async def update_group(
     group_id: int, group_in: UserGroupUpdate, db: AsyncSession
-) -> UserGroupModel | CrudResultGroup:
-    group = await get_group(group_id, db)
-
-    if isinstance(group, CrudResultGroup):
-        return group
+) -> UserGroupModel:
+    try:
+        group = await get_group(group_id, db)
+    except group_exc.GroupNotFound as e:
+        raise e
 
     # Check if group with this name already exists
     ###########################################################################
@@ -76,7 +73,7 @@ async def update_group(
     )
     check = result.first()
     if check:
-        return CrudResultGroup.NAME_CONFLICT
+        raise group_exc.GroupNameConflict()
     ###########################################################################
 
     group.name = group_in.name
@@ -85,12 +82,12 @@ async def update_group(
     return group
 
 
-async def delete_group(group_id: int, db: AsyncSession) -> bool | CrudResultGroup:
-    result = await get_group(group_id, db)
+async def delete_group(group_id: int, db: AsyncSession) -> bool:
+    try:
+        group = await get_group(group_id, db)
+    except group_exc.GroupNotFound as e:
+        raise e
 
-    if isinstance(result, CrudResultGroup):
-        return result
-
-    result.is_active = False
+    group.is_active = False
     await db.commit()
     return True

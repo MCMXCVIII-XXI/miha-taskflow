@@ -8,14 +8,15 @@ from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
 from app.schemas.task_schemas import TaskCreate, TaskUpdate
 
-from .crud_result import CrudResultTask
+from .exceptions import task_exc
 
 
 async def get_tasks(
-    db: AsyncSession, skip: int = 0, limit: int = 100
+    current_user: UserModel, db: AsyncSession, skip: int = 0, limit: int = 100
 ) -> Sequence[TaskModel]:
     tasks = await db.scalars(
         select(TaskModel)
+        .join(UserModel, UserModel.id == TaskModel.owner_id)
         .order_by(TaskModel.id)
         .where(TaskModel.is_active)
         .offset(skip)
@@ -24,21 +25,19 @@ async def get_tasks(
     return tasks.all()
 
 
-async def get_task(task_id: int, db: AsyncSession) -> TaskModel | CrudResultTask:
+async def get_task(task_id: int, db: AsyncSession) -> TaskModel:
     result = await db.scalars(
         select(TaskModel).where(TaskModel.id == task_id, TaskModel.is_active)
     )
     task = result.first()
 
     if not task:
-        return CrudResultTask.NOT_FOUND
+        raise task_exc.TaskNotFound()
 
     return task
 
 
-async def create_task(
-    task_in: TaskCreate, db: AsyncSession
-) -> TaskModel | CrudResultTask:
+async def create_task(task_in: TaskCreate, db: AsyncSession) -> TaskModel:
     result = await db.scalars(
         select(TaskModel).where(
             (TaskModel.title == task_in.title),
@@ -50,7 +49,7 @@ async def create_task(
     check = result.first()
 
     if check:
-        return CrudResultTask.TITLE_CONFLICT
+        raise task_exc.TaskTitleConflict()
 
     task = TaskModel(**task_in.model_dump())
     db.add(task)
@@ -59,13 +58,11 @@ async def create_task(
     return task
 
 
-async def update_task(
-    task_id: int, task_in: TaskUpdate, db: AsyncSession
-) -> TaskModel | CrudResultTask:
-    task = await get_task(task_id, db)
-
-    if task == CrudResultTask.NOT_FOUND:
-        return CrudResultTask.NOT_FOUND
+async def update_task(task_id: int, task_in: TaskUpdate, db: AsyncSession) -> TaskModel:
+    try:
+        task = await get_task(task_id, db)
+    except task_exc.TaskNotFound as e:
+        raise e
 
     update_data = task_in.model_dump(exclude_unset=True)
 
@@ -81,7 +78,7 @@ async def update_task(
     )
     check = result.first()
     if check:
-        return CrudResultTask.TITLE_CONFLICT
+        raise task_exc.TaskTitleConflict()
     ###########################################################################
 
     for field, value in update_data.items():
@@ -92,11 +89,11 @@ async def update_task(
     return task
 
 
-async def delete_task(task_id: int, db: AsyncSession) -> bool | CrudResultTask:
-    result = await get_task(task_id, db)
-
-    if isinstance(result, CrudResultTask):
-        return CrudResultTask.NOT_FOUND
+async def delete_task(task_id: int, db: AsyncSession) -> bool:
+    try:
+        result = await get_task(task_id, db)
+    except task_exc.TaskNotFound as e:
+        raise e
 
     result.is_active = False
     await db.commit()
