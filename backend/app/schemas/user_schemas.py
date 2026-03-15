@@ -6,11 +6,9 @@ from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_va
 
 
 class UserRole(Enum):
-    GUEST = "guest"
     MEMBER = "member"
     GROUP_ADMIN = "group_admin"
-    LEAD = "lead"
-    MANAGER = "manager"
+    TASK_LEADER = "task_leader"
     ADMIN = "admin"
 
 
