@@ -1,7 +1,6 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from sqlalchemy.ext.asyncio.session import AsyncSession
 
-from app.crud.crud_result import CrudResultGroup, CrudResultGroupMembership
 from app.crud.group_logic import create_group as create_group_logic
 from app.crud.group_logic import delete_group as delete_group_logic
 from app.crud.group_logic import get_group as get_group_logic
@@ -52,13 +51,6 @@ async def create_group(
     db: AsyncSession = Depends(db_helper.get_session),
 ) -> UserGroupSchema:
     result = await create_group_logic(group_in, db)
-
-    if result == CrudResultGroup.NAME_CONFLICT:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=CrudResultGroup.NAME_CONFLICT.value,
-        )
-
     return UserGroupSchema.model_validate(result)
 
 
@@ -72,13 +64,6 @@ async def get_group(
     db: AsyncSession = Depends(db_helper.get_session),
 ) -> UserGroupSchema:
     result = await get_group_logic(group_id, db)
-
-    if result == CrudResultGroup.NOT_FOUND:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=CrudResultGroup.NOT_FOUND.value,
-        )
-
     return UserGroupSchema.model_validate(result)
 
 
@@ -93,18 +78,6 @@ async def update_group(
     db: AsyncSession = Depends(db_helper.get_session),
 ) -> UserGroupSchema:
     result = await update_group_logic(group_id, group_in, db)
-
-    if result == CrudResultGroup.NOT_FOUND:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=CrudResultGroup.NOT_FOUND.value,
-        )
-    elif result == CrudResultGroup.NAME_CONFLICT:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=CrudResultGroup.NAME_CONFLICT.value,
-        )
-
     return UserGroupSchema.model_validate(result)
 
 
@@ -116,13 +89,7 @@ async def delete_group(
     group_id: int,
     db: AsyncSession = Depends(db_helper.get_session),
 ) -> None:
-    result = await delete_group_logic(group_id, db)
-
-    if result == CrudResultGroup.NOT_FOUND:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=CrudResultGroup.NOT_FOUND.value,
-        )
+    await delete_group_logic(group_id, db)
 
 
 @router.get(
@@ -153,13 +120,6 @@ async def add_to_group(
     db: AsyncSession = Depends(db_helper.get_session),
 ) -> UserGroupMembershipSchema:
     result = await add_to_group_logic(group_id, membership_in, db)
-
-    if result == CrudResultGroupMembership.MEMBER_CONFLICT:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=CrudResultGroupMembership.MEMBER_CONFLICT.value,
-        )
-
     return UserGroupMembershipSchema.model_validate(result)
 
 
@@ -171,10 +131,4 @@ async def delete_group_membership(
     membership_id: int,
     db: AsyncSession = Depends(db_helper.get_session),
 ) -> None:
-    result = await delete_group_membership_logic(membership_id, db)
-
-    if result == CrudResultGroupMembership.NOT_FOUND:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=CrudResultGroupMembership.NOT_FOUND.value,
-        )
+    await delete_group_membership_logic(membership_id, db)
