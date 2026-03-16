@@ -1,7 +1,8 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from app.api.v1 import api_router
 from app.core.exceptions.security_exc import BaseSecurityError
@@ -16,8 +17,11 @@ from app.db import db_helper
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # startup
+    # Adding values to the RBAC tables
+    await init_rbac()
     yield
     # shutdown
+    # Closing the database connection
     await db_helper.dispose()
 
 
