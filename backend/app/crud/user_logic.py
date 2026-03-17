@@ -6,9 +6,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security.hash import get_password_hash
 from app.db import db_helper
+from app.models import Role as RoleModel
 from app.models import User as UserModel
+from app.models import UserGroup as UserGroupModel
 from app.models import UserGroupMembership as UserGroupMembershipModel
-from app.schemas.user_schemas import UserCreate, UserRole, UserUpdate
+from app.models import UserRole as UserRoleModel
+from app.schemas.group_schemas import UserGroupCreate
+from app.schemas.user_schemas import UserCreate, UserUpdate
 
 from .exceptions import user_exc
 
@@ -162,3 +166,38 @@ async def set_user_role(
     await db.commit()
     await db.refresh(result)
     return result
+
+
+async def create_user_group(
+    user_id: int, user_group_in: UserGroupCreate, db: AsyncSession
+) -> UserGroupModel:
+    result = await db.scalars(
+        select(UserGroupModel).where(
+            (UserGroupModel.name == user_group_in.name),
+            UserGroupModel.is_active,
+        )
+    )
+
+    if result.first():
+        raise user_exc.UserGroupNameConflict()
+
+    user_group = UserGroupModel(
+        name=user_group_in.name,
+        admin_id=user_id,
+        is_active=True,
+    )
+
+    db.add(user_group)
+    await db.commit()
+    await db.refresh(user_group)
+
+    group_admin_role = await db.scalar(
+        select(RoleModel).where(RoleModel.name == "GROUP_ADMIN")
+    )
+    user_role = UserRoleModel(
+        user_id=user_id, role_id=group_admin_role.id, group_id=user_group.id
+    )
+
+    db.add(user_role)
+    await db.commit()
+    return user_group
