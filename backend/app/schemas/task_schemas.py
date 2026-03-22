@@ -26,9 +26,6 @@ class TaskRead(BaseModel):
     status: TaskStatus = Field(TaskStatus.PENDING, description="Task status")
     priority: TaskPriority = Field(TaskPriority.MEDIUM, description="Task priority")
     group_id: int | None = Field(None, description="Group ID")
-    group_name: str | None = Field(None, description="Group name")
-    owner_id: int = Field(description="Task owner ID")
-    username: str = Field(description="Task owner username")
     created_at: datetime = Field(description="Task creation date")
 
     model_config = ConfigDict(from_attributes=True)
