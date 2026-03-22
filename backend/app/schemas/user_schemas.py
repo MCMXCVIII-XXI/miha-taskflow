@@ -12,7 +12,7 @@ class UserRole(Enum):
     ADMIN = "admin"
 
 
-class User(BaseModel):
+class UserRead(BaseModel):
     """User API response."""
 
     model_config = ConfigDict(from_attributes=True)
@@ -32,9 +32,11 @@ class User(BaseModel):
         default_factory=list, description="Member groups"
     )
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class UserCreate(BaseModel):
-    """User registration."""
+    """Schema for creating users."""
 
     username: str = Field(description="User username")
     email: EmailStr = Field(description="User email")
@@ -63,7 +65,7 @@ class UserCreate(BaseModel):
 
 
 class UserUpdate(BaseModel):
-    """Update user profile."""
+    """Schema for updating user profile."""
 
     username: str | None = Field(None, description="User username")
     email: EmailStr | None = Field(None, description="User email")

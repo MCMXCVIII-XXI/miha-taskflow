@@ -17,7 +17,7 @@ class TaskPriority(Enum):
     HIGH = "high"
 
 
-class Task(BaseModel):
+class TaskRead(BaseModel):
     """Task API response."""
 
     id: int = Field(description="Task ID")
@@ -35,7 +35,7 @@ class Task(BaseModel):
 
 
 class TaskCreate(BaseModel):
-    """Task creation."""
+    """Schema for creating tasks."""
 
     title: str = Field(..., max_length=200, description="Task title")
     description: str | None = Field(
@@ -56,7 +56,7 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
-    """Task update."""
+    """Schema for updating tasks."""
 
     title: str | None = Field(None, max_length=200, description="Task title")
     description: str | None = Field(

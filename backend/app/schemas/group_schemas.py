@@ -3,7 +3,9 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class UserGroup(BaseModel):
+class UserGroupRead(BaseModel):
+    """UserGroup API response."""
+
     id: int = Field(description="Group ID")
     name: str = Field(max_length=50, description="Group name")
     admin_id: int = Field(description="Admin ID")
@@ -15,14 +17,20 @@ class UserGroup(BaseModel):
 
 
 class UserGroupCreate(BaseModel):
+    """Schema for creating user groups."""
+
     name: str = Field(max_length=50, description="Group name")
 
 
 class UserGroupUpdate(BaseModel):
+    """Schema for updating user groups."""
+
     name: str = Field(max_length=50, description="Group name")
 
 
 class UserGroupMembership(BaseModel):
+    """Schema for user group membership."""
+
     id: int = Field(description="User group membership ID")
     user_id: int = Field(description="User ID")
     group_id: int = Field(description="Group ID")
@@ -36,5 +44,7 @@ class UserGroupMembership(BaseModel):
 
 
 class UserGroupMembershipCreate(BaseModel):
+    """Schema for creating user group membership."""
+
     user_id: int = Field(description="User ID")
     group_id: int = Field(description="Group ID")

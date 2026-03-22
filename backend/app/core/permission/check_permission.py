@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import db_helper
 from app.models import Permission, Role, RolePermission
 from app.models import UserRole as UserRoleModel
-from app.schemas.user_schemas import User as UserSchema
+from app.schemas.user_schemas import UserRead
 
 from ..exceptions import security_exc
 from ..security.auth import get_current_user
@@ -47,9 +47,9 @@ def require_permissions_db(
     """
 
     async def dependency(
-        current_user: UserSchema = Depends(get_current_user),
+        current_user: UserRead = Depends(get_current_user),
         db: AsyncSession = Depends(db_helper.get_session),
-    ) -> UserSchema:
+    ) -> UserRead:
         perms = await get_user_permissions_db(current_user.id, db)
         missing = [p for p in required_permissions if p not in perms]
         if missing:
