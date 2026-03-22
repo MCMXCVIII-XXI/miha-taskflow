@@ -41,45 +41,25 @@ class RBAC:
         self._seed = seed
         self._setup = setup
 
-    # Method for checking if tables exist
-    # roles, permissions, role_permissions, user_roles
-    async def __check(self) -> bool:
-        """
-        Check if tables exist
-        """
-        for model in self.models:
-            result = await self.db.scalars(select(model).limit(1))
-            if result.first():
-                return False
-        return True
+    async def __clear(self) -> None:
+        """Clear RBAC tables and binds"""
+        # Role↔Permission
+        await self.db.scalars(delete(RolePermission))
+        # Only RBAC tables
+        await self.db.scalars(delete(Permission))
+        await self.db.scalars(delete(Role))
 
-    # Initial seeding of RBAC
-    # Adding roles and permissions
-    # Creating many to many relationship between roles and permissions
-    # (Table role_permissions)
-    # Creating many to many relationship between users and roles (Table user_roles)
     async def init(self) -> None:
         """
         Initial seeding of RBAC
         """
-        # Checking tables ##################
-        if await self.__check():
+        async with self.db.begin():
             # Clear tables and binds ###########
             await self.__clear()
             # Adding data ######################
             await self._seed.seed()
             # Binds role and permissions #######
             await self._setup.setup_all()
-            ####################################
-
-    # Clear tables and binds
-    async def __clear(self) -> None:
-        """
-        Clear tables and binds
-        """
-        for model in self.models:
-            await self.db.scalars(delete(model))
-        await self.db.commit()
 
 
 async def init_rbac() -> RBAC:
