@@ -76,7 +76,7 @@ async def init_rbac() -> None:
     MODELS = (RolePermission, UserRole, Role, Permission)
 
     # Get RBAC for initial seeding and setup
-    async with db_helper.get_session_ctx() as db:
+    async with db_helper.get_session_ctx() as db:  # type: AsyncSession
         rbac = RBAC(
             db=db, models=MODELS, seed=SeedData(db), setup=SetupRolePermissions(db)
         )
