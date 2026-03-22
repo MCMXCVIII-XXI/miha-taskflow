@@ -14,7 +14,21 @@ class SetupRolePermissions:
         This class is responsible for setting up permissions for roles in the database.
         It includes methods for setting up member.
 
+    Attributes:
+        db (AsyncSession): Database session
+        user_perms (list[str]): List of user permissions
+        member_perms (list[str]): List of member permissions
+        group_admin_perms (list[str]): List of group admin permissions
+        task_leader_perms (list[str]): List of task leader permissions
+        all_perms (list[str]): List of all permissions
 
+    Methods:
+        setup_user: Set up user permissions
+        setup_member: Set up member permissions
+        setup_group_admin: Set up group admin permissions
+        setup_task_leader: Set up task leader permissions
+        setup_admin: Set up admin permissions
+        setup_all: Set up all permissions
     """
 
     def __init__(self, db: AsyncSession) -> None:
