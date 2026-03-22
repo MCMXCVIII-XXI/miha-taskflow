@@ -58,7 +58,7 @@ class DatabaseHelper:
             yield session
 
     @asynccontextmanager
-    async def get_session_ctx(self) -> AsyncSession:
+    async def get_session_ctx(self) -> AsyncIterator[AsyncSession]:
         """Async context manager for getting a session"""
         async with self.session_factory() as session:
             yield session
