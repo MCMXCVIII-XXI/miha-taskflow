@@ -11,17 +11,18 @@ dependencies = [
     "asyncpg>=0.31.0",
     "alembic[async,asyncio]>=1.18.4",
     "celery>=5.6.2",
-    "redis>=7.2.0",
+    "redis[hiredis]>=7.2.0",
     "prometheus-client>=0.24.1",
     "python-dotenv>=1.2.1",
     "greenlet>=3.3.2",
     "argon2-cffi>=25.1.0",
     "pyjwt>=2.11.0",
     "python-multipart>=0.0.22",
+    "fastapi-cache2>=0.2.2",
 ]
 
 [dependency-groups]
-dev = [                  
+dev = [
     "httpx>=0.28.1",
     "cookiecutter>=2.6.0",
 ]
@@ -72,7 +73,7 @@ indent-width = 4
 target-version = "py311"
 
 [tool.ruff.lint]
-select = [    
+select = [
     "UP",    # pyupgrade
     "I",     # isort (автозамена)
     "E",     # flake8-errors
@@ -102,8 +103,8 @@ indent-style = "space"
 skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-format = false
-docstring-code-line-length = "dynamic"     
-###################################################################################   
+docstring-code-line-length = "dynamic"
+###################################################################################
 
 # MYPY
 ###################################################################################
@@ -114,7 +115,7 @@ plugins = ["pydantic.mypy"]
 explicit_package_bases = true
 namespace_packages = true
 ignore_missing_imports = true
-disallow_untyped_defs = false   
+disallow_untyped_defs = false
 warn_return_any = false
 warn_unreachable = true
 pretty = true
@@ -123,7 +124,7 @@ show_error_codes = true
 
 [[tool.mypy.overrides]]
 module = ["app.models.*"]
-disable_error_code = ["name-defined"] 
+disable_error_code = ["name-defined"]
 
 [[tool.mypy.overrides]]
 module = [
