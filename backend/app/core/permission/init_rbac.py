@@ -52,6 +52,11 @@ class RBAC:
     async def init(self) -> None:
         """
         Initial seeding of RBAC
+
+        Details:
+            Initial seeding of RBAC
+            Adding roles and permissions
+            Creating many to many relationship between roles and permissions
         """
         async with self.db.begin():
             # Clear tables and binds ###########
