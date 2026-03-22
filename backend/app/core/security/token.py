@@ -18,6 +18,7 @@ def create_access_token(data: dict[str, str | datetime]) -> str:
 
 def create_refresh_token(data: dict[str, str | datetime]) -> str:
     to_encode = data.copy()
+
     expire = datetime.now(UTC) + timedelta(
         days=token_settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
