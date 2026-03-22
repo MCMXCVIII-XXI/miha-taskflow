@@ -23,13 +23,61 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      cache:
+        condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+asyncpg://user:pass@db:5432/taskflow
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      REDIS_URL: redis://${REDIS_USER}:${REDIS_USER_PASSWORD}@cache:6379/0
     volumes:
       - .:/app 
     restart: unless-stopped
 
+  cache:
+    image: redis:8.4.2-alpine
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+      REDIS_USER: ${REDIS_USER}
+      REDIS_USER_PASSWORD: ${REDIS_USER_PASSWORD}
+    env_file:
+      - .env_cache
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis_data:/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    command: >
+      sh -c '
+        mkdir -p /usr/local/etc/redis &&
+        echo "bind 127.0.0.1 192.168.3.37" > redis.conf &&
+        echo "protected-mode yes" >> redis.conf &&
+        echo "appendonly yes" >> redis.conf &&
+        echo "appendfsync everysec" >> redis.conf &&
+        echo "rename-command FLUSHALL {}" >> redis.conf &&
+        echo "rename-command CONFIG {}" >> redis.conf &&
+        echo "user $REDIS_USER on >$REDIS_USER_PASSWORD ~* +@all" > users.acl &&
+        redis-server redis.conf --aclfile users.acl
+      '
+    healthcheck:
+      test: ["CMD", "redis-cli", 
+           "--user", "${REDIS_USER}", 
+           "--pass", "${REDIS_USER_PASSWORD}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+    tty: true
+    stdin_open: true
+
+
 volumes:
   postgres_data:
+  redis_data:
 
 
