@@ -27,12 +27,13 @@ class SecurityCouldNotVerify(BaseSecurityError):
 
     def __init__(
         self,
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             code=status.HTTP_401_UNAUTHORIZED,
-            message="Could not verify credentials",
+            message=message,
             headers=headers,
             details=details,
         )
@@ -43,12 +44,13 @@ class SecurityRefreshTokenError(BaseSecurityError):
 
     def __init__(
         self,
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             code=status.HTTP_401_UNAUTHORIZED,
-            message="Could not validate refresh token",
+            message=message,
             headers=headers,
             details=details,
         )
@@ -59,12 +61,13 @@ class SecurityAccessTokenError(BaseSecurityError):
 
     def __init__(
         self,
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             code=status.HTTP_401_UNAUTHORIZED,
-            message="Could not validate access token",
+            message=message,
             headers=headers,
             details=details,
         )
@@ -75,12 +78,13 @@ class SecurityExpired(BaseSecurityError):
 
     def __init__(
         self,
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             code=status.HTTP_401_UNAUTHORIZED,
-            message="Token has expired",
+            message=message,
             headers=headers,
             details=details,
         )
@@ -91,12 +95,13 @@ class SecurityNotAuthorized(BaseSecurityError):
 
     def __init__(
         self,
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             code=status.HTTP_403_FORBIDDEN,
-            message="You cannot perform this action",
+            message=message,
             headers=headers,
             details=details,
         )
@@ -107,12 +112,13 @@ class SecurityPermissionDenied(BaseSecurityError):
 
     def __init__(
         self,
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             code=status.HTTP_403_FORBIDDEN,
-            message="You do not have permission to perform this action",
+            message=message,
             headers=headers,
             details=details,
         )

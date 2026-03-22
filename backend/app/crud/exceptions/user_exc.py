@@ -22,17 +22,35 @@ class BaseUserError(Exception):
         return self.message
 
 
-class UserUsernameConflict(BaseUserError):
-    """Username already exists."""
+class UserAlreadyExists(BaseUserError):
+    """User already exists."""
 
     def __init__(
         self,
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             code=status.HTTP_409_CONFLICT,
-            message="Username already exists",
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class UserUsernameConflict(BaseUserError):
+    """Username already exists."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_409_CONFLICT,
+            message=message,
             headers=headers,
             details=details,
         )
@@ -43,12 +61,13 @@ class UserEmailConflict(BaseUserError):
 
     def __init__(
         self,
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             code=status.HTTP_409_CONFLICT,
-            message="Email already exists",
+            message=message,
             headers=headers,
             details=details,
         )
@@ -59,12 +78,13 @@ class UserNotFound(BaseUserError):
 
     def __init__(
         self,
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(
             code=status.HTTP_404_NOT_FOUND,
-            message="User not found",
+            message=message,
             headers=headers,
             details=details,
         )
