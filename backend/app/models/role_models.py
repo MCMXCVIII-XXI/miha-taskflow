@@ -1,16 +1,55 @@
-from sqlalchemy import ForeignKey
+from sqlalchemy import ForeignKey, Index, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column
-from sqlalchemy.schema import UniqueConstraint
 
 from app.db import Base
 from app.db.mixins import IdPkMixin
 
 
 class Permission(IdPkMixin, Base):
-    name: Mapped[str] = mapped_column(unique=True, index=True)
-    resource: Mapped[str] = mapped_column(index=True)
-    action: Mapped[str] = mapped_column(index=True)
-    description: Mapped[str | None] = mapped_column()
+    """Permission model with computed name via hybrid_property"""
+
+    name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
+    resource: Mapped[str] = mapped_column(String(50), index=True)
+    action: Mapped[str] = mapped_column(String(50), index=True)
+    context: Mapped[str | None] = mapped_column(String(50), index=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (
+        UniqueConstraint("resource", "action", "context", name="uq_permission_rac"),
+        Index(
+            "idx_permission_name",
+            func.concat_ws(":", resource, action, func.nullif(context, None)),
+        ),
+    )
+
+    @classmethod
+    def create(
+        cls,
+        resource: str,
+        action: str,
+        context: str | None = None,
+        description: str | None = None,
+    ) -> "Permission":
+        """
+        Factory: creates a Permission with name auto-generation
+
+        Args:
+            resource (str): Resource name
+            action (str): Action name
+            context (str | None): Optional context
+            description (str | None): Optional description
+
+        Returns:
+            Permission with filled in name
+        """
+        name = f"{resource}:{action}:{context}" if context else f"{resource}:{action}"
+        return cls(
+            resource=resource,
+            action=action,
+            context=context,
+            name=name,
+            description=description,
+        )
 
 
 class Role(IdPkMixin, Base):
