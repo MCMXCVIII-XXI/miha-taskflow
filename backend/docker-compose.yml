@@ -1,20 +1,45 @@
+version: '3.9'
+
 services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: taskflow
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      PGDATA: ${PGDATA}
+    env_file:
+      - .env_db
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ${PGDATA}:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: '0.50'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 256M
+    command: >
+      postgres -c max_connections=200           
+            -c shared_buffers=256MB
+            -c effective_cache_size=384MB    
+            -c maintenance_work_mem=64MB
+            -c checkpoint_completion_target=0.7
+            -c wal_buffers=16MB
+            -c default_statistics_target=100
+            -c work_mem=4MB                  
+            -c random_page_cost=1.1    
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U user -d taskflow"]
-      interval: 10s
-      timeout: 5s
+      test: [ "CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}" ]      
+      interval: 30s
+      timeout: 10s
       retries: 5
     restart: unless-stopped
+    tty: true
+    stdin_open: true
 
   backend:
     build: .
