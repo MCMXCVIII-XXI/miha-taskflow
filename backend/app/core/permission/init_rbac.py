@@ -67,7 +67,7 @@ class RBAC:
             await self._setup.setup_all()
 
 
-async def init_rbac() -> RBAC:
+async def init_rbac() -> None:
     """
     Get RBAC
     """
