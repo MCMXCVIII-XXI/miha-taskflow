@@ -34,23 +34,31 @@ class SetupRolePermissions:
     def __init__(self, db: AsyncSession) -> None:
         """
         db (AsyncSession): Database session
+        user_perms (list[str]): List of user permissions
         member_perms (list[str]): List of member permissions
         group_admin_perms (list[str]): List of group admin permissions
         task_leader_perms (list[str]): List of task leader permissions
         all_perms (list[str]): List of all permissions
         """
         self.db = db
-        self.member_perms = ["user:view", "group:view", "task:view", "task:create"]
-        self.group_admin_perms = [
-            "user:create",
-            "user:update",
-            "user:delete",
-            "group:manage",
-            "group:create",
-            "group:delete",
-            "task:update",
+        self.user_perms = [
+            "users:read:own",
+            "users:update:own",
+            "tasks:create",
+            "tasks:read:own",
         ]
-        self.task_leader_perms = ["task:delete"]
+
+        self.member_perms = ["groups:read", "groups:join", "tasks:read:group"]
+
+        self.group_admin_perms = [
+            "group:create",
+            "group:manage",
+            "group:delete",
+            "user:create",
+            "user:manage",
+        ]
+
+        self.task_leader_perms = ["task:update:any", "task:delete:any", "task:assign"]
         self.all_perms = None
 
     async def __get_role(self, name_role: str) -> Role | None:
@@ -82,9 +90,14 @@ class SetupRolePermissions:
                 self.db.add(rp)
 
     # A pyramid of roles is organized here ##########################################
+    async def setup_user(self) -> None:
+        role = await self.__get_role(name_role="USER")
+        await self.__add_role_permission(role=role, perm_names=self.user_perms)
+
     async def setup_member(self) -> None:
+        all_perms = self.user_perms + self.member_perms
         role = await self.__get_role(name_role="MEMBER")
-        await self.__add_role_permission(role=role, perm_names=self.member_perms)
+        await self.__add_role_permission(role=role, perm_names=all_perms)
 
     async def setup_group_admin(self) -> None:
         all_perms = self.member_perms + self.group_admin_perms
@@ -105,6 +118,7 @@ class SetupRolePermissions:
     #################################################################################
 
     async def setup_all(self) -> None:
+        await self.setup_user()
         await self.setup_member()
         await self.setup_group_admin()
         await self.setup_task_leader()
