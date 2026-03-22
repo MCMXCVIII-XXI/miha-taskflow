@@ -1,6 +1,7 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from app.cache import init_cache
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
@@ -17,6 +18,8 @@ from app.db import db_helper
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # startup
+    # Initialize cache Redis
+    await init_cache()
     # Adding values to the RBAC tables
     await init_rbac()
     yield

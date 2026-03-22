@@ -21,5 +21,20 @@ class DBSettings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_prefix="DB_", extra="ignore")
 
 
+class CacheSettings(BaseSettings):
+    URL: str
+    connect_retry: bool = True
+    retry_on_error: list[str] = ["CONNECTION_ERROR"]
+    socket_timeout: float = 5.0
+    socket_connect_timeout: float = 3.0
+    max_connections: int = 10
+    retry_on_timeout: bool = True
+
+    model_config = SettingsConfigDict(
+        env_file=".env", env_prefix="CACHE_", extra="ignore"
+    )
+
+
 token_settings = TokenSettings()
 db_settings = DBSettings()
+cache_settings = CacheSettings()
