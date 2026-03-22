@@ -53,7 +53,10 @@ def require_permissions_db(
         perms = await get_user_permissions_db(current_user.id, db)
         missing = [p for p in required_permissions if p not in perms]
         if missing:
-            raise security_exc.SecurityPermissionDenied(details={"Missing": missing})
+            raise security_exc.SecurityPermissionDenied(
+                message="You do not have permission to perform this action",
+                details={"Missing": missing},
+            )
         return current_user
 
     return dependency
