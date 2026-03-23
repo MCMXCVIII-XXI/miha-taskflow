@@ -1,6 +1,7 @@
 .PHONY: dev-up backend-up logs logs-backend test-backend clean down status lint test dev help
 
 dev-up:
+	docker-compose down -v
 	docker-compose up -d --build
 
 backend-up:
@@ -11,6 +12,10 @@ cache-up:
 
 db-up:
 	docker-compose up db -d --build
+
+infra-up:
+	make cache-up
+	make db-up
 
 logs:
 	docker-compose logs -f
@@ -29,10 +34,10 @@ lint:
 	uv run mypy app/
 
 format:
-	uv sync --group lint  
+	uv sync --group lint
 	uv run ruff format .
 	uv run ruff check . --fix
-                         
+
 test:
 	make test-backend
 
