@@ -19,9 +19,9 @@ async def get_current_user(
 ) -> UserModel:
     try:
         payload = decode_token(token)
-        user_id = payload.get("sub")
-        email = payload.get("mail")
-        if not user_id:
+        sub = payload.get("sub")
+        email = payload.get("email")
+        if not sub:
             raise security_exc.SecurityCouldNotVerify(
                 message="Invalid token", headers={"WWW-Authenticate": "Bearer"}
             )
