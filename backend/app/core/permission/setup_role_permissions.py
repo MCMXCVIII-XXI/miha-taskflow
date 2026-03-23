@@ -42,23 +42,26 @@ class SetupRolePermissions:
         """
         self.db = db
         self.user_perms = [
-            "users:read:own",
-            "users:update:own",
-            "tasks:create",
-            "tasks:read:own",
+            "user:view",
+            "user:create",
+            "task:view",
+            "task:create",
         ]
 
-        self.member_perms = ["groups:read", "groups:join", "tasks:read:group"]
+        self.member_perms = [
+            "group:view",
+        ]
 
         self.group_admin_perms = [
-            "group:create",
             "group:manage",
-            "group:delete",
+            "group:create",
             "user:create",
-            "user:manage",
         ]
 
-        self.task_leader_perms = ["task:update:any", "task:delete:any", "task:assign"]
+        self.task_leader_perms = [
+            "task:update",
+            "task:delete",
+        ]
         self.all_perms = None
 
     async def __get_role(self, name_role: str) -> Role | None:
