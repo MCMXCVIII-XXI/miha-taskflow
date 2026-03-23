@@ -1,16 +1,16 @@
-from .group_models import UserGroupMembershipModel, UserGroupModel
+from .group_models import UserGroup, UserGroupMembership
 from .role_models import Permission, Role, RolePermission, UserRole
-from .task_models import TaskAssignee, TaskModel
-from .user_models import UserModel
+from .task_models import Task, TaskAssignee
+from .user_models import User
 
 __all__ = [
     "Permission",
     "Role",
     "RolePermission",
+    "Task",
     "TaskAssignee",
-    "TaskModel",
-    "UserGroupMembershipModel",
-    "UserGroupModel",
-    "UserModel",
+    "User",
+    "UserGroup",
+    "UserGroupMembership",
     "UserRole",
 ]
