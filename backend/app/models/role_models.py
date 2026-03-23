@@ -1,4 +1,4 @@
-from sqlalchemy import ForeignKey, Index, String, Text, UniqueConstraint, func
+from sqlalchemy import ForeignKey, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -13,14 +13,6 @@ class Permission(IdPkMixin, Base):
     action: Mapped[str] = mapped_column(String(50), index=True)
     context: Mapped[str | None] = mapped_column(String(50), index=True)
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
-
-    __table_args__ = (
-        UniqueConstraint("resource", "action", "context", name="uq_permission_rac"),
-        Index(
-            "idx_permission_name",
-            func.concat_ws(":", resource, action, func.nullif(context, None)),
-        ),
-    )
 
     @classmethod
     def create(

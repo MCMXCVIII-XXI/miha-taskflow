@@ -8,7 +8,7 @@ from app.db.mixins import IdPkMixin
 from app.schemas.task_schemas import TaskPriority, TaskStatus
 
 
-class TaskModel(Base, IdPkMixin):
+class Task(Base, IdPkMixin):
     title: Mapped[str] = mapped_column(String(200), index=True)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     status: Mapped[TaskStatus] = mapped_column(
@@ -29,7 +29,7 @@ class TaskModel(Base, IdPkMixin):
         "TaskAssignee", back_populates="task", cascade="all, delete-orphan"
     )
 
-    group: Mapped["UserGroupModel"] = relationship("UserGroup", back_populates="tasks")
+    group: Mapped["UserGroup"] = relationship("UserGroup", back_populates="tasks")
 
 
 class TaskAssignee(Base, IdPkMixin):
@@ -37,7 +37,5 @@ class TaskAssignee(Base, IdPkMixin):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     assigned_at: Mapped[datetime] = mapped_column(default=func.now())
 
-    task: Mapped["TaskModel"] = relationship("TaskModel", back_populates="assignees")
-    user: Mapped["UserModel"] = relationship(
-        "UserModel", back_populates="assigned_tasks"
-    )
+    task: Mapped["Task"] = relationship("Task", back_populates="assignees")
+    user: Mapped["User"] = relationship("User", back_populates="assigned_tasks")
