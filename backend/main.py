@@ -1,11 +1,11 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
-from app.cache import init_cache
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from app.api.v1 import api_router
+from app.cache import init_cache
 from app.core.exceptions.security_exc import BaseSecurityError
 from app.core.permission import init_rbac
 from app.crud.exceptions.group_exc import BaseGroupError
