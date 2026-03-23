@@ -10,7 +10,7 @@ from app.models import UserModel
 from ..exceptions import security_exc
 from .token import decode_token
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/v1/users/token")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="auth/token")
 
 
 async def get_current_user(
