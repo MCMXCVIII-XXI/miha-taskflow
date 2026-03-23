@@ -34,7 +34,7 @@ def decode_token(token: str) -> dict[str, str | datetime]:
             token, token_settings.SECRET_KEY, algorithms=[token_settings.ALGORITHM]
         )
         date = payload.get("exp")
-        if date and date < datetime.now(UTC):
+        if date and datetime.fromtimestamp(date, tz=UTC) < datetime.now(UTC):
             raise jwt.ExpiredSignatureError
         return payload
     except jwt.PyJWTError as e:
