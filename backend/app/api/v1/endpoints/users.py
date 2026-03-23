@@ -7,7 +7,6 @@ from app.crud.user_logic import create_user_group as create_user_group_logic
 from app.crud.user_logic import delete_user as delete_user_logic
 from app.crud.user_logic import get_group_users as get_group_users_logic
 from app.crud.user_logic import get_user as get_user_logic
-from app.crud.user_logic import get_user_groups as get_user_groups_logic
 from app.crud.user_logic import get_users as get_users_logic
 from app.crud.user_logic import set_user_role as set_user_role_logic
 from app.crud.user_logic import update_user as update_user_logic
@@ -110,30 +109,4 @@ async def create_user_group(
     db: AsyncSession = Depends(db_helper.get_session),
 ) -> UserGroupSchemas:
     user_group = await create_user_group_logic(user_id, user_group_in, db)
-    return UserGroupSchemas.model_validate(user_group)
-
-
-@router.get(
-    "/me/groups", response_model=list[UserGroupSchemas], status_code=status.HTTP_200_OK
-)
-async def get_me_groups(
-    current_user: User = Depends(RoleCurrentUser.member),
-    db: AsyncSession = Depends(db_helper.get_session),
-) -> list[UserGroupSchemas]:
-    groups = await get_user_groups_logic(current_user.id, db)
-    return [UserGroupSchemas.model_validate(group) for group in groups]
-
-
-@router.post(
-    "/me/groups/{group_id}/users",
-    response_model=UserGroupSchemas,
-    status_code=status.HTTP_200_OK,
-)
-async def add_user_to_group(
-    group_id: int,
-    user_id: int,
-    current_user: User = Depends(RoleCurrentUser.admin_groups),
-    db: AsyncSession = Depends(db_helper.get_session),
-) -> UserGroupSchemas:
-    user_group = await add_user_to_group_logic(group_id, user_id, db)
     return UserGroupSchemas.model_validate(user_group)
