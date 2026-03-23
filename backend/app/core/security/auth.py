@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import db_helper
-from app.models import UserModel
+from app.models import User as UserModel
 
 from ..exceptions import security_exc
 from .token import decode_token
