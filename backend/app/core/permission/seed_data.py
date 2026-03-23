@@ -7,6 +7,19 @@ from app.models import Permission, Role
 class SeedData:
     """
     Seed data for RBAC
+
+    Attribute:
+        db (AsyncSession): The database session.
+        roles (list[Role]): The list of roles to seed.
+        permissions (list[Permission]): The list of permissions to seed.
+
+    Details:
+        This class provides methods to seed roles and permissions into the database.
+        It uses the `roles` and `permissions` attributes to insert data into database.
+        The `seed` method is used to seed the database with the roles and permissions.
+        Permissions template: {resource}:{action}[:context]
+
+
     """
 
     def __init__(self, db: AsyncSession) -> None:
