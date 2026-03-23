@@ -25,6 +25,12 @@ async def get_current_user(
             raise security_exc.SecurityCouldNotVerify(
                 message="Invalid token", headers={"WWW-Authenticate": "Bearer"}
             )
+        if not isinstance(sub, str) or not sub.isdigit():
+            raise security_exc.SecurityCouldNotVerify(
+                message="Invalid user ID format", headers={"WWW-Authenticate": "Bearer"}
+            )
+        user_id = int(sub)
+
     except jwt.ExpiredSignatureError as e:
         raise security_exc.SecurityExpired(
             message="Token expired", headers={"WWW-Authenticate": "Bearer"}
