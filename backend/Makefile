@@ -38,6 +38,10 @@ format:
 	uv run ruff format .
 	uv run ruff check . --fix
 
+lint-all:
+	make format
+	make lint
+
 test:
 	make test-backend
 
