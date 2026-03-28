@@ -29,7 +29,7 @@ def upgrade() -> None:
         sa.Column("hashed_password", sa.String(length=255), nullable=False),
         sa.Column(
             "role",
-            sa.Enum("USER", "ADMIN", name="userrole"),
+            sa.Enum("USER", "ADMIN", name="globaluserrole"),
             nullable=False,
         ),
         sa.Column(
