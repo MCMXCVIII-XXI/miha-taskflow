@@ -1,11 +1,16 @@
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.db.mixins import IdPkMixin
-from app.schemas.task_schemas import TaskPriority, TaskStatus
+from app.schemas import TaskPriority, TaskStatus
+
+if TYPE_CHECKING:
+    from .group import UserGroup
+    from .user import User
 
 
 class Task(Base, IdPkMixin):
@@ -35,7 +40,9 @@ class Task(Base, IdPkMixin):
 class TaskAssignee(Base, IdPkMixin):
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
-    assigned_at: Mapped[datetime] = mapped_column(default=func.now())
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
 
     task: Mapped["Task"] = relationship("Task", back_populates="assignees")
     user: Mapped["User"] = relationship("User", back_populates="assigned_tasks")
