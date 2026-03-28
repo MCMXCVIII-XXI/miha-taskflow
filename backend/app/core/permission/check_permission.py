@@ -1,44 +1,47 @@
+from collections.abc import Callable
+from typing import Any
+
 from fastapi import Depends
-from sqlalchemy import select
+from fastapi_cache.decorator import cache
+from sqlalchemy import String, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.exceptions import security_exc
+from app.core.security.auth import get_current_user
 from app.db import db_helper
 from app.models import Permission, Role, RolePermission
+from app.models import User as UserModel
 from app.models import UserRole as UserRoleModel
-from app.schemas.user_schemas import UserRead
-
-from ..exceptions import security_exc
-from ..security.auth import get_current_user
 
 
+@cache(expire=300, namespace="rbac")
 async def get_user_permissions_db(user_id: int, db: AsyncSession) -> set[str]:
     """
     Get user permissions from database
     """
-    result = await db.scalars(
-        select(Permission.name)  # select all permissions from the database
-        .join(
-            RolePermission, Permission.id == RolePermission.permission_id
-        )  # select all role permissions
-        .join(Role, RolePermission.role_id == Role.id)  # select all roles
-        .join(UserRoleModel, UserRoleModel.role_id == Role.id)  # select all user roles
-        .where(UserRoleModel.user_id == user_id)  # filter by user id
+    global_perms = await db.scalars(
+        select(Permission.name)
+        .join(RolePermission, Permission.id == RolePermission.permission_id)
+        .join(Role, RolePermission.role_id == Role.id)
+        .join(UserModel, func.cast(UserModel.role, String) == Role.name)
+        .where(UserModel.id == user_id)
     )
-    return set(result.all())
+    secondary_perms = await db.scalars(
+        select(Permission.name)
+        .join(RolePermission, Permission.id == RolePermission.permission_id)
+        .join(Role, RolePermission.role_id == Role.id)
+        .join(UserRoleModel, UserRoleModel.role_id == Role.id)
+        .where(UserRoleModel.user_id == user_id)
+    )
+    return set(global_perms.all()) | set(secondary_perms.all())
 
 
-def require_permissions_db(
-    *required_permissions: str,
-) -> Callable:  # type: ignore
+def require_permissions_db(*required_permissions: str) -> Callable[..., Any]:
     """
     Check if user has required permissions
 
     Args:
         required_permissions (list[str]): List of required permissions
-
-        Args:
-            current_user (UserSchema): Current user
-            db (AsyncSession): Database session
 
     Details:
         This function checks if the user has the required permissions.
@@ -47,11 +50,12 @@ def require_permissions_db(
     """
 
     async def dependency(
-        current_user: UserRead = Depends(get_current_user),
+        current_user: UserModel = Depends(get_current_user),
         db: AsyncSession = Depends(db_helper.get_session),
-    ) -> UserRead:
+    ) -> UserModel:
         perms = await get_user_permissions_db(current_user.id, db)
-        missing = [p for p in required_permissions if p not in perms]
+        perms_set: set[str] = perms if isinstance(perms, set) else set()
+        missing = [p for p in required_permissions if p not in perms_set]
         if missing:
             raise security_exc.SecurityPermissionDenied(
                 message="You do not have permission to perform this action",
