@@ -45,9 +45,11 @@ class RBAC:
         """Clear RBAC tables and binds"""
         # Role↔Permission
         await self.db.execute(delete(RolePermission))
-        # Only RBAC tables
-        await self.db.execute(delete(Permission))
-        await self.db.execute(delete(Role))
+        # Only RBAC tables and reset ID
+        await self.db.execute(delete(Role).execution_options(restart_identity=True))
+        await self.db.execute(
+            delete(Permission).execution_options(restart_identity=True)
+        )
 
     async def init(self) -> None:
         """
