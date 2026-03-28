@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Permission, Role
 
+from .permissions import PERMISSIONS, ROLES
+
 
 class SeedData:
     """
@@ -24,47 +26,8 @@ class SeedData:
 
     def __init__(self, db: AsyncSession) -> None:
         self.db = db
-        self.roles = [
-            Role(name="USER", description="Basic user"),
-            Role(name="MEMBER", description="Member"),
-            Role(name="GROUP_ADMIN", description="Group admin"),
-            Role(name="TASK_LEADER", description="Task leader"),
-            Role(name="ADMIN", description="Admin app"),
-        ]
-        self.permissions = [
-            Permission.create(resource="user", action="view", description="View user"),
-            Permission.create(
-                resource="user", action="create", description="Create user"
-            ),
-            Permission.create(
-                resource="user", action="update", description="Update user"
-            ),
-            Permission.create(
-                resource="user", action="delete", description="Delete user"
-            ),
-            Permission.create(
-                resource="group", action="view", description="View group"
-            ),
-            Permission.create(
-                resource="group", action="manage", description="Manage group"
-            ),
-            Permission.create(
-                resource="group", action="create", description="Create group"
-            ),
-            Permission.create(
-                resource="group", action="delete", description="Delete group"
-            ),
-            Permission.create(resource="task", action="view", description="View task"),
-            Permission.create(
-                resource="task", action="create", description="Create task"
-            ),
-            Permission.create(
-                resource="task", action="update", description="Update task"
-            ),
-            Permission.create(
-                resource="task", action="delete", description="Delete task"
-            ),
-        ]
+        self.roles = ROLES
+        self.permissions = PERMISSIONS
 
     async def seed(self) -> None:
         """Seed roles and permissions into the database."""

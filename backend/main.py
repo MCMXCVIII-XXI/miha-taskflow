@@ -35,6 +35,22 @@ app.include_router(api_router)
 
 
 # Exception handlers ##################################################################
+@app.exception_handler(BaseSearchError)
+def search_exception_handler(request: Request, exc: BaseSearchError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.code,
+        content={"detail": exc.message},
+    )
+
+
+@app.exception_handler(BaseRBACError)
+def rbac_exception_handler(request: Request, exc: BaseRBACError) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.code,
+        content={"detail": exc.message},
+    )
+
+
 @app.exception_handler(BaseSecurityError)
 def security_exception_handler(
     request: Request, exc: BaseSecurityError
