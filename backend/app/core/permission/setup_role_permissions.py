@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Permission, Role, RolePermission
 
+from .permissions import PERMISSIONS
+
 
 class SetupRolePermissions:
     """
@@ -25,8 +27,8 @@ class SetupRolePermissions:
     Methods:
         setup_user: Set up user permissions
         setup_member: Set up member permissions
+        setup_assignee: Set up assignee permissions
         setup_group_admin: Set up group admin permissions
-        setup_task_leader: Set up task leader permissions
         setup_admin: Set up admin permissions
         setup_all: Set up all permissions
     """
@@ -36,33 +38,49 @@ class SetupRolePermissions:
         db (AsyncSession): Database session
         user_perms (list[str]): List of user permissions
         member_perms (list[str]): List of member permissions
+        assignee_perms (list[str]): List of assignee permissions
         group_admin_perms (list[str]): List of group admin permissions
-        task_leader_perms (list[str]): List of task leader permissions
         all_perms (list[str]): List of all permissions
         """
         self.db = db
-        self.user_perms = [
-            "user:view",
-            "user:create",
-            "task:view",
-            "task:create",
-        ]
+        self.user_perms = {
+            "user:view:any",
+            "user:view:own",
+            "user:update:own",
+            "user:delete:own",
+            "group:create:own",
+            "group:view:any",
+            "group:join:any",
+            "task:view:any",
+            "task:join:any",
+        }
 
-        self.member_perms = [
-            "group:view",
-        ]
+        self.member_perms = {
+            "group:view:group",
+            "group:exit:member",
+            "task:view:group",
+        }
 
-        self.group_admin_perms = [
-            "group:manage",
-            "group:create",
-            "user:create",
-        ]
+        self.assignee_perms = {
+            "task:update:status",
+        }
 
-        self.task_leader_perms = [
-            "task:update",
-            "task:delete",
-        ]
-        self.all_perms = None
+        self.group_admin_perms = {
+            "group:view:own",
+            "group:update:own",
+            "group:delete:own",
+            "group:add:own",
+            "group:remove:own",
+            "task:create:own",
+            "task:view:own",
+            "task:add:own",
+            "task:remove:own",
+            "task:update:own",
+            "task:delete:own",
+            "task:update:status",
+        }
+
+        self.admin_perms = PERMISSIONS
 
     async def __get_role(self, name_role: str) -> Role | None:
         """
@@ -81,13 +99,16 @@ class SetupRolePermissions:
         return result.first()
 
     async def __add_role_permission(
-        self, role: Role | None, perm_names: Sequence[str]
+        self,
+        role: Role | None,
+        perm_names: set[str] | Sequence[Permission],
     ) -> None:
         """
         Add role permission
         """
         for perm_name in perm_names:
-            perm = await self.__get_permission(perm_name)
+            name = perm_name.name if isinstance(perm_name, Permission) else perm_name
+            perm = await self.__get_permission(name)
             if perm and role:
                 rp = RolePermission(role_id=role.id, permission_id=perm.id)
                 self.db.add(rp)
@@ -98,33 +119,31 @@ class SetupRolePermissions:
         await self.__add_role_permission(role=role, perm_names=self.user_perms)
 
     async def setup_member(self) -> None:
-        all_perms = self.user_perms + self.member_perms
+        all_perms = self.user_perms | self.member_perms
         role = await self.__get_role(name_role="MEMBER")
         await self.__add_role_permission(role=role, perm_names=all_perms)
 
+    async def setup_assignee(self) -> None:
+        all_perms = self.user_perms | self.assignee_perms
+        role = await self.__get_role(name_role="ASSIGNEE")
+        await self.__add_role_permission(role=role, perm_names=all_perms)
+
     async def setup_group_admin(self) -> None:
-        all_perms = self.member_perms + self.group_admin_perms
+        all_perms = self.user_perms | self.member_perms | self.group_admin_perms
         role = await self.__get_role(name_role="GROUP_ADMIN")
         await self.__add_role_permission(role=role, perm_names=all_perms)
 
-    async def setup_task_leader(self) -> None:
-        all_perms = self.member_perms + self.task_leader_perms
-        role = await self.__get_role(name_role="TASK_LEADER")
-        await self.__add_role_permission(role=role, perm_names=all_perms)
-
     async def setup_admin(self) -> None:
-        result = await self.db.scalars(select(Permission.name))
-        all_perms = result.all()
         role = await self.__get_role(name_role="ADMIN")
-        await self.__add_role_permission(role=role, perm_names=all_perms)
+        await self.__add_role_permission(role=role, perm_names=self.admin_perms)
 
     #################################################################################
 
     async def setup_all(self) -> None:
         await self.setup_user()
         await self.setup_member()
+        await self.setup_assignee()
         await self.setup_group_admin()
-        await self.setup_task_leader()
         await self.setup_admin()
 
         await self.db.commit()
