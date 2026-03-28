@@ -1,19 +1,13 @@
 import re
 from datetime import datetime
-from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
 
-
-class UserRole(Enum):
-    USER = "user"
-    ADMIN = "admin"
+from .role import GlobalUserRole
 
 
 class UserRead(BaseModel):
     """User API response."""
-
-    model_config = ConfigDict(from_attributes=True)
 
     id: int = Field(description="User ID")
     username: str = Field(description="User username")
@@ -21,7 +15,7 @@ class UserRead(BaseModel):
     first_name: str = Field(description="First name")
     last_name: str = Field(description="Last name")
     patronymic: str | None = Field(None, description="Patronymic")
-    role: UserRole = Field(description="User role")
+    role: GlobalUserRole = Field(description="User role")
     is_active: bool = Field(description="User is active")
     created_at: datetime = Field(description="User creation date")
     updated_at: datetime | None = Field(None, description="User update date")
