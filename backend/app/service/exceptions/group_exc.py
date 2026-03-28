@@ -3,8 +3,8 @@ from typing import Any
 from fastapi import status
 
 
-class BaseTaskError(Exception):
-    """Base task error."""
+class BaseGroupError(Exception):
+    """Base group error."""
 
     def __init__(
         self,
@@ -22,8 +22,8 @@ class BaseTaskError(Exception):
         return self.message
 
 
-class TaskTitleConflict(BaseTaskError):
-    """Title already exists."""
+class GroupNameConflict(BaseGroupError):
+    """Name already exists."""
 
     def __init__(
         self,
@@ -39,8 +39,8 @@ class TaskTitleConflict(BaseTaskError):
         )
 
 
-class TaskNotFound(BaseTaskError):
-    """Task not found."""
+class GroupNotFound(BaseGroupError):
+    """Group not found."""
 
     def __init__(
         self,
@@ -56,8 +56,8 @@ class TaskNotFound(BaseTaskError):
         )
 
 
-class ForbiddenTaskAccess(BaseTaskError):
-    """Task does not belong to your group."""
+class ForbiddenGroupAccess(BaseGroupError):
+    """Forbidden group access."""
 
     def __init__(
         self,
@@ -67,6 +67,40 @@ class ForbiddenTaskAccess(BaseTaskError):
     ) -> None:
         super().__init__(
             code=status.HTTP_403_FORBIDDEN,
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class MemberAlreadyExists(BaseGroupError):
+    """Member already exists."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_409_CONFLICT,
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class MemberNotFound(BaseGroupError):
+    """Member not found."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_404_NOT_FOUND,
             message=message,
             headers=headers,
             details=details,
