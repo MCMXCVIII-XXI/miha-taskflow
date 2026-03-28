@@ -8,6 +8,7 @@ class UserGroupRead(BaseModel):
 
     id: int = Field(description="Group ID")
     name: str = Field(max_length=50, description="Group name")
+    description: str | None = Field(default=None, description="Group description")
     admin_id: int = Field(description="Admin ID")
     is_active: bool = Field(description="Group is active")
     created_at: datetime = Field(description="Group creation date")
@@ -20,6 +21,8 @@ class UserGroupCreate(BaseModel):
     """Schema for creating user groups."""
 
     name: str = Field(max_length=50, description="Group name")
+    description: str | None = Field(default=None, description="Group description")
+    admin_id: int = Field(description="Admin ID")
 
 
 class UserGroupUpdate(BaseModel):
