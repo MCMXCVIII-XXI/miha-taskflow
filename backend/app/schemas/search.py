@@ -2,8 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from .task_schemas import TaskPriority, TaskStatus
-from .user_schemas import UserRole
+from .role import GlobalUserRole
+from .task import TaskPriority, TaskStatus
 
 
 ###############################################################################
@@ -35,7 +35,7 @@ class UserSearch(BaseModel):
     first_name: str | None = Field(None, min_length=2, description="Sort by first name")
     last_name: str | None = Field(None, min_length=2, description="Sort by last name")
     patronymic: str | None = Field(None, min_length=2, description="Sort by patronymic")
-    role: UserRole | None = Field(None, description="Sort by user role")
+    role: GlobalUserRole | None = Field(None, description="Sort by user role")
     created_at: datetime | None = Field(None, description="Sort by creation date")
 
     model_config = ConfigDict(
