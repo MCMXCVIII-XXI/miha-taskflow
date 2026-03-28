@@ -6,13 +6,15 @@ from fastapi.responses import JSONResponse
 
 from app.api.v1 import api_router
 from app.cache import init_cache
+from app.core.exceptions.rbac_exc import BaseRBACError
 from app.core.exceptions.security_exc import BaseSecurityError
 from app.core.permission import init_rbac
-from app.crud.exceptions.group_exc import BaseGroupError
-from app.crud.exceptions.group_membership_exc import BaseGroupMembershipError
-from app.crud.exceptions.task_exc import BaseTaskError
-from app.crud.exceptions.user_exc import BaseUserError
 from app.db import db_helper
+from app.service.exceptions.group_exc import BaseGroupError
+from app.service.exceptions.group_membership_exc import BaseGroupMembershipError
+from app.service.exceptions.search_exc import BaseSearchError
+from app.service.exceptions.task_exc import BaseTaskError
+from app.service.exceptions.user_exc import BaseUserError
 
 
 @asynccontextmanager
