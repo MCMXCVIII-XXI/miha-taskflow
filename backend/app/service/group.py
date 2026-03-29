@@ -292,11 +292,6 @@ class GroupService(BaseService):
         if not membership:
             raise group_exc.MemberNotFound(message="Member not found")
 
-        if not getattr(membership, "user", None) or not getattr(
-            membership, "group", None
-        ):
-            raise group_exc.MemberNotFound(message="Member not found")
-
         return membership
 
     async def _get_remaining_group_or_member(
