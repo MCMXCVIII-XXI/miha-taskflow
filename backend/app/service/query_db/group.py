@@ -121,25 +121,22 @@ class GroupQueries:
         user_id: int,
         group_id: int,
         is_active: Literal[True, False, None] = None,
-    ) -> Select[tuple[UserGroup]]:
+    ) -> Select[tuple[UserGroupMembership]]:
         """
-        Get a UserGroup by its ID and check if a user is a member,
-            optionally filtered by is_active status.
+        Get a UserGroupMembership by user_id and group_id.
 
         Args:
-            user_id: The ID of the user to check membership for
-            group_id: The ID of the UserGroup to retrieve
+            user_id: The ID of the user
+            group_id: The ID of the group
             is_active: The is_active to filter by
-                (True for active, False for inactive, None for all).
-                True: Filter for active users.
-                False: Filter for inactive users.
-                None: Return all users.
 
         Returns:
-            The query of the group by its ID, filtered by membership.
+            The query of the membership.
         """
-        base = GroupQueries.by_my_member(user_id, is_active=True).where(
-            UserGroupMembership.group_id == group_id,
+        base = (
+            select(UserGroupMembership)
+            .where(UserGroupMembership.user_id == user_id)
+            .where(UserGroupMembership.group_id == group_id)
         )
         return base
 
