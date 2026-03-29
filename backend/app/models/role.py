@@ -56,15 +56,13 @@ class RolePermission(Base):
     )
 
 
-class UserRole(Base):
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), primary_key=True)
-    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), primary_key=True)
+class UserRole(IdPkMixin, Base):
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
+    role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"))
     group_id: Mapped[int | None] = mapped_column(
-        ForeignKey("user_groups.id"), index=True, nullable=True
+        ForeignKey("user_groups.id"), nullable=True
     )
-    task_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tasks.id"), index=True, nullable=True
-    )
+    task_id: Mapped[int | None] = mapped_column(ForeignKey("tasks.id"), nullable=True)
     __table_args__ = (
         UniqueConstraint(
             "user_id", "role_id", "group_id", "task_id", name="uq_user_role_group_task"
