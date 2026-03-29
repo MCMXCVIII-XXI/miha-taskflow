@@ -40,7 +40,6 @@ class UserGroupMembership(BaseModel):
     updated_at: datetime | None = Field(
         default=None, description="User group membership update date"
     )
-    is_active: bool = Field(default=True, description="User group membership is active")
 
     model_config = ConfigDict(from_attributes=True)
 

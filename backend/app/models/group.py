@@ -35,7 +35,6 @@ class UserGroup(Base, IdPkMixin):
 class UserGroupMembership(Base, IdPkMixin):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     group_id: Mapped[int] = mapped_column(ForeignKey("user_groups.id"))
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

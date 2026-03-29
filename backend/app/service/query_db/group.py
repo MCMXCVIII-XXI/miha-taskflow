@@ -141,7 +141,7 @@ class GroupQueries:
         base = GroupQueries.by_my_member(user_id, is_active=True).where(
             UserGroupMembership.group_id == group_id,
         )
-        return GroupQueries._check_active(base, is_active)
+        return base
 
     @staticmethod
     def by_admin_groups(
