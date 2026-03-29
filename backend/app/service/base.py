@@ -128,14 +128,15 @@ class BaseService:
 
         if not role_id:
             raise rbac_exc.RoleNotFound(message=f"Role {role_name} not found")
-
         query = await self._build_query_for_user_role(
             group_id=group_id, task_id=task_id, user_id=user_id, role_id=role_id
         )
         existing = await self._db.scalar(query)
 
         if not existing:
-            user_role = UserRoleModel(user_id=user_id, role_id=role_id)
+            user_role = UserRoleModel(
+                user_id=user_id, role_id=role_id, group_id=group_id, task_id=task_id
+            )
             self._db.add(user_role)
 
     async def _invalidate(self, namespace: str) -> None:
