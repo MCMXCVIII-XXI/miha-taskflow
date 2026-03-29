@@ -110,9 +110,9 @@ class BaseService:
             UserRoleModel.user_id == user_id,
             UserRoleModel.role_id == role_id,
         )
-        if not group_id:
+        if group_id is not None:
             return query.where(UserRoleModel.group_id == group_id)
-        elif not task_id:
+        elif task_id is not None:
             return query.where(UserRoleModel.task_id == task_id)
         else:
             raise ValueError("You must pass the group_id or task_id.")
