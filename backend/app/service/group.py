@@ -138,6 +138,7 @@ class GroupService(BaseService):
         sort: UserGroupSearch,
         limit: int,
         offset: int,
+        **kwargs: Any,
     ) -> Select[tuple[UserGroupModel]]:
         """
         Base query for all active groups search/filter/sort.
@@ -472,6 +473,7 @@ class GroupService(BaseService):
                 UserRole.role_id == role_id,
                 UserRole.group_id == group_id,
             )
+        )
 
         if not user_role:
             raise group_exc.GroupNotFound(message="Group not found")
