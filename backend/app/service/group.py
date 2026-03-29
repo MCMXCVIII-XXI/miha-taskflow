@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi import Depends
 from sqlalchemy import Select, select
@@ -238,34 +238,28 @@ class GroupService(BaseService):
         Example Usage:
             group = await group_svc.create_my_group(current_user, group_create)
         """
-        group_create = group_in.model_dump(exclude_unset=True)
-
-        name = group_create.get("name")
-
-        if name:
+        if group_in.name:
             name_conflict = await self._db.scalar(
-                self._group_queries.by_name(name, is_active=True).where(
+                self._group_queries.by_name(group_in.name, is_active=True).where(
                     UserGroupModel.admin_id == current_user.id
                 )
             )
             if name_conflict:
                 raise group_exc.GroupNameConflict(message="Name already exists")
-
-        async with self._db.begin():
-            group = UserGroupModel(
-                name=group_in.name,
-                description=group_in.description,
-                admin_id=current_user.id,
-            )
-            role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
-            user_role = UserRole(
-                user_id=current_user.id, role_id=role_id, group_id=group.id
-            )
-            self._db.add(group)
-            self._db.add(user_role)
-            await self._db.commit()
-            await self._db.refresh(group)
-
+        group = UserGroupModel(
+            name=group_in.name,
+            description=group_in.description,
+            admin_id=current_user.id,
+        )
+        self._db.add(group)
+        await self._db.flush()
+        await self._grant_role_if_not_exists(
+            user_id=current_user.id,
+            group_id=group.id,
+            role_name=self._role.GROUP_ADMIN.value,
+        )
+        await self._db.commit()
+        await self._db.refresh(group)
         await self._invalidate("groups")
         return UserGroupRead.model_validate(group)
 
@@ -476,26 +470,24 @@ class GroupService(BaseService):
         Example Usage:
             await group_svc.delete_my_group(123, current_user)
         """
-        async with self._db.begin():
-            group = await self._get_my_group(group_id, current_user.id)
-            role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
-            user_role = await self._db.scalar(
-                select(UserRole).where(
-                    UserRole.user_id == current_user.id,
-                    UserRole.role_id == role_id,
-                    UserRole.group_id == group_id,
-                )
+        group = await self._get_my_group(group_id, current_user.id)
+        role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
+        user_role = await self._db.scalar(
+            select(UserRole).where(
+                UserRole.user_id == current_user.id,
+                UserRole.role_id == role_id,
+                UserRole.group_id == group_id,
             )
 
-            if not user_role:
-                raise group_exc.GroupNotFound(message="Group not found")
+        if not user_role:
+            raise group_exc.GroupNotFound(message="Group not found")
 
-            group.is_active = False
-            await self._db.delete(user_role)
-            await self._cleanup_role_if_no_groups(
-                current_user.id, self._role.GROUP_ADMIN.value
-            )
-            await self._db.commit()
+        group.is_active = False
+        await self._db.delete(user_role)
+        await self._cleanup_role_if_no_groups(
+            current_user.id, self._role.GROUP_ADMIN.value
+        )
+        await self._db.commit()
         await self._invalidate("groups")
 
     async def join_group(self, group_id: int, current_user: UserModel) -> None:
