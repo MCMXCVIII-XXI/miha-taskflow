@@ -11,7 +11,7 @@ router = APIRouter()
 @router.get("/{group_id}", response_model=UserGroupRead, status_code=status.HTTP_200_OK)
 async def get_my_group(
     group_id: int,
-    current_user: UserModel = Depends(require_permissions_db("group:manage:own")),
+    current_user: UserModel = Depends(require_permissions_db("group:view:own")),
     svc: GroupService = Depends(get_group_service),
 ) -> UserGroupRead:
     """Get owned group profile (GROUP_ADMIN)."""
@@ -24,7 +24,7 @@ async def search_groups(
     sort: UserGroupSearch = Depends(),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("group:view")),
+    current_user: UserModel = Depends(require_permissions_db("group:view:any")),
     svc: GroupService = Depends(get_group_service),
 ) -> list[UserGroupRead]:
     """Search all groups."""
@@ -37,7 +37,7 @@ async def search_my_groups(
     sort: UserGroupSearch = Depends(),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("group:manage:own")),
+    current_user: UserModel = Depends(require_permissions_db("group:view:own")),
     svc: GroupService = Depends(get_group_service),
 ) -> list[UserGroupRead]:
     """Get owned groups (GROUP_ADMIN)."""
@@ -54,7 +54,7 @@ async def search_member_groups(
     sort: UserGroupSearch = Depends(),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("group:view")),
+    current_user: UserModel = Depends(require_permissions_db("group:view:any")),
     svc: GroupService = Depends(get_group_service),
 ) -> list[UserGroupRead]:
     """Get groups where user is member (MEMBER+)."""
@@ -66,7 +66,7 @@ async def search_member_groups(
 @router.post("", response_model=UserGroupRead, status_code=status.HTTP_201_CREATED)
 async def create_my_group(
     group_in: UserGroupCreate,
-    current_user: UserModel = Depends(require_permissions_db("group:create")),
+    current_user: UserModel = Depends(require_permissions_db("group:create:own")),
     svc: GroupService = Depends(get_group_service),
 ) -> UserGroupRead:
     """Create new group."""
@@ -81,7 +81,7 @@ async def create_my_group(
 async def add_member_to_group(
     group_id: int,
     user_id: int,
-    current_user: UserModel = Depends(require_permissions_db("group:manage:group")),
+    current_user: UserModel = Depends(require_permissions_db("group:add:own")),
     svc: GroupService = Depends(get_group_service),
 ) -> None:
     """Add user to group (GROUP_ADMIN)."""
@@ -94,7 +94,7 @@ async def add_member_to_group(
 async def remove_member_from_group(
     group_id: int,
     user_id: int,
-    current_user: UserModel = Depends(require_permissions_db("group:manage:group")),
+    current_user: UserModel = Depends(require_permissions_db("group:remove:own")),
     svc: GroupService = Depends(get_group_service),
 ) -> None:
     """Remove user from group (GROUP_ADMIN)."""
@@ -109,7 +109,7 @@ async def remove_member_from_group(
 async def update_my_group(
     group_id: int,
     group_in: UserGroupUpdate,
-    current_user: UserModel = Depends(require_permissions_db("group:manage:own")),
+    current_user: UserModel = Depends(require_permissions_db("group:update:own")),
     svc: GroupService = Depends(get_group_service),
 ) -> UserGroupRead:
     """Update owned group (GROUP_ADMIN)."""
@@ -128,10 +128,20 @@ async def delete_my_group(
     return await svc.delete_my_group(group_id=group_id, current_user=current_user)
 
 
+@router.post("/{group_id}/join", status_code=status.HTTP_201_CREATED)
+async def join_group(
+    group_id: int,
+    current_user: UserModel = Depends(require_permissions_db("group:join:any")),
+    svc: GroupService = Depends(get_group_service),
+) -> None:
+    """Join group (MEMBER+)."""
+    return await svc.join_group(group_id=group_id, current_user=current_user)
+
+
 @router.delete("/{group_id}/exit", status_code=status.HTTP_204_NO_CONTENT)
 async def exit_group(
     group_id: int,
-    current_user: UserModel = Depends(require_permissions_db("group:view")),
+    current_user: UserModel = Depends(require_permissions_db("group:exit:member")),
     svc: GroupService = Depends(get_group_service),
 ) -> None:
     """Leave group (MEMBER+)."""

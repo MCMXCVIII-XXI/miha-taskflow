@@ -16,9 +16,7 @@ router = APIRouter()
 async def create_task_for_group(
     group_id: int,
     task_in: TaskCreate,
-    current_user: UserModel = Depends(
-        require_permissions_db("task:create", "group:manage:own")
-    ),
+    current_user: UserModel = Depends(require_permissions_db("task:create:own")),
     svc: TaskService = Depends(get_task_service),
 ) -> TaskRead:
     """Create task in group (GROUP_ADMIN only)."""
@@ -33,7 +31,7 @@ async def search_tasks(
     sort: TaskSearch = Depends(),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("task:view")),
+    current_user: UserModel = Depends(require_permissions_db("task:view:any")),
     svc: TaskService = Depends(get_task_service),
 ) -> list[TaskRead]:
     """Search all tasks."""
@@ -84,7 +82,7 @@ async def search_assigned_tasks(
     sort: TaskSearch = Depends(),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("task:view")),
+    current_user: UserModel = Depends(require_permissions_db("task:view:any")),
     svc: TaskService = Depends(get_task_service),
 ) -> list[TaskRead]:
     """Get assigned tasks (TASK_LEADER/MEMBER)."""
@@ -124,13 +122,13 @@ async def delete_my_task(
 )
 async def update_status_task(
     task_id: int,
-    status: TaskStatus,
+    new_status: TaskStatus,
     current_user: UserModel = Depends(require_permissions_db("task:update:status")),
     svc: TaskService = Depends(get_task_service),
 ) -> TaskRead:
     """Update task status (GROUP_ADMIN/TASK_LEADER)."""
     return await svc.update_status_task(
-        task_id=task_id, status=status, current_user=current_user
+        task_id=task_id, status=new_status, current_user=current_user
     )
 
 
@@ -138,7 +136,7 @@ async def update_status_task(
 async def add_user_to_task(
     task_id: int,
     user_id: int,
-    current_user: UserModel = Depends(require_permissions_db("task:manage:group")),
+    current_user: UserModel = Depends(require_permissions_db("task:add:own")),
     svc: TaskService = Depends(get_task_service),
 ) -> None:
     """Add user to task assignees (GROUP_ADMIN)."""
@@ -151,7 +149,7 @@ async def add_user_to_task(
 async def remove_user_from_task(
     task_id: int,
     user_id: int,
-    current_user: UserModel = Depends(require_permissions_db("task:manage:group")),
+    current_user: UserModel = Depends(require_permissions_db("task:remove:own")),
     svc: TaskService = Depends(get_task_service),
 ) -> None:
     """Remove user from task (GROUP_ADMIN)."""
@@ -160,10 +158,20 @@ async def remove_user_from_task(
     )
 
 
-@router.delete("/me/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.post("/{task_id}/join", status_code=status.HTTP_201_CREATED)
+async def join_task(
+    task_id: int,
+    current_user: UserModel = Depends(require_permissions_db("task:join:any")),
+    svc: TaskService = Depends(get_task_service),
+) -> None:
+    """Join task (self-add, TASK_LEADER/MEMBER)."""
+    return await svc.join_task(task_id=task_id, current_user=current_user)
+
+
+@router.delete("/{task_id}/exit", status_code=status.HTTP_204_NO_CONTENT)
 async def exit_task(
     task_id: int,
-    current_user: UserModel = Depends(require_permissions_db("task:view")),
+    current_user: UserModel = Depends(require_permissions_db("task:exit:assignee")),
     svc: TaskService = Depends(get_task_service),
 ) -> None:
     """Exit task (self-remove, TASK_LEADER/MEMBER)."""
