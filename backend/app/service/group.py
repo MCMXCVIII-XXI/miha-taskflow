@@ -307,7 +307,6 @@ class GroupService(BaseService):
                 select(UserGroupMembershipModel)
                 .where(
                     UserGroupMembershipModel.user_id == user_id,
-                    UserGroupMembershipModel.is_active == True,  # noqa: E712
                 )
                 .limit(1)
             )
