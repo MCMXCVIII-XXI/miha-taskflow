@@ -265,7 +265,7 @@ class GroupService(BaseService):
 
     async def _get_active_group_member(
         self, group_id: int, user_id: int
-    ) -> UserGroupModel:
+    ) -> UserGroupMembershipModel:
         """
         Get active UserGroupMembership record.
 
