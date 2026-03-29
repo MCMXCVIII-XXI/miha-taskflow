@@ -2,11 +2,11 @@ from enum import Enum
 
 
 class GlobalUserRole(Enum):
-    USER = "user"
-    ADMIN = "admin"
+    USER = "USER"
+    ADMIN = "ADMIN"
 
 
 class SecondaryUserRole(Enum):
-    GROUP_ADMIN = "group_admin"
-    MEMBER = "member"
-    ASSIGNEE = "assignee"
+    GROUP_ADMIN = "GROUP_ADMIN"
+    MEMBER = "MEMBER"
+    ASSIGNEE = "ASSIGNEE"

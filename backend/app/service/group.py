@@ -306,9 +306,9 @@ class GroupService(BaseService):
         return membership
 
     async def _get_remaining_group_or_member(
-        self, user_id: int, role: Literal["member", "group_admin"]
+        self, user_id: int, role: Literal["MEMBER", "GROUP_ADMIN"]
     ) -> UserGroupModel | UserGroupMembershipModel:
-        if role == "member":
+        if role == "MEMBER":
             return await self._db.scalar(
                 select(UserGroupMembershipModel)
                 .where(
@@ -317,7 +317,7 @@ class GroupService(BaseService):
                 )
                 .limit(1)
             )
-        elif role == "group_admin":
+        elif role == "GROUP_ADMIN":
             return await self._db.scalar(
                 select(UserGroupModel)
                 .where(
@@ -328,7 +328,7 @@ class GroupService(BaseService):
             )
 
     async def _cleanup_role_if_no_groups(
-        self, user_id: int, role: Literal["member", "group_admin"]
+        self, user_id: int, role: Literal["MEMBER", "GROUP_ADMIN"]
     ) -> None:
         remaining = await self._get_remaining_group_or_member(user_id, role)
         if not remaining:

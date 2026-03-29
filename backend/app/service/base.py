@@ -86,7 +86,7 @@ class BaseService:
         self._role = SecondaryUserRoleEnum
 
     async def _get_role_id(
-        self, role_name: Literal["member", "group_admin", "assignee"]
+        self, role_name: Literal["MEMBER", "GROUP_ADMIN", "ASSIGNEE"]
     ) -> int | None:
         if role_name == self._role.MEMBER.value:
             return await self._db.scalar(
@@ -120,7 +120,7 @@ class BaseService:
     async def _grant_role_if_not_exists(
         self,
         user_id: int,
-        role_name: Literal["member", "assignee"],
+        role_name: Literal["MEMBER", "ASSIGNEE", "GROUP_ADMIN"],
         group_id: int | None = None,
         task_id: int | None = None,
     ) -> None:
