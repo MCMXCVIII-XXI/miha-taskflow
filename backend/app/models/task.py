@@ -1,7 +1,15 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum, ForeignKey, String, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -46,3 +54,7 @@ class TaskAssignee(Base, IdPkMixin):
 
     task: Mapped["Task"] = relationship("Task", back_populates="assignees")
     user: Mapped["User"] = relationship("User", back_populates="assigned_tasks")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "task_id", name="uq_user_task_assignee"),
+    )
