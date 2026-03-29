@@ -18,7 +18,7 @@ async def login(
     return await svc.login(form_data)
 
 
-@router.post("/", response_model=TokenResponse, status_code=status.HTTP_200_OK)
+@router.post("", response_model=TokenResponse, status_code=status.HTTP_200_OK)
 async def register(
     user_in: UserCreate,
     db: AsyncSession = Depends(db_helper.get_session),
