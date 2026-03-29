@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import Depends
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -181,32 +183,32 @@ class TaskService(BaseService):
             raise task_exc.TaskTitleConflict(
                 message="Task with this title already exists"
             )
-        async with self._db.begin():
-            group = await self._db.scalar(
-                select(UserGroupModel).where(
-                    UserGroupModel.id == group_id, UserGroupModel.is_active
-                )
+        group = await self._db.scalar(
+            select(UserGroupModel).where(
+                UserGroupModel.id == group_id, UserGroupModel.is_active
             )
-            if not group:
-                raise group_exc.GroupNotFound(message="Group not found or inactive")
+        )
+        if not group:
+            raise group_exc.GroupNotFound(message="Group not found or inactive")
 
-            task = TaskModel(
-                title=task_in.title,
-                description=task_in.description,
-                priority=task_in.priority,
-                group_id=group.id,
-            )
-            role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
-            user_role = UserRoleModel(
-                task_id=task.id,
-                user_id=current_user.id,
-                role_id=role_id,
-                group_id=group_id,
-            )
-            self._db.add(user_role)
-            self._db.add(task)
-            await self._db.commit()
-            await self._db.refresh(task)
+        task = TaskModel(
+            title=task_in.title,
+            description=task_in.description,
+            priority=task_in.priority,
+            group_id=group.id,
+        )
+        self._db.add(task)
+        await self._db.flush()
+        role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
+        user_role = UserRoleModel(
+            task_id=task.id,
+            user_id=current_user.id,
+            role_id=role_id,
+            group_id=group_id,
+        )
+        self._db.add(user_role)
+        await self._db.commit()
+        await self._db.refresh(task)
         await self._invalidate("tasks")
 
         return TaskRead.model_validate(task)
@@ -218,6 +220,7 @@ class TaskService(BaseService):
         sort: TaskSearch,
         limit: int,
         offset: int,
+        **kwargs: Any,
     ) -> Select[tuple[TaskModel]]:
         """
         Base query for all active tasks search/filter/sort.
@@ -396,30 +399,25 @@ class TaskService(BaseService):
         """
         await self._check_task_access(task_id, current_user)
 
-        async with self._db.begin():
-            task = await self._db.scalar(
-                self._task_queries.by_id(task_id, is_active=True)
+        task = await self._db.scalar(self._task_queries.by_id(task_id, is_active=True))
+
+        if not task:
+            raise task_exc.TaskNotFound(message="Task not found")
+
+        role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
+        user_role = await self._db.scalar(
+            select(UserRoleModel).where(
+                UserRoleModel.user_id == current_user.id,
+                UserRoleModel.role_id == role_id,
             )
+        )
 
-            if not task:
-                raise task_exc.TaskNotFound(message="Task not found")
+        if not user_role:
+            raise task_exc.TaskNotFound(message="Task not found")
 
-            role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
-            user_role = await self._db.scalar(
-                select(UserRoleModel).where(
-                    UserRoleModel.user_id == current_user.id,
-                    UserRoleModel.role_id == role_id,
-                    UserRoleModel.task_id == task_id,
-                    UserRoleModel.group_id == group_id,
-                )
-            )
-
-            if not user_role:
-                raise task_exc.TaskNotFound(message="Task not found")
-
-            task.is_active = False
-            await self._db.delete(user_role)
-            await self._db.commit()
+        task.is_active = False
+        await self._db.delete(user_role)
+        await self._db.commit()
         await self._invalidate("tasks")
 
     async def update_status_task(
