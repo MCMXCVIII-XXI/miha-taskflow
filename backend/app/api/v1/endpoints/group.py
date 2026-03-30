@@ -75,7 +75,6 @@ async def create_my_group(
 
 @router.post(
     "/{group_id}/members/{user_id}",
-    response_model=UserGroupRead,
     status_code=status.HTTP_201_CREATED,
 )
 async def add_member_to_group(
