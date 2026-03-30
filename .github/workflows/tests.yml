@@ -1,4 +1,4 @@
-name: TaskFlow-Lint-and-Format
+name: Taskflow-Tests
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  lint:
+  test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -19,5 +19,5 @@ jobs:
           enable-cache: true
           python-version: 3.11
 
-      - name: Lint & Format
-        run: cd backend/ && make lint
+      - name: Tests
+        run: cd backend/ && make test-coverage

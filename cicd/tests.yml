@@ -1,5 +1,5 @@
 stages:
-  - quality
+  - tests
 
 workflow:
   rules:
@@ -8,20 +8,18 @@ workflow:
   auto_cancel:
     on_new_commit: interruptible
 
-quality:
-  stage: quality
+tests:
+  stage: tests
   image: python:3.11-alpine
   interruptible: true
+  coverage: '/^TOTAL.+?(\d+\%)$/'
   before_script:
     - apk add --no-cache uv
     - uv cache dir
   script:
     - cd backend
-    - make lint
+    - make test-coverage
   cache:
     key: ${CI_COMMIT_REF_SLUG}
     paths:
       - ~/.cache/uv/
-  artifacts:
-    reports:
-      codequality: backend/ruff-report.json

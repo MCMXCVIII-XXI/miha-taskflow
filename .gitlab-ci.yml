@@ -1,6 +1,7 @@
 include:
-  - local: 'cicd/lint-and-formatting.yml'
+  - local: "cicd/lint-and-formatting.yml"
+  - local: "cicd/tests.yml"
 
 stages:
   - quality
-
+  - tests
