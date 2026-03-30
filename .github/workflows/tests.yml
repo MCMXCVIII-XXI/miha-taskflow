@@ -27,4 +27,4 @@ jobs:
           python-version: 3.11
 
       - name: Tests
-        run: cd backend/ && make test-coverage
+        run: make test-coverage
