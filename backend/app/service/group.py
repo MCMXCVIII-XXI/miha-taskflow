@@ -4,6 +4,7 @@ from fastapi import Depends
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.db import db_helper
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
@@ -24,6 +25,8 @@ from .base import BaseService
 from .exceptions import group_exc
 from .query_db import GroupQueries
 from .search import group_search
+
+logger = get_logger("service.group")
 
 
 class GroupService(BaseService):
@@ -246,6 +249,11 @@ class GroupService(BaseService):
                 )
             )
             if name_conflict:
+                logger.warning(
+                    "Group creation failed: duplicate name {name} for user {user_id}",
+                    name=group_in.name,
+                    user_id=current_user.id,
+                )
                 raise group_exc.GroupNameConflict(message="Name already exists")
         group = UserGroupModel(
             name=group_in.name,
@@ -263,6 +271,14 @@ class GroupService(BaseService):
         await self._db.refresh(group)
         await self._invalidate("groups")
         await self._invalidate("rbac")
+
+        logger.info(
+            "Group created: id={group_id}, name={name}, admin_id={user_id}",
+            group_id=group.id,
+            name=group.name,
+            user_id=current_user.id,
+        )
+
         return UserGroupRead.model_validate(group)
 
     async def _get_active_group_member(
@@ -361,6 +377,11 @@ class GroupService(BaseService):
             self._group_queries.by_user_member(user_id, group_id, is_active=True)
         )
         if membership:
+            logger.warning(
+                "Add member failed: user {user_id} already member of group {group_id}",
+                user_id=user_id,
+                group_id=group_id,
+            )
             raise group_exc.MemberAlreadyExists(message="Member already exists")
 
         membership_create = UserGroupMembershipModel(group_id=group_id, user_id=user_id)
@@ -368,6 +389,12 @@ class GroupService(BaseService):
         await self._db.commit()
         await self._db.refresh(membership_create)
         await self._invalidate("groups")
+
+        logger.info(
+            "Member added to group: group_id={group_id}, user_id={added_by}",
+            group_id=group_id,
+            added_by=user_id,
+        )
 
     async def remove_member_from_group(
         self, group_id: int, user_id: int, current_user: UserModel
@@ -396,6 +423,12 @@ class GroupService(BaseService):
         await self._db.delete(membership)
         await self._cleanup_role_if_no_groups(user_id, self._role.MEMBER.value)
         await self._db.commit()
+
+        logger.info(
+            "Member removed from group: group_id={group_id}, user_id={removed_user}",
+            group_id=group_id,
+            removed_user=user_id,
+        )
 
     async def update_my_group(
         self, group_id: int, current_user: UserModel, group_in: UserGroupUpdate
@@ -438,6 +471,11 @@ class GroupService(BaseService):
                 )
             )
             if name_conflict:
+                logger.warning(
+                    "Group update failed: duplicate name {name} for group_id {group_id}",
+                    name=name,
+                    group_id=group_id,
+                )
                 raise group_exc.GroupNameConflict(message="Group name already exists")
 
         for key, value in group_update.items():
@@ -446,6 +484,13 @@ class GroupService(BaseService):
         await self._db.commit()
         await self._db.refresh(group)
         await self._invalidate("groups")
+
+        logger.info(
+            "Group updated: group_id={group_id}, fields={fields}",
+            group_id=group_id,
+            fields=list(group_update.keys()),
+        )
+
         return UserGroupRead.model_validate(group)
 
     async def delete_my_group(self, group_id: int, current_user: UserModel) -> None:
@@ -487,6 +532,12 @@ class GroupService(BaseService):
         await self._db.commit()
         await self._invalidate("groups")
 
+        logger.info(
+            "Group deleted (soft delete): group_id={group_id}, admin_id={user_id}",
+            group_id=group_id,
+            user_id=current_user.id,
+        )
+
     async def join_group(self, group_id: int, current_user: UserModel) -> None:
         user_group_membership = await self._db.scalar(
             select(UserGroupMembershipModel).where(
@@ -495,6 +546,11 @@ class GroupService(BaseService):
             )
         )
         if user_group_membership:
+            logger.warning(
+                "Join group failed: user {user_id} already member of group {group_id}",
+                user_id=current_user.id,
+                group_id=group_id,
+            )
             raise group_exc.MemberAlreadyExists(
                 message="User is already a member of this group"
             )
@@ -512,6 +568,12 @@ class GroupService(BaseService):
         await self._db.commit()
         await self._invalidate("groups")
         await self._invalidate("rbac")
+
+        logger.info(
+            "User joined group: user_id={user_id}, group_id={group_id}",
+            user_id=current_user.id,
+            group_id=group_id,
+        )
 
     async def exit_group(self, group_id: int, current_user: UserModel) -> None:
         """
@@ -535,6 +597,12 @@ class GroupService(BaseService):
         await self._cleanup_role_if_no_groups(current_user.id, self._role.MEMBER.value)
         await self._db.commit()
         await self._invalidate("groups")
+
+        logger.info(
+            "User left group: user_id={user_id}, group_id={group_id}",
+            user_id=current_user.id,
+            group_id=group_id,
+        )
 
 
 def get_group_service(

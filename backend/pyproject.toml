@@ -19,6 +19,7 @@ dependencies = [
     "pyjwt>=2.11.0",
     "python-multipart>=0.0.22",
     "fastapi-cache2>=0.2.2",
+    "loguru>=0.7.3",
 ]
 
 [dependency-groups]

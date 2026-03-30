@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import security_exc
+from app.core.logging import get_logger
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -20,6 +21,16 @@ from app.schemas import RefreshTokenRequest, TokenResponse, TokenType, UserCreat
 
 from .base import BaseService
 from .exceptions import user_exc
+
+logger = get_logger("service.auth")
+
+
+def _mask_email(email: str) -> str:
+    """Mask email for logging: user@example.com -> u***@example.com"""
+    if not email or "@" not in email:
+        return "***"
+    local, domain = email.split("@", 1)
+    return f"{local[0]}***@{domain}" if len(local) > 1 else "***@{domain}"
 
 
 class AuthenticationService(BaseService):
@@ -141,6 +152,11 @@ class AuthenticationService(BaseService):
         )
         user = result.first()
         if user:
+            logger.warning(
+                "Registration failed: duplicate email {email} or username {username}",
+                email=_mask_email(user_in.email),
+                username=user_in.username,
+            )
             raise user_exc.UserAlreadyExists(
                 message="User with this email or username already exists"
             )
@@ -157,6 +173,14 @@ class AuthenticationService(BaseService):
         self._db.add(user)
         await self._db.commit()
         await self._db.refresh(user)
+
+        logger.info(
+            "User registered: user_id={user_id}, username={username}, email={email}",
+            user_id=user.id,
+            username=user.username,
+            email=_mask_email(user.email),
+        )
+
         return self._create_token_response(user)
 
     async def login(
@@ -192,11 +216,26 @@ class AuthenticationService(BaseService):
         )
         user = result.first()
         if not user:
+            logger.warning(
+                "Login failed: user not found or inactive: {username}",
+                username=form_data.username,
+            )
             raise user_exc.UserNotFound(message="User not found or inactive")
         if not verify_password(form_data.password, user.hashed_password):
+            logger.warning(
+                "Login failed: invalid password for user {user_id} ({username})",
+                user_id=user.id,
+                username=form_data.username,
+            )
             raise security_exc.SecurityCouldNotVerify(
                 message="Could not verify credentials"
             )
+
+        logger.info(
+            "User logged in: user_id={user_id}, username={username}",
+            user_id=user.id,
+            username=user.username,
+        )
 
         return self._create_token_response(user)
 

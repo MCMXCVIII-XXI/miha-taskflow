@@ -5,6 +5,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.core.logging import get_logger
 from app.db import db_helper
 from app.models import Task as TaskModel
 from app.models import TaskAssignee
@@ -23,6 +24,8 @@ from .base import BaseService
 from .exceptions import group_exc, task_exc
 from .query_db import TaskQueries
 from .search import task_search
+
+logger = get_logger("service.task")
 
 
 class TaskService(BaseService):
@@ -180,6 +183,12 @@ class TaskService(BaseService):
             )
         )
         if result.first():
+            logger.warning(
+                "Task creation failed: duplicate title {title} in group {group_id} by user {user_id}",
+                title=task_in.title,
+                group_id=group_id,
+                user_id=current_user.id,
+            )
             raise task_exc.TaskTitleConflict(
                 message="Task with this title already exists"
             )
@@ -211,6 +220,14 @@ class TaskService(BaseService):
         await self._db.refresh(task)
         await self._invalidate("tasks")
         await self._invalidate("rbac")
+
+        logger.info(
+            "Task created: id={task_id}, title={title}, group_id={group_id}, owner_id={user_id}",
+            task_id=task.id,
+            title=task.title,
+            group_id=group_id,
+            user_id=current_user.id,
+        )
 
         return TaskRead.model_validate(task)
 

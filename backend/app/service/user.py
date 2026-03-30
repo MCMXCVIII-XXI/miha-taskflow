@@ -4,6 +4,7 @@ from fastapi import Depends
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.logging import get_logger
 from app.db import db_helper
 
 # MODELS
@@ -17,6 +18,8 @@ from .base import BaseService
 from .exceptions import group_exc, user_exc
 from .query_db import GroupQueries, UserQueries
 from .search import user_search
+
+logger = get_logger("service.user")
 
 
 class UserService(BaseService):
@@ -270,6 +273,11 @@ class UserService(BaseService):
                 )
             )
             if email_conflict:
+                logger.warning(
+                    "Profile update failed: duplicate email {email} for user {user_id}",
+                    email=email,
+                    user_id=user.id,
+                )
                 raise user_exc.UserEmailConflict(
                     message="User with this email already exists"
                 )
@@ -281,6 +289,11 @@ class UserService(BaseService):
                 )
             )
             if username_conflict:
+                logger.warning(
+                    "Profile update failed: duplicate username {username} for user {user_id}",
+                    username=username,
+                    user_id=user.id,
+                )
                 raise user_exc.UserUsernameConflict(
                     message="User with this username already exists"
                 )
@@ -291,6 +304,13 @@ class UserService(BaseService):
         await self._db.commit()
         await self._db.refresh(user)
         await self._invalidate("auth")
+
+        logger.info(
+            "Profile updated: user_id={user_id}, fields={fields}",
+            user_id=user.id,
+            fields=list(update_data.keys()),
+        )
+
         return UserRead.model_validate(user)
 
     async def delete_my_profile(self, current_user: UserModel) -> None:
@@ -317,6 +337,11 @@ class UserService(BaseService):
         await self._db.commit()
         await self._invalidate("users")
         await self._invalidate("auth")
+
+        logger.info(
+            "Profile deleted (soft delete): user_id={user_id}",
+            user_id=user.id,
+        )
 
     async def get_group_admin(self, group_id: int) -> UserRead:
         """
