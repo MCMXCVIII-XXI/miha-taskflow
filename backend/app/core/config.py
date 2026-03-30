@@ -1,4 +1,4 @@
-from pydantic import PostgresDsn
+from pydantic import AnyUrl
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -13,7 +13,7 @@ class TokenSettings(BaseSettings):
 
 
 class DBSettings(BaseSettings):
-    URL: PostgresDsn
+    URL: AnyUrl
     echo: bool = False
     echo_pool: bool = False
     pool_size: int = 5
