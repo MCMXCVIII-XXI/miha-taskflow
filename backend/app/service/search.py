@@ -1,3 +1,4 @@
+import inspect
 from collections.abc import Awaitable, Callable
 from typing import Any, Generic, TypeVar
 
@@ -109,13 +110,23 @@ class SearchParameters(Generic[ModelT]):
             offset_param = kwargs.pop("offset", 0)
             current_user = kwargs.pop("current_user", None)
 
+            # Some endpoints pass current_user as positional arg
+            if current_user is None and args:
+                current_user = args[0]
+                args = args[1:]
+
+            call_kwargs: dict[str, Any] = {
+                "search": search_param,
+                "sort": sort_param,
+                "limit": limit_param,
+                "offset": offset_param,
+            }
+            if "current_user" in inspect.signature(function).parameters:
+                call_kwargs["current_user"] = current_user
             base_query: Select[tuple[ModelT, ...]] = await function(
                 service,
-                search=search_param,
-                sort=sort_param,
-                limit=limit_param,
-                offset=offset_param,
-                current_user=current_user,
+                *args,
+                **call_kwargs,
                 **kwargs,
             )
 
