@@ -20,7 +20,19 @@ dependencies = [
     "python-multipart>=0.0.22",
     "fastapi-cache2>=0.2.2",
     "loguru>=0.7.3",
+    "typer>=0.24.0",
 ]
+
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+miha = "app.cli.__main__:app"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["app*"]
 
 [dependency-groups]
 dev = [
