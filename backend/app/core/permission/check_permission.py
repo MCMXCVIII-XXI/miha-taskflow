@@ -2,8 +2,7 @@ from collections.abc import Callable
 from typing import Any
 
 from fastapi import Depends
-from fastapi_cache.decorator import cache
-from sqlalchemy import String, func, select
+from sqlalchemy import String, func, select, union
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import security_exc
@@ -14,26 +13,26 @@ from app.models import User as UserModel
 from app.models import UserRole as UserRoleModel
 
 
-@cache(expire=300, namespace="rbac")
 async def get_user_permissions_db(user_id: int, db: AsyncSession) -> set[str]:
     """
     Get user permissions from database
     """
-    global_perms = await db.scalars(
+    global_query = (
         select(Permission.name)
         .join(RolePermission, Permission.id == RolePermission.permission_id)
         .join(Role, RolePermission.role_id == Role.id)
         .join(UserModel, func.cast(UserModel.role, String) == Role.name)
         .where(UserModel.id == user_id)
     )
-    secondary_perms = await db.scalars(
+    secondary_query = (
         select(Permission.name)
         .join(RolePermission, Permission.id == RolePermission.permission_id)
         .join(Role, RolePermission.role_id == Role.id)
         .join(UserRoleModel, UserRoleModel.role_id == Role.id)
         .where(UserRoleModel.user_id == user_id)
     )
-    return set(global_perms.all()) | set(secondary_perms.all())
+    result = await db.scalars(union(global_query, secondary_query))
+    return set(result.all())
 
 
 def require_permissions_db(*required_permissions: str) -> Callable[..., Any]:
