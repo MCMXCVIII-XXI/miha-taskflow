@@ -16,7 +16,6 @@ jobs:
     steps:
       - name: Debug
         run: |
-          cd backend/
           echo "DB_URL=$DB_URL"
           echo "CACHE_URL=$CACHE_URL"
           echo "TOKEN_SECRET_KEY=$TOKEN_SECRET_KEY"
