@@ -509,7 +509,9 @@ class GroupService(BaseService):
             user_id=current_user.id,
             role_name=self._role.MEMBER.value,
         )
+        await self._db.commit()
         await self._invalidate("groups")
+        await self._invalidate("rbac")
 
     async def exit_group(self, group_id: int, current_user: UserModel) -> None:
         """
