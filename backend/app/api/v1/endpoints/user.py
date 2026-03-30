@@ -23,7 +23,7 @@ async def search_users(
     sort: UserSearch = Depends(),
     limit: int = Query(10, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("user:view")),
+    current_user: UserModel = Depends(require_permissions_db("user:view:any")),
     svc: UserService = Depends(get_user_service),
 ) -> list[UserRead]:
     """Search users (autocomplete, lists)."""
