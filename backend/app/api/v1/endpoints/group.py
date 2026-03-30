@@ -8,16 +8,6 @@ from app.service import GroupService, get_group_service
 router = APIRouter()
 
 
-@router.get("/{group_id}", response_model=UserGroupRead, status_code=status.HTTP_200_OK)
-async def get_my_group(
-    group_id: int,
-    current_user: UserModel = Depends(require_permissions_db("group:view:own")),
-    svc: GroupService = Depends(get_group_service),
-) -> UserGroupRead:
-    """Get owned group profile (GROUP_ADMIN)."""
-    return await svc.get_my_group(group_id=group_id, current_user=current_user)
-
-
 @router.get("", response_model=list[UserGroupRead], status_code=status.HTTP_200_OK)
 async def search_groups(
     search: UserGroupSearch = Depends(),
@@ -42,12 +32,12 @@ async def search_my_groups(
 ) -> list[UserGroupRead]:
     """Get owned groups (GROUP_ADMIN)."""
     return await svc.search_my_groups(
-        current_user, search=search, sort=sort, limit=limit, offset=offset
+        search=search, sort=sort, limit=limit, offset=offset, current_user=current_user
     )
 
 
 @router.get(
-    "/membership", response_model=list[UserGroupRead], status_code=status.HTTP_200_OK
+    "/members", response_model=list[UserGroupRead], status_code=status.HTTP_200_OK
 )
 async def search_member_groups(
     search: UserGroupSearch = Depends(),
@@ -59,7 +49,7 @@ async def search_member_groups(
 ) -> list[UserGroupRead]:
     """Get groups where user is member (MEMBER+)."""
     return await svc.search_member_groups(
-        current_user, search=search, sort=sort, limit=limit, offset=offset
+        search=search, sort=sort, limit=limit, offset=offset, current_user=current_user
     )
 
 
@@ -71,6 +61,16 @@ async def create_my_group(
 ) -> UserGroupRead:
     """Create new group."""
     return await svc.create_my_group(group_in=group_in, current_user=current_user)
+
+
+@router.get("/{group_id}", response_model=UserGroupRead, status_code=status.HTTP_200_OK)
+async def get_my_group(
+    group_id: int,
+    current_user: UserModel = Depends(require_permissions_db("group:view:own")),
+    svc: GroupService = Depends(get_group_service),
+) -> UserGroupRead:
+    """Get owned group profile (GROUP_ADMIN)."""
+    return await svc.get_my_group(group_id=group_id, current_user=current_user)
 
 
 @router.post(
