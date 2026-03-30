@@ -9,6 +9,8 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    env:
+      TOKEN_SECRET_KEY: ${{ secrets.TOKEN_SECRET_KEY }}
     steps:
       - name: Checkout
         uses: actions/checkout@v5
