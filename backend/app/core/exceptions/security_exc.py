@@ -122,3 +122,20 @@ class SecurityPermissionDenied(BaseSecurityError):
             headers=headers,
             details=details,
         )
+
+
+class SecurityInvalidTokenType(BaseSecurityError):
+    """The token type is invalid."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_401_UNAUTHORIZED,
+            message=message,
+            headers=headers,
+            details=details,
+        )
