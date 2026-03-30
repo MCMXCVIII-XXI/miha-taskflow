@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi_cache import FastAPICache
@@ -9,11 +9,31 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import StaticPool
 
 import app.cache as cache_module
+from app.core import config
 from app.core.permission import PERMISSIONS
 from app.db.base import Base
 from app.db.db_helper import db_helper
 from app.models import Permission, Role, RolePermission
 from main import app
+
+
+@pytest.fixture(scope="session", autouse=True)
+def mock_settings():
+    """Mock settings for tests."""
+    with (
+        patch.object(config, "db_settings") as mock_db,
+        patch.object(config, "token_settings") as mock_token,
+        patch.object(config, "cache_settings") as mock_cache,
+    ):
+        mock_db.URL = "sqlite+aiosqlite:///:memory:"
+        mock_token.SECRET_KEY = "test-secret"
+        mock_token.ALGORITHM = "HS256"
+        mock_token.ACCESS_TOKEN_EXPIRE_MINUTES = 30
+        mock_token.REFRESH_TOKEN_EXPIRE_DAYS = 30
+        mock_cache.URL = "memory://"
+
+        yield
+
 
 TEST_USER_USERNAME = "testuser"
 TEST_USER_PASSWORD = "Test123456789"  # noqa: S105
