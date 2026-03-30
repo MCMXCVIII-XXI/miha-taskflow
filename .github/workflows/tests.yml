@@ -11,9 +11,16 @@ jobs:
     runs-on: ubuntu-latest
     env:
       TOKEN_SECRET_KEY: ${{ secrets.TOKEN_SECRET_KEY }}
-      URL: sqlite+aiosqlite:///test.db
+      DB_URL: sqlite+aiosqlite:///test.db
       CACHE_URL: memory://
     steps:
+      - name: Debug
+        run: |
+          cd backend/
+          echo "DB_URL=$DB_URL"
+          echo "CACHE_URL=$CACHE_URL"
+          echo "TOKEN_SECRET_KEY=$TOKEN_SECRET_KEY"
+
       - name: Checkout
         uses: actions/checkout@v5
 
