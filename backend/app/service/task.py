@@ -210,6 +210,7 @@ class TaskService(BaseService):
         await self._db.commit()
         await self._db.refresh(task)
         await self._invalidate("tasks")
+        await self._invalidate("rbac")
 
         return TaskRead.model_validate(task)
 
