@@ -24,7 +24,6 @@ logs-backend:
 	docker-compose logs -f backend
 
 test-backend:
-	cd backend
 	uv sync --group test
 	uv run pytest
 
@@ -44,6 +43,10 @@ lint-all:
 
 test:
 	make test-backend
+
+test-coverage:
+	uv sync --group test
+	uv run pytest --cov=app --cov-report=term-missing
 
 dev:
 	make lint
