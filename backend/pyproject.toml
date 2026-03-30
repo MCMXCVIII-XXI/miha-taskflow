@@ -34,7 +34,16 @@ test = [
     "pytest>=9.0.2",
     "pytest-asyncio>=1.3.0",
     "pytest-cov>=7.0.0",
+    "aiosqlite>=0.20.0",
 ]
+
+# TESTS
+###################################################################################
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+testpaths = ["tests"]
+pythonpath = ["."]
 
 # RUFF
 ###################################################################################
@@ -75,7 +84,7 @@ target-version = "py311"
 [tool.ruff.lint]
 select = [
     "UP",    # pyupgrade
-    "I",     # isort (автозамена)
+    "I",     # isort (auto-fixable)
     "E",     # flake8-errors
     "W",     # flake8-warnings
     "F",     # flake8-pyflakes
@@ -91,8 +100,11 @@ select = [
     "ERA",   # eradicate
     "FURB",  # refurb
 ]
-
-ignore = ["B008", "F821"]
+ignore = [
+    "B008", # do not flag function calls in default argument values
+    "F821", # allow undefined names
+    "S101", # allow `assert` usage, especially in test files
+]
 fixable = ["ALL"]
 unfixable = []
 dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
@@ -104,7 +116,6 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 docstring-code-format = false
 docstring-code-line-length = "dynamic"
-###################################################################################
 
 # MYPY
 ###################################################################################
