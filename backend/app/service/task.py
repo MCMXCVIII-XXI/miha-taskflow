@@ -5,7 +5,7 @@ from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
-from app.core.logging import get_logger
+from app.core.log import get_logger
 from app.db import db_helper
 from app.models import Task as TaskModel
 from app.models import TaskAssignee
@@ -184,7 +184,8 @@ class TaskService(BaseService):
         )
         if result.first():
             logger.warning(
-                "Task creation failed: duplicate title {title} in group {group_id} by user {user_id}",
+                "Task creation failed: duplicate title {title} \
+                    in group {group_id} by user {user_id}",
                 title=task_in.title,
                 group_id=group_id,
                 user_id=current_user.id,
@@ -222,7 +223,8 @@ class TaskService(BaseService):
         await self._invalidate("rbac")
 
         logger.info(
-            "Task created: id={task_id}, title={title}, group_id={group_id}, owner_id={user_id}",
+            "Task created: id={task_id}, title={title}, \
+                group_id={group_id}, owner_id={user_id}",
             task_id=task.id,
             title=task.title,
             group_id=group_id,
@@ -388,6 +390,13 @@ class TaskService(BaseService):
         await self._db.refresh(task)
         await self._invalidate("tasks")
 
+        logger.info(
+            "Task updated: task_id={task_id}, fields={fields}, user_id={user_id}",
+            task_id=task.id,
+            fields=list(task_in.model_dump(exclude_unset=True).keys()),
+            user_id=current_user.id,
+        )
+
         return TaskRead.model_validate(task)
 
     async def delete_my_task(
@@ -423,6 +432,12 @@ class TaskService(BaseService):
         task.is_active = False
         await self._db.commit()
         await self._invalidate("tasks")
+
+        logger.info(
+            "Task deleted: task_id={task_id}, user_id={user_id}",
+            task_id=task.id,
+            user_id=current_user.id,
+        )
 
     async def update_status_task(
         self,
@@ -463,10 +478,20 @@ class TaskService(BaseService):
                 message="Task status is already set to this value"
             )
 
+        old_status = task.status
         task.status = status
         await self._db.commit()
         await self._db.refresh(task)
         await self._invalidate("tasks")
+
+        logger.info(
+            "Task status updated: task_id={task_id}, \
+                {old_status} -> {new_status}, user_id={user_id}",
+            task_id=task.id,
+            old_status=old_status.value,
+            new_status=status.value,
+            user_id=current_user.id,
+        )
 
         return TaskRead.model_validate(task)
 
@@ -560,12 +585,25 @@ class TaskService(BaseService):
         )
 
         if task_assignee:
+            logger.warning(
+                "Add user to task failed: user {user_id} already in task {task_id}",
+                user_id=user_id,
+                task_id=task_id,
+            )
             raise task_exc.UserAlreadyInTask(message="User is already in the task")
 
         assignee = TaskAssignee(task_id=task_id, user_id=user_id)
         self._db.add(assignee)
         await self._db.commit()
         await self._invalidate("tasks")
+
+        logger.info(
+            "User added to task: user_id={user_id}, \
+                task_id={task_id}, by_user_id={by_user_id}",
+            user_id=user_id,
+            task_id=task_id,
+            by_user_id=current_user.id,
+        )
 
     async def remove_user_from_task(
         self,
@@ -599,6 +637,14 @@ class TaskService(BaseService):
         await self._db.commit()
         await self._invalidate("tasks")
 
+        logger.info(
+            "User removed from task: user_id={user_id}, \
+                task_id={task_id}, by_user_id={by_user_id}",
+            user_id=user_id,
+            task_id=task_id,
+            by_user_id=current_user.id,
+        )
+
     async def join_task(self, task_id: int, current_user: UserModel) -> None:
         task_assignee = await self._db.scalar(
             select(TaskAssignee).where(
@@ -607,6 +653,11 @@ class TaskService(BaseService):
             )
         )
         if task_assignee:
+            logger.warning(
+                "Join task failed: user {user_id} already in task {task_id}",
+                user_id=current_user.id,
+                task_id=task_id,
+            )
             raise task_exc.UserAlreadyInTask("User is already assigned to this task")
 
         assignee = TaskAssignee(task_id=task_id, user_id=current_user.id)
@@ -620,6 +671,12 @@ class TaskService(BaseService):
         await self._db.commit()
         await self._invalidate("tasks")
         await self._invalidate("rbac")
+
+        logger.info(
+            "User joined task: user_id={user_id}, task_id={task_id}",
+            user_id=current_user.id,
+            task_id=task_id,
+        )
 
     async def exit_task(self, task_id: int, current_user: UserModel) -> None:
         """
@@ -643,6 +700,12 @@ class TaskService(BaseService):
         await self._cleanup_assignee_role_if_no_tasks(current_user.id)
         await self._db.commit()
         await self._invalidate("tasks")
+
+        logger.info(
+            "User exited task: user_id={user_id}, task_id={task_id}",
+            user_id=current_user.id,
+            task_id=task_id,
+        )
 
 
 def get_task_service(db: AsyncSession = Depends(db_helper.get_session)) -> TaskService:

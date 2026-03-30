@@ -7,7 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import security_exc
-from app.core.logging import get_logger
+from app.core.log import get_logger
 from app.core.security import (
     create_access_token,
     create_refresh_token,

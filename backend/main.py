@@ -8,7 +8,7 @@ from app.api.v1 import api_router
 from app.cache import init_cache
 from app.core.exceptions.rbac_exc import BaseRBACError
 from app.core.exceptions.security_exc import BaseSecurityError
-from app.core.logging import get_logger, setup_logging
+from app.core.log import get_logger, setup_logging
 from app.core.middleware import http_logging_middleware
 from app.core.permission import init_rbac
 from app.db import db_helper

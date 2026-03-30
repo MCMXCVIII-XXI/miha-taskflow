@@ -4,7 +4,7 @@ from fastapi import Depends
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.logging import get_logger
+from app.core.log import get_logger
 from app.db import db_helper
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
@@ -472,7 +472,8 @@ class GroupService(BaseService):
             )
             if name_conflict:
                 logger.warning(
-                    "Group update failed: duplicate name {name} for group_id {group_id}",
+                    "Group update failed: duplicate name {name} \
+                        for group_id {group_id}",
                     name=name,
                     group_id=group_id,
                 )

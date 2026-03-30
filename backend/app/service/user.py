@@ -4,7 +4,7 @@ from fastapi import Depends
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.logging import get_logger
+from app.core.log import get_logger
 from app.db import db_helper
 
 # MODELS
@@ -290,7 +290,8 @@ class UserService(BaseService):
             )
             if username_conflict:
                 logger.warning(
-                    "Profile update failed: duplicate username {username} for user {user_id}",
+                    "Profile update failed: duplicate username {username} \
+                        for user {user_id}",
                     username=username,
                     user_id=user.id,
                 )
