@@ -9,6 +9,9 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     env:
       TOKEN_SECRET_KEY: ${{ secrets.TOKEN_SECRET_KEY }}
       DB_URL: sqlite+aiosqlite:///test.db
