@@ -57,7 +57,7 @@ v1.1.0 (Upcoming)
 
 """
 
-from typing import Literal
+from typing import Any, Literal
 
 from fastapi_cache import FastAPICache
 from sqlalchemy import Select, select
@@ -67,6 +67,7 @@ from app.core.exceptions import rbac_exc
 from app.models import Role as RoleModel
 from app.models import UserRole as UserRoleModel
 from app.schemas import SecondaryUserRole as SecondaryUserRoleEnum
+from app.service.utils import StatsGroups, StatsTasks, StatsUsers
 
 
 class BaseService:
@@ -147,3 +148,28 @@ class BaseService:
             namespace (str): Cache namespace to clear.
         """
         await FastAPICache.clear(namespace=namespace)
+
+
+class AdminBaseService(BaseService):
+    def __init__(self, db: AsyncSession) -> None:
+        super().__init__(db)
+        self._stats_users = StatsUsers(db)
+        self._stats_groups = StatsGroups(db)
+        self._stats_tasks = StatsTasks(db)
+
+    async def _get_data(
+        self,
+        stat_users: bool = False,
+        stat_groups: bool = False,
+        stat_tasks: bool = False,
+    ) -> dict[str, Any]:
+        stats: dict[str, Any] = {"users": {}, "groups": {}, "tasks": {}}
+
+        if stat_users:
+            stats["users"] = await self._stats_users.get_stats() or {}
+        if stat_groups:
+            stats["groups"] = await self._stats_groups.get_stats() or {}
+        if stat_tasks:
+            stats["tasks"] = await self._stats_tasks.get_stats() or {}
+
+        return stats

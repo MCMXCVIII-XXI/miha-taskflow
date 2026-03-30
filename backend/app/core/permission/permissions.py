@@ -101,4 +101,17 @@ PERM_GROUP = [
     ),
 ]
 
-PERMISSIONS = PERM_USER + PERM_GROUP + PERM_TASK
+# ADMIN
+PERM_ADMIN = [
+    Permission.create(
+        resource="admin", action="users", context="view", description="View all users"
+    ),
+    Permission.create(
+        resource="admin", action="users", context="delete", description="Delete users"
+    ),
+    Permission.create(
+        resource="admin", action="stats", context="view", description="View statistics"
+    ),
+]
+
+PERMISSIONS = PERM_USER + PERM_GROUP + PERM_TASK + PERM_ADMIN

@@ -169,6 +169,54 @@ async def auth_headers(test_client, testuser_id):
     return {"Authorization": f"Bearer {token}"}
 
 
+TEST_ADMIN_USERNAME = "testadmin"
+TEST_ADMIN_PASSWORD = "TestAdmin123456"  # noqa: S105
+
+
+@pytest.fixture(scope="session")
+async def testadmin_id(test_client, session_factory):
+    """Register testadmin once and return its ID."""
+    import jwt
+
+    from app.models import User
+    from app.schemas import GlobalUserRole
+
+    resp = await test_client.post(
+        "/auth",
+        json={
+            "username": TEST_ADMIN_USERNAME,
+            "email": "admin@test.com",
+            "password": TEST_ADMIN_PASSWORD,
+            "first_name": "Admin",
+            "last_name": "Test",
+        },
+    )
+    token = resp.json()["access_token"]
+    payload = jwt.decode(token, options={"verify_signature": False})
+    admin_id = int(payload.get("sub"))
+
+    async with session_factory() as session:
+        user = await session.get(User, admin_id)
+        user.role = GlobalUserRole.ADMIN
+        await session.commit()
+
+    return admin_id
+
+
+@pytest.fixture
+async def admin_auth_headers(test_client, testadmin_id):
+    """Fresh auth headers for admin."""
+    resp = await test_client.post(
+        "/auth/token",
+        data={
+            "username": TEST_ADMIN_USERNAME,
+            "password": TEST_ADMIN_PASSWORD,
+        },
+    )
+    token = resp.json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
 @pytest.fixture(autouse=True)
 async def cleanup_test_data(session_factory, testuser_id):
     """Cleanup test data after each test to prevent side effects."""
