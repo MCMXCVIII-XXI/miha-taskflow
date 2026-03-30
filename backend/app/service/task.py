@@ -374,7 +374,6 @@ class TaskService(BaseService):
 
     async def delete_my_task(
         self,
-        group_id: int,
         task_id: int,
         current_user: UserModel,
     ) -> None:
@@ -386,7 +385,6 @@ class TaskService(BaseService):
             Ownership validation + cache invalidation.
 
         Arguments:
-            group_id (int): Target group ID
             task_id (int): Target task ID
             current_user (UserModel): Task owner
 
@@ -404,19 +402,7 @@ class TaskService(BaseService):
         if not task:
             raise task_exc.TaskNotFound(message="Task not found")
 
-        role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
-        user_role = await self._db.scalar(
-            select(UserRoleModel).where(
-                UserRoleModel.user_id == current_user.id,
-                UserRoleModel.role_id == role_id,
-            )
-        )
-
-        if not user_role:
-            raise task_exc.TaskNotFound(message="Task not found")
-
         task.is_active = False
-        await self._db.delete(user_role)
         await self._db.commit()
         await self._invalidate("tasks")
 
