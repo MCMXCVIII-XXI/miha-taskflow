@@ -106,15 +106,12 @@ async def update_my_task(
 
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_my_task(
-    group_id: int,
     task_id: int,
     current_user: UserModel = Depends(require_permissions_db("task:delete:own")),
     svc: TaskService = Depends(get_task_service),
 ) -> None:
     """Soft-delete own task (GROUP_ADMIN)."""
-    return await svc.delete_my_task(
-        group_id=group_id, task_id=task_id, current_user=current_user
-    )
+    return await svc.delete_my_task(task_id=task_id, current_user=current_user)
 
 
 @router.patch(
