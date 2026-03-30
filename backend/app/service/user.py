@@ -6,12 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import get_logger
 from app.db import db_helper
-
-# MODELS
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
-
-# SCHEMAS
 from app.schemas import UserRead, UserSearch, UserUpdate
 
 from .base import BaseService

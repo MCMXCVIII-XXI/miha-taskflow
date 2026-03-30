@@ -88,3 +88,37 @@ class UserNotFound(BaseUserError):
             headers=headers,
             details=details,
         )
+
+
+class UserSelfDeleteError(BaseUserError):
+    """Cannot delete yourself."""
+
+    def __init__(
+        self,
+        message: str = "Cannot delete yourself",
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_403_FORBIDDEN,
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class CannotDeleteLastAdmin(BaseUserError):
+    """Cannot delete the last admin."""
+
+    def __init__(
+        self,
+        message: str = "Cannot delete the last admin",
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_403_FORBIDDEN,
+            message=message,
+            headers=headers,
+            details=details,
+        )
