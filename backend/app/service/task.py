@@ -441,7 +441,6 @@ class TaskService(BaseService):
 
         if not task:
             raise task_exc.TaskNotFound(message="Task not found or inactive")
-
         if task.status == status:
             raise task_exc.TaskStatusAlreadySet(
                 message="Task status is already set to this value"
@@ -601,7 +600,9 @@ class TaskService(BaseService):
             user_id=current_user.id,
             role_name=self._role.ASSIGNEE.value,
         )
+        await self._db.commit()
         await self._invalidate("tasks")
+        await self._invalidate("rbac")
 
     async def exit_task(self, task_id: int, current_user: UserModel) -> None:
         """
