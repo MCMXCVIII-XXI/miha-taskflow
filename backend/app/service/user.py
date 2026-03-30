@@ -299,7 +299,7 @@ class UserService(BaseService):
 
         Details:
             Sets user.is_active = False (soft delete pattern).
-            Automatic cache invalidation for "users" namespace.
+            Automatic cache invalidation for "auth" namespace.
 
         Arguments:
             current_user (UserModel): Authenticated user model from dependency.
@@ -316,6 +316,7 @@ class UserService(BaseService):
         user.is_active = False
         await self._db.commit()
         await self._invalidate("users")
+        await self._invalidate("auth")
 
     async def get_group_admin(self, group_id: int) -> UserRead:
         """
