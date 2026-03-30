@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import Depends
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -156,6 +158,7 @@ class UserService(BaseService):
         sort: UserSearch,
         limit: int,
         offset: int,
+        **kwargs: Any,
     ) -> Select[tuple[UserModel]]:
         """
         Search all active users query builder.
