@@ -290,7 +290,7 @@ class UserService(BaseService):
 
         await self._db.commit()
         await self._db.refresh(user)
-        await self._invalidate("users")
+        await self._invalidate("auth")
         return UserRead.model_validate(user)
 
     async def delete_my_profile(self, current_user: UserModel) -> None:
