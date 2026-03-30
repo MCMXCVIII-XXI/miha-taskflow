@@ -49,7 +49,7 @@ async def search_my_tasks(
 ) -> list[TaskRead]:
     """Get own tasks (GROUP_ADMIN)."""
     return await svc.search_my_tasks(
-        current_user, search=search, sort=sort, limit=limit, offset=offset
+        search=search, sort=sort, limit=limit, offset=offset, current_user=current_user
     )
 
 
