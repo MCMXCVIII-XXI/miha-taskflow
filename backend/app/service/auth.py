@@ -96,16 +96,19 @@ class AuthenticationService(BaseService):
             "role": str(user.role),
         }
 
-        match options:
-            case TokenType.ACCESS:
-                return TokenResponse(access_token=create_access_token(data))
-            case TokenType.REFRESH:
-                return TokenResponse(refresh_token=create_refresh_token(data))
-            case TokenType.BOTH:
-                return TokenResponse(
-                    access_token=create_access_token(data),
-                    refresh_token=create_refresh_token(data),
-                )
+        if options == "access":
+            return TokenResponse(access_token=create_access_token(data))
+        elif options == "refresh":
+            return TokenResponse(refresh_token=create_refresh_token(data))
+        elif options == "both":
+            return TokenResponse(
+                access_token=create_access_token(data),
+                refresh_token=create_refresh_token(data),
+            )
+        else:
+            raise security_exc.SecurityInvalidTokenType(
+                message=f"Invalid token type: {options}",
+            )
 
     async def register(
         self,
