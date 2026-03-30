@@ -14,12 +14,6 @@ jobs:
       DB_URL: sqlite+aiosqlite:///test.db
       CACHE_URL: memory://
     steps:
-      - name: Debug
-        run: |
-          echo "DB_URL=$DB_URL"
-          echo "CACHE_URL=$CACHE_URL"
-          echo "TOKEN_SECRET_KEY=$TOKEN_SECRET_KEY"
-
       - name: Checkout
         uses: actions/checkout@v5
 
