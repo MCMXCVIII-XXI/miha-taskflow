@@ -262,6 +262,7 @@ class GroupService(BaseService):
         await self._db.commit()
         await self._db.refresh(group)
         await self._invalidate("groups")
+        await self._invalidate("rbac")
         return UserGroupRead.model_validate(group)
 
     async def _get_active_group_member(
