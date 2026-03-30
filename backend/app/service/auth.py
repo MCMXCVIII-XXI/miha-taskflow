@@ -60,15 +60,17 @@ class AuthenticationService(BaseService):
         new_access = await auth_svc.access_token(refresh_request)
     """
 
-    REFRESH_TOKEN_TYPE = TokenType.REFRESH
-    ACCESS_TOKEN_TYPE = TokenType.ACCESS
-    BOTH_TOKEN_TYPE = TokenType.BOTH
+    REFRESH_TOKEN_TYPE = TokenType.REFRESH.value
+    ACCESS_TOKEN_TYPE = TokenType.ACCESS.value
+    BOTH_TOKEN_TYPE = TokenType.BOTH.value
 
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(db)
 
     def _create_token_response(
-        self, user: UserModel, options: TokenType = BOTH_TOKEN_TYPE
+        self,
+        user: UserModel,
+        options: str = BOTH_TOKEN_TYPE,
     ) -> TokenResponse:
         """
         Create TokenResponse with access/refresh tokens.
