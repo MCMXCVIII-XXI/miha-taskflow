@@ -21,6 +21,8 @@ dependencies = [
     "fastapi-cache2>=0.2.2",
     "loguru>=0.7.3",
     "typer>=0.24.0",
+    "slowapi>=0.1.9",
+    "sentry-sdk[fastapi]>=2.0.0",
 ]
 
 [build-system]
