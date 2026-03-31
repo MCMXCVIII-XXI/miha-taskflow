@@ -1,6 +1,12 @@
 from datetime import datetime
+from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class GroupVisibility(Enum):
+    PUBLIC = "public"
+    PRIVATE = "private"
 
 
 class UserGroupRead(BaseModel):
@@ -10,6 +16,9 @@ class UserGroupRead(BaseModel):
     name: str = Field(max_length=50, description="Group name")
     description: str | None = Field(default=None, description="Group description")
     admin_id: int = Field(description="Admin ID")
+    visibility: GroupVisibility = Field(
+        GroupVisibility.PUBLIC, description="Group visibility"
+    )
     is_active: bool = Field(description="Group is active")
     created_at: datetime = Field(description="Group creation date")
     updated_at: datetime | None = Field(default=None, description="Group update date")
@@ -22,6 +31,12 @@ class UserGroupCreate(BaseModel):
 
     name: str = Field(max_length=50, description="Group name")
     description: str | None = Field(default=None, description="Group description")
+    visibility: GroupVisibility = Field(
+        default=GroupVisibility.PUBLIC, description="Group visibility"
+    )
+    parent_group_id: int | None = Field(
+        default=None, description="Parent group ID for subgroups"
+    )
 
 
 class UserGroupUpdate(BaseModel):

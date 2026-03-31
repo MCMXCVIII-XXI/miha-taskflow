@@ -23,6 +23,8 @@ class TestCreateMyGroup:
         group_in = MagicMock()
         group_in.name = "Test Group"
         group_in.description = "Desc"
+        group_in.visibility = "public"
+        group_in.parent_group_id = None
         svc = GroupService(mock_db)
         await svc.create_my_group(mock_user, group_in)
         group_obj = mock_db.add.call_args_list[0][0][0]
@@ -36,6 +38,8 @@ class TestCreateMyGroup:
         group_in = MagicMock()
         group_in.name = "Existing"
         group_in.description = "Desc"
+        group_in.visibility = "public"
+        group_in.parent_group_id = None
         svc = GroupService(mock_db)
         with pytest.raises(group_exc.GroupNameConflict):
             await svc.create_my_group(mock_user, group_in)
@@ -90,6 +94,8 @@ class TestRoleAssignment:
             group_in = MagicMock()
             group_in.name = "Test Group"
             group_in.description = "Desc"
+            group_in.visibility = "public"
+            group_in.parent_group_id = None
 
             await svc.create_my_group(mock_user, group_in)
 

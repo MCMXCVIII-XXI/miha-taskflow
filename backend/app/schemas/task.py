@@ -17,6 +17,18 @@ class TaskPriority(Enum):
     HIGH = "high"
 
 
+class TaskDifficulty(Enum):
+    EASY = "easy"
+    MEDIUM = "medium"
+    HARD = "hard"
+
+
+class TaskVisibility(Enum):
+    PUBLIC = "public"
+    PRIVATE = "private"
+    GROUP = "group"
+
+
 class TaskRead(BaseModel):
     """Task API response."""
 
@@ -25,6 +37,10 @@ class TaskRead(BaseModel):
     description: str | None = Field(None, description="Task description")
     status: TaskStatus = Field(TaskStatus.PENDING, description="Task status")
     priority: TaskPriority = Field(TaskPriority.MEDIUM, description="Task priority")
+    difficulty: TaskDifficulty | None = Field(None, description="Task difficulty")
+    visibility: TaskVisibility = Field(
+        TaskVisibility.PRIVATE, description="Task visibility"
+    )
     group_id: int | None = Field(None, description="Group ID")
     created_at: datetime = Field(description="Task creation date")
 
@@ -39,6 +55,12 @@ class TaskCreate(BaseModel):
         None, max_length=1000, description="Task description"
     )
     priority: TaskPriority = Field(TaskPriority.MEDIUM, description="Task priority")
+    difficulty: TaskDifficulty | None = Field(
+        default=None, description="Task difficulty"
+    )
+    visibility: TaskVisibility = Field(
+        default=TaskVisibility.PRIVATE, description="Task visibility"
+    )
     group_id: int = Field(description="Put task in group")
 
     @field_validator("title", mode="before")
@@ -60,4 +82,6 @@ class TaskUpdate(BaseModel):
     )
     status: TaskStatus | None = Field(None)
     priority: TaskPriority | None = Field(None)
+    difficulty: TaskDifficulty | None = Field(None)
+    visibility: TaskVisibility | None = Field(None)
     is_active: bool | None = Field(None)

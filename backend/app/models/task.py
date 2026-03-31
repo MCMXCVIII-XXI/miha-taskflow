@@ -14,7 +14,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.db.mixins import IdPkMixin
-from app.schemas import TaskPriority, TaskStatus
+from app.schemas import TaskDifficulty, TaskPriority, TaskStatus, TaskVisibility
 
 if TYPE_CHECKING:
     from .group import UserGroup
@@ -28,6 +28,12 @@ class Task(Base, IdPkMixin):
         Enum(TaskStatus), default=TaskStatus.PENDING, index=True
     )
     priority: Mapped[TaskPriority] = mapped_column(Enum(TaskPriority), index=True)
+    difficulty: Mapped[TaskDifficulty | None] = mapped_column(
+        Enum(TaskDifficulty), nullable=True
+    )
+    visibility: Mapped[TaskVisibility] = mapped_column(
+        Enum(TaskVisibility), default=TaskVisibility.PRIVATE, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
