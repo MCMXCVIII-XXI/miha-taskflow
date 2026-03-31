@@ -75,3 +75,18 @@ class TestAdminUnauthorized:
         """Regular user cannot access admin endpoints."""
         resp = await test_client.get("/admin/users", headers=auth_headers)
         assert resp.status_code == 403
+
+
+class TestHealthCheck:
+    async def test_health_check_returns_200(self, test_client: AsyncClient):
+        """Health check endpoint returns 200."""
+        resp = await test_client.get("/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["status"] == "ok"
+        assert "version" in data
+
+    async def test_metrics_returns_200(self, test_client: AsyncClient):
+        """Metrics endpoint returns 200."""
+        resp = await test_client.get("/metrics")
+        assert resp.status_code == 200

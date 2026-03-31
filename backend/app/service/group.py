@@ -259,6 +259,9 @@ class GroupService(BaseService):
             name=group_in.name,
             description=group_in.description,
             admin_id=current_user.id,
+            visibility=group_in.visibility,
+            parent_group_id=group_in.parent_group_id,
+            level=1 if group_in.parent_group_id is None else 2,
         )
         self._db.add(group)
         await self._db.flush()

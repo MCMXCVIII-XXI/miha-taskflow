@@ -4,6 +4,7 @@ from typing import Any
 from fastapi import Request
 
 from app.core.log import get_logger
+from app.core.metrics import http_request_duration_seconds, http_requests_total
 
 logger = get_logger("http")
 
@@ -52,5 +53,17 @@ async def http_logging_middleware(request: Request, call_next: Any) -> Any:
             url=str(request.url),
             time=process_time,
         )
+
+    # Prometheus metrics
+    endpoint = request.url.path
+    http_requests_total.labels(
+        method=request.method,
+        endpoint=endpoint,
+        status_code=response.status_code,
+    ).inc()
+    http_request_duration_seconds.labels(
+        method=request.method,
+        endpoint=endpoint,
+    ).observe(process_time)
 
     return response

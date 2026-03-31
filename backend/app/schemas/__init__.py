@@ -1,4 +1,5 @@
 from .group import (
+    GroupVisibility,
     UserGroupCreate,
     UserGroupMembership,
     UserGroupMembershipCreate,
@@ -7,7 +8,15 @@ from .group import (
 )
 from .role import GlobalUserRole, SecondaryUserRole
 from .search import TaskSearch, UserGroupSearch, UserSearch
-from .task import TaskCreate, TaskPriority, TaskRead, TaskStatus, TaskUpdate
+from .task import (
+    TaskCreate,
+    TaskDifficulty,
+    TaskPriority,
+    TaskRead,
+    TaskStatus,
+    TaskUpdate,
+    TaskVisibility,
+)
 from .token import (
     AccessTokenRequest,
     RefreshTokenRequest,
@@ -19,14 +28,17 @@ from .user import UserCreate, UserRead, UserUpdate
 __all__ = [
     "AccessTokenRequest",
     "GlobalUserRole",
+    "GroupVisibility",
     "RefreshTokenRequest",
     "SecondaryUserRole",
     "TaskCreate",
+    "TaskDifficulty",
     "TaskPriority",
     "TaskRead",
     "TaskSearch",
     "TaskStatus",
     "TaskUpdate",
+    "TaskVisibility",
     "TokenResponse",
     "TokenType",
     "UserCreate",
