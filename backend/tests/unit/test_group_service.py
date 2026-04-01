@@ -17,6 +17,7 @@ class TestCreateMyGroup:
             obj.is_active = True
             obj.created_at = MagicMock()
             obj.updated_at = None
+            obj.invite_policy = "admin_only"
 
         mock_db.add = MagicMock(side_effect=mock_add)
         mock_db.flush = AsyncMock()
@@ -25,6 +26,7 @@ class TestCreateMyGroup:
         group_in.description = "Desc"
         group_in.visibility = "public"
         group_in.parent_group_id = None
+        group_in.invite_policy = "admin_only"
         svc = GroupService(mock_db)
         await svc.create_my_group(mock_user, group_in)
         group_obj = mock_db.add.call_args_list[0][0][0]
@@ -49,12 +51,18 @@ class TestJoinGroup:
     async def test_join_creates_membership(self, mock_db: AsyncMock):
         mock_user = AsyncMock()
         mock_user.id = 1
+        mock_group = AsyncMock()
+        mock_group.admin_id = 1
+        mock_group.name = "Test Group"
         mock_db.scalar.side_effect = [
-            None,
-            42,
-            None,
-        ]  # check existing, get_role_id, check existing role
-        svc = GroupService(mock_db)
+            None,  # check existing membership
+            mock_group,  # get group
+            42,  # get_role_id
+            None,  # check existing role
+        ]
+        mock_db.add = MagicMock()
+        mock_db.commit = AsyncMock()
+        svc = GroupService(mock_db, None)
         await svc.join_group(group_id=5, current_user=mock_user)
         mock_db.add.assert_called()
         membership = mock_db.add.call_args_list[0][0][0]
@@ -84,6 +92,7 @@ class TestRoleAssignment:
                 obj.is_active = True
                 obj.created_at = MagicMock()
                 obj.updated_at = None
+                obj.invite_policy = "admin_only"
 
         mock_db.add = MagicMock(side_effect=mock_add)
         mock_db.flush = AsyncMock()
@@ -96,6 +105,7 @@ class TestRoleAssignment:
             group_in.description = "Desc"
             group_in.visibility = "public"
             group_in.parent_group_id = None
+            group_in.invite_policy = "admin_only"
 
             await svc.create_my_group(mock_user, group_in)
 
@@ -107,12 +117,20 @@ class TestRoleAssignment:
         """Verify MEMBER role is assigned when joining group."""
         mock_user = AsyncMock()
         mock_user.id = 1
+        mock_group = AsyncMock()
+        mock_group.admin_id = 1
+        mock_group.name = "Test Group"
 
-        mock_db.scalar.side_effect = [None, 2, None]
+        mock_db.scalar.side_effect = [
+            None,  # check existing membership
+            mock_group,  # get group
+            2,  # get_role_id
+            None,  # check existing role
+        ]
         mock_db.add = MagicMock()
-        mock_db.flush = AsyncMock()
+        mock_db.commit = AsyncMock()
 
-        svc = GroupService(mock_db)
+        svc = GroupService(mock_db, None)
         await svc.join_group(group_id=5, current_user=mock_user)
 
         add_calls = mock_db.add.call_args_list

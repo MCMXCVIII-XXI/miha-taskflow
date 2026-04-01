@@ -10,6 +10,7 @@ from app.schemas import GlobalUserRole
 
 if TYPE_CHECKING:
     from .group import UserGroupMembership
+    from .notification import Notification
     from .task import TaskAssignee
 
 
@@ -30,6 +31,16 @@ class User(Base, IdPkMixin):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    notifications_sent: Mapped[list["Notification"]] = relationship(
+        "Notification",
+        back_populates="sender",
+        foreign_keys="Notification.sender_id",
+    )
+    notifications_received: Mapped[list["Notification"]] = relationship(
+        "Notification",
+        back_populates="recipient",
+        foreign_keys="Notification.recipient_id",
+    )
     assigned_tasks: Mapped[list["TaskAssignee"]] = relationship(
         "TaskAssignee", back_populates="user"
     )

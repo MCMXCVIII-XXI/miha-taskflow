@@ -114,4 +114,20 @@ PERM_ADMIN = [
     ),
 ]
 
-PERMISSIONS = PERM_USER + PERM_GROUP + PERM_TASK + PERM_ADMIN
+# NOTIFICATION
+PERM_NOTIFICATION = [
+    Permission.create(
+        resource="notification",
+        action="view",
+        context="own",
+        description="View own notifications",
+    ),
+    Permission.create(
+        resource="notification",
+        action="respond",
+        context="own",
+        description="Respond to notifications",
+    ),
+]
+
+PERMISSIONS = PERM_USER + PERM_GROUP + PERM_TASK + PERM_ADMIN + PERM_NOTIFICATION
