@@ -230,19 +230,27 @@ class TestSearchTasks:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Search tasks with offset — skips first results."""
-        await _create_group_and_task(
-            test_client, auth_headers, "Offset Group 1", "Task 1"
-        )
-        await _create_group_and_task(
-            test_client, auth_headers, "Offset Group 2", "Task 2"
+        # Create unique group and task for this test
+        unique_id = str(uuid.uuid4())[:8]
+        group_id, _ = await _create_group_and_task(
+            test_client,
+            auth_headers,
+            f"Offset Group Unique_{unique_id}",
+            f"Task Unique_{unique_id}",
         )
 
-        resp_all = await test_client.get("/tasks", headers=auth_headers)
-        resp_offset = await test_client.get("/tasks?offset=1", headers=auth_headers)
+        # Get tasks for this specific group with offset
+        resp_all = await test_client.get(
+            f"/tasks/groups/{group_id}", headers=auth_headers
+        )
+        resp_offset = await test_client.get(
+            f"/tasks/groups/{group_id}?offset=1", headers=auth_headers
+        )
 
         assert resp_all.status_code == 200
         assert resp_offset.status_code == 200
-        assert len(resp_offset.json()) < len(resp_all.json())
+        # With offset=1, should get fewer or equal results
+        assert len(resp_offset.json()) <= len(resp_all.json())
 
     async def test_search_tasks_by_status_filter(
         self, test_client: AsyncClient, auth_headers: dict

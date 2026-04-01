@@ -2,6 +2,12 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
+from .notification import (
+    NotificationResponse,
+    NotificationStatus,
+    NotificationTargetType,
+    NotificationType,
+)
 from .role import GlobalUserRole
 from .task import TaskPriority, TaskStatus
 
@@ -23,7 +29,7 @@ class TaskSearch(BaseModel):
 
 
 ###############################################################################
-# USER #########################################################################
+# USER ########################################################################
 
 
 class UserSearch(BaseModel):
@@ -44,7 +50,7 @@ class UserSearch(BaseModel):
 
 
 ###############################################################################
-# USER GROUP ###################################################################
+# USER GROUP ##################################################################
 
 
 class UserGroupSearch(BaseModel):
@@ -58,4 +64,24 @@ class UserGroupSearch(BaseModel):
 
 
 ###############################################################################
-###############################################################################
+# NOTIFICATION ################################################################
+
+
+class NotificationSearch(BaseModel):
+    """Schema for searching notifications."""
+
+    id: int | None = Field(None, description="Notification ID")
+    sender_id: int | None = Field(None, description="Sender user ID")
+    recipient_id: int | None = Field(None, description="Recipient user ID")
+    type: NotificationType | None = Field(None, description="Notification type")
+    title: str | None = Field(None, description="Notification title")
+    message: str | None = Field(None, description="Notification message")
+    target_id: int | None = Field(None, description="Target ID")
+    target_type: NotificationTargetType | None = Field(None, description="Target type")
+    response: NotificationResponse | None = Field(
+        None, description="Notification response"
+    )
+    status: NotificationStatus | None = Field(None, description="Notification status")
+    created_at: datetime | None = Field(None, description="Created at")
+
+    model_config = ConfigDict(extra="forbid")

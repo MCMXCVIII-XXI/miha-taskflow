@@ -1,6 +1,7 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from fastapi import Depends
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.inmemory import InMemoryBackend
 from httpx import ASGITransport, AsyncClient
@@ -68,6 +69,8 @@ async def init_rbac(session_factory):
             "task:view:any",
             "task:join:any",
             "task:exit:assignee",
+            "notification:view:own",
+            "notification:respond:own",
         }
         member_perms = {"group:view:group", "group:exit:member", "task:view:group"}
         assignee_perms = {"task:update:status"}
@@ -116,6 +119,18 @@ async def test_client(session_factory):
             yield session
 
     app.dependency_overrides[db_helper.get_session] = override_get_session
+
+    # Override notification service to use test DB session
+    from app.service.notification import NotificationService, get_notification_service
+
+    def override_get_notification_service(
+        db: AsyncSession = Depends(db_helper.get_session),
+    ) -> NotificationService:
+        return NotificationService(db)
+
+    app.dependency_overrides[get_notification_service] = (
+        override_get_notification_service
+    )
 
     # Prevent lifespan from initializing Redis cache
     original_init_cache = cache_module.init_cache
@@ -230,6 +245,7 @@ async def cleanup_test_data(session_factory, testuser_id):
             await session.execute(text("DELETE FROM tasks"))
             await session.execute(text("DELETE FROM user_group_membership"))
             await session.execute(text("DELETE FROM user_groups"))
+            await session.execute(text("DELETE FROM notifications"))
             await session.execute(
                 text("DELETE FROM user_roles WHERE user_id != :uid"),
                 {"uid": testuser_id},

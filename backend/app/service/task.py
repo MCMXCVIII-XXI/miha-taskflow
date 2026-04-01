@@ -22,6 +22,7 @@ from app.schemas import (
 
 from .base import BaseService
 from .exceptions import group_exc, task_exc
+from .notification import NotificationService
 from .query_db import TaskQueries
 from .search import task_search
 
@@ -75,9 +76,14 @@ class TaskService(BaseService):
         await task_svc.add_user_to_task(task_id, user_id, current_user)
     """
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        notification_service: NotificationService | None = None,
+    ) -> None:
         super().__init__(db)
         self._task_queries = TaskQueries
+        self._notification = notification_service
 
     async def _get_id_admin_groups(self, current_user: UserModel) -> list[int]:
         """
@@ -597,6 +603,18 @@ class TaskService(BaseService):
         await self._db.commit()
         await self._invalidate("tasks")
 
+        if self._notification:
+            task = await self._db.scalar(
+                select(TaskModel).where(TaskModel.id == task_id)
+            )
+            if task:
+                await self._notification.notify_task_invite(
+                    inviter_id=current_user.id,
+                    invitee_id=user_id,
+                    task_id=task_id,
+                    task_title=task.title,
+                )
+
         logger.info(
             "User added to task: user_id={user_id}, \
                 task_id={task_id}, by_user_id={by_user_id}",
@@ -731,4 +749,7 @@ def get_task_service(db: AsyncSession = Depends(db_helper.get_session)) -> TaskS
             return await task_service.search_tasks()
         ```
     """
-    return TaskService(db)
+    from app.service.notification import NotificationService
+
+    notification_svc = NotificationService(db)
+    return TaskService(db, notification_svc)

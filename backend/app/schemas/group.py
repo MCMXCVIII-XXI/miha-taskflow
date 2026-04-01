@@ -9,6 +9,11 @@ class GroupVisibility(Enum):
     PRIVATE = "private"
 
 
+class InvitePolicy(Enum):
+    ADMIN_ONLY = "admin_only"
+    ALL_MEMBERS = "all_members"
+
+
 class UserGroupRead(BaseModel):
     """UserGroup API response."""
 
@@ -20,6 +25,9 @@ class UserGroupRead(BaseModel):
         GroupVisibility.PUBLIC, description="Group visibility"
     )
     is_active: bool = Field(description="Group is active")
+    invite_policy: InvitePolicy = Field(
+        InvitePolicy.ADMIN_ONLY, description="Invite policy"
+    )
     created_at: datetime = Field(description="Group creation date")
     updated_at: datetime | None = Field(default=None, description="Group update date")
 
@@ -37,12 +45,20 @@ class UserGroupCreate(BaseModel):
     parent_group_id: int | None = Field(
         default=None, description="Parent group ID for subgroups"
     )
+    invite_policy: InvitePolicy = Field(
+        default=InvitePolicy.ADMIN_ONLY, description="Invite policy"
+    )
 
 
 class UserGroupUpdate(BaseModel):
     """Schema for updating user groups."""
 
-    name: str = Field(max_length=50, description="Group name")
+    name: str | None = Field(None, max_length=50, description="Group name")
+    description: str | None = Field(
+        None, max_length=255, description="Group description"
+    )
+    visibility: GroupVisibility | None = Field(None, description="Group visibility")
+    invite_policy: InvitePolicy | None = Field(None, description="Invite policy")
 
 
 class UserGroupMembership(BaseModel):

@@ -23,6 +23,7 @@ from app.schemas import (
 
 from .base import BaseService
 from .exceptions import group_exc
+from .notification import NotificationService
 from .query_db import GroupQueries
 from .search import group_search
 
@@ -72,9 +73,14 @@ class GroupService(BaseService):
         await group_svc.add_member_to_group(group_id, user_id, current_user)
     """
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        notification_service: NotificationService | None = None,
+    ) -> None:
         super().__init__(db)
         self._group_queries = GroupQueries
+        self._notification = notification_service
 
     async def _get_my_group(self, group_id: int, user_id: int) -> UserGroupModel:
         """
@@ -393,6 +399,15 @@ class GroupService(BaseService):
         await self._db.refresh(membership_create)
         await self._invalidate("groups")
 
+        if self._notification:
+            group = await self._get_my_group(group_id, current_user.id)
+            await self._notification.notify_group_invite(
+                inviter_id=current_user.id,
+                invitee_id=user_id,
+                group_id=group_id,
+                group_name=group.name,
+            )
+
         logger.info(
             "Member added to group: group_id={group_id}, user_id={added_by}",
             group_id=group_id,
@@ -559,6 +574,12 @@ class GroupService(BaseService):
                 message="User is already a member of this group"
             )
 
+        group = await self._db.scalar(
+            select(UserGroupModel).where(UserGroupModel.id == group_id)
+        )
+        if not group:
+            raise group_exc.GroupNotFound(message="Group not found")
+
         membership = UserGroupMembershipModel(
             user_id=current_user.id, group_id=group_id
         )
@@ -572,6 +593,14 @@ class GroupService(BaseService):
         await self._db.commit()
         await self._invalidate("groups")
         await self._invalidate("rbac")
+
+        if self._notification:
+            await self._notification.notify_group_join_request(
+                requester_id=current_user.id,
+                admin_id=group.admin_id,
+                group_id=group_id,
+                group_name=group.name,
+            )
 
         logger.info(
             "User joined group: user_id={user_id}, group_id={group_id}",
@@ -634,4 +663,7 @@ def get_group_service(
             return await group_svc.search_my_groups(current_user)
         ```
     """
-    return GroupService(db)
+    from app.service.notification import NotificationService
+
+    notification_svc = NotificationService(db)
+    return GroupService(db, notification_svc)
