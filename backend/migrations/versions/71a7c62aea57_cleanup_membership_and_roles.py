@@ -24,7 +24,7 @@ def upgrade() -> None:
     op.create_unique_constraint('uq_user_task_assignee', 'task_assignees', ['user_id', 'task_id'])
     op.drop_index(op.f('ix_user_group_memberships_is_active'), table_name='user_group_memberships')
     op.drop_column('user_group_memberships', 'is_active')
-    op.add_column('user_roles', sa.Column('id', sa.Integer(), nullable=False))
+    op.add_column('user_roles', sa.Column('id', sa.Integer(), autoincrement=True, nullable=False))
     op.drop_index(op.f('ix_user_roles_group_id'), table_name='user_roles')
     op.drop_index(op.f('ix_user_roles_task_id'), table_name='user_roles')
     # ### end Alembic commands ###

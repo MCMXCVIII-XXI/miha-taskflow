@@ -41,8 +41,13 @@ lint-all:
 	make format
 	make lint
 
+test-pg:
+	uv sync --group test
+	PYTHONPATH=. POSTGRES_DB=taskflow_test uv run pytest --asyncio-mode=auto tests/
+
 test:
-	make test-backend
+	uv sync --group test
+	uv run pytest
 
 test-coverage:
 	uv sync --group test

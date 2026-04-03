@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class GroupVisibility(Enum):
@@ -48,6 +48,13 @@ class UserGroupCreate(BaseModel):
     invite_policy: InvitePolicy = Field(
         default=InvitePolicy.ADMIN_ONLY, description="Invite policy"
     )
+
+    @field_validator("parent_group_id", mode="before")
+    @classmethod
+    def convert_zero_to_none(cls, value):
+        if value == 0:
+            return None
+        return value
 
 
 class UserGroupUpdate(BaseModel):

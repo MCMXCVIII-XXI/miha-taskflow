@@ -42,14 +42,9 @@ class RBAC:
         self._setup = setup
 
     async def __clear(self) -> None:
-        """Clear RBAC tables and binds"""
+        """Clear only RolePermission bindings, keep Role and Permission data."""
         # Role↔Permission
         await self.db.execute(delete(RolePermission))
-        # Only RBAC tables and reset ID
-        await self.db.execute(delete(Role).execution_options(restart_identity=True))
-        await self.db.execute(
-            delete(Permission).execution_options(restart_identity=True)
-        )
 
     async def init(self) -> None:
         """
