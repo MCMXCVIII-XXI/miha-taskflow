@@ -9,12 +9,12 @@ class BaseNotificationError(Exception):
     def __init__(
         self,
         message: str,
-        status_code: int,
+        code: int,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ):
         self.message = message
-        self.status_code = status_code
+        self.code = code
         self.headers = headers
         self.details = details
 
@@ -33,7 +33,7 @@ class NotificationNotFoundError(BaseNotificationError):
     ):
         super().__init__(
             message=message,
-            status_code=status.HTTP_404_NOT_FOUND,
+            code=status.HTTP_404_NOT_FOUND,
             headers=headers,
             details=details,
         )
@@ -50,7 +50,7 @@ class NotificationNotActionableError(BaseNotificationError):
     ):
         super().__init__(
             message=message,
-            status_code=status.HTTP_400_BAD_REQUEST,
+            code=status.HTTP_400_BAD_REQUEST,
             headers=headers,
             details=details,
         )
