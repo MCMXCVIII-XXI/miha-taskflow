@@ -20,6 +20,7 @@ from app.core.permission import init_rbac
 from app.db import db_helper
 from app.service.exceptions.group_exc import BaseGroupError
 from app.service.exceptions.group_membership_exc import BaseGroupMembershipError
+from app.service.exceptions.notifi_exc import BaseNotificationError
 from app.service.exceptions.search_exc import BaseSearchError
 from app.service.exceptions.task_exc import BaseTaskError
 from app.service.exceptions.user_exc import BaseUserError
@@ -69,10 +70,10 @@ app.state.limiter = limiter
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:3000", "https://taskflow.ru"],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Add HTTP logging middleware
@@ -191,6 +192,22 @@ def task_exception_handler(request: Request, exc: BaseTaskError) -> JSONResponse
 def user_exception_handler(request: Request, exc: BaseUserError) -> JSONResponse:
     logger.error(
         "User error: {message} | {method} {url}",
+        message=exc.message,
+        method=request.method,
+        url=str(request.url),
+    )
+    return JSONResponse(
+        status_code=exc.code,
+        content={"detail": exc.message},
+    )
+
+
+@app.exception_handler(BaseNotificationError)
+def notification_exception_handler(
+    request: Request, exc: BaseNotificationError
+) -> JSONResponse:
+    logger.error(
+        "Notification error: {message} | {method} {url}",
         message=exc.message,
         method=request.method,
         url=str(request.url),
