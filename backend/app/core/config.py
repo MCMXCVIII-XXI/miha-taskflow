@@ -35,6 +35,13 @@ class CacheSettings(BaseSettings):
     )
 
 
+class SecuritySettings(BaseSettings):
+    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000"]
+    model_config = SettingsConfigDict(
+        env_file=".env", env_prefix="SECURITY_", extra="ignore"
+    )
+
+
 token_settings = TokenSettings()
 db_settings = DBSettings()
 cache_settings = CacheSettings()
