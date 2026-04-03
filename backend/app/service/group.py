@@ -261,6 +261,7 @@ class GroupService(BaseService):
                     user_id=current_user.id,
                 )
                 raise group_exc.GroupNameConflict(message="Name already exists")
+
         group = UserGroupModel(
             name=group_in.name,
             description=group_in.description,
