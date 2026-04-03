@@ -269,15 +269,28 @@ class AuthenticationService(BaseService):
                 message="Could not validate refresh token"
             ) from e
 
-        user_id = payload.get("sub")
+        user_id_str = payload.get("sub")
         email = payload.get("email")
         token_type = payload.get("token_type")
 
         # Bandit S105: JWT standard token_type validation
-        if user_id is None or token_type != self.REFRESH_TOKEN_TYPE:
+        if user_id_str is None or token_type != self.REFRESH_TOKEN_TYPE:
             raise security_exc.SecurityRefreshTokenError(
                 message="Could not validate refresh token"
             )
+
+        # Convert user_id to integer for database query
+        if not isinstance(user_id_str, (str, int)):
+            raise security_exc.SecurityRefreshTokenError(
+                message="Invalid user_id type in token"
+            )
+
+        try:
+            user_id = int(user_id_str)
+        except (ValueError, TypeError) as e:
+            raise security_exc.SecurityRefreshTokenError(
+                message="Could not validate refresh token"
+            ) from e
 
         result = await self._db.scalars(
             select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
