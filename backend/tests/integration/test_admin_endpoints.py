@@ -1,3 +1,5 @@
+import uuid
+
 from httpx import AsyncClient
 
 
@@ -23,29 +25,40 @@ class TestAdminUsers:
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
         """Admin can delete user."""
+        import jwt
+
+        username = f"delete_{uuid.uuid4().hex[:8]}"
         resp = await test_client.post(
             "/auth",
             json={
-                "username": "deletetest",
-                "email": "delete@test.com",
+                "username": username,
+                "email": f"{username}@test.com",
                 "password": "Password123",
                 "first_name": "Delete",
                 "last_name": "Test",
             },
         )
-        new_user_id = 3
+        token = resp.json()["access_token"]
+        payload = jwt.decode(token, options={"verify_signature": False})
+        new_user_id = int(payload.get("sub"))
 
         resp = await test_client.delete(
             f"/admin/users/{new_user_id}", headers=admin_auth_headers
         )
-        assert resp.status_code in [204, 404]
+        assert resp.status_code == 204
 
     async def test_admin_cannot_delete_self(
-        self, test_client: AsyncClient, admin_auth_headers: dict, testadmin_id: int
+        self, test_client: AsyncClient, admin_auth_headers: dict
     ):
         """Admin cannot delete themselves."""
+        import jwt
+
+        token = admin_auth_headers["Authorization"].replace("Bearer ", "")
+        payload = jwt.decode(token, options={"verify_signature": False})
+        admin_id = int(payload.get("sub"))
+
         resp = await test_client.delete(
-            f"/admin/users/{testadmin_id}", headers=admin_auth_headers
+            f"/admin/users/{admin_id}", headers=admin_auth_headers
         )
         assert resp.status_code == 403
 

@@ -3,59 +3,7 @@ import uuid
 from httpx import AsyncClient
 
 from app.schemas.task import TaskStatus
-
-
-async def _register_user(client: AsyncClient, username: str, email: str) -> dict:
-    """Register user (or login if exists) and return auth headers."""
-    resp = await client.post(
-        "/auth",
-        json={
-            "username": username,
-            "email": email,
-            "password": "Password123",
-            "first_name": "Test",
-            "last_name": "User",
-        },
-    )
-    if resp.status_code == 409:
-        resp = await client.post(
-            "/auth/token",
-            data={"username": username, "password": "Password123"},
-        )
-    token = resp.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
-
-
-async def _create_group_and_task(
-    client: AsyncClient, headers: dict, group_name: str, task_title: str
-):
-    """Helper to create a group and task, return (group_id, task_id)."""
-    unique_id = str(uuid.uuid4())[:8]
-    group_resp = await client.post(
-        "/groups",
-        json={"name": f"{group_name}_{unique_id}", "description": "For test"},
-        headers=headers,
-    )
-    assert group_resp.status_code == 201, (
-        f"Group creation failed: {group_resp.status_code} - {group_resp.text}"
-    )
-    group_id = group_resp.json()["id"]
-
-    task_resp = await client.post(
-        f"/tasks/groups/{group_id}",
-        json={
-            "title": f"{task_title}_{unique_id}",
-            "description": "Test description",
-            "priority": "medium",
-            "group_id": group_id,
-        },
-        headers=headers,
-    )
-    assert task_resp.status_code == 201, (
-        f"Task creation failed: {task_resp.status_code} - {task_resp.text}"
-    )
-    task_id = task_resp.json()["id"]
-    return group_id, task_id
+from tests.conftest import create_group_and_task, register_user
 
 
 class TestCreateTask:
@@ -141,11 +89,11 @@ class TestCreateTask:
         )
         assert resp.status_code == 409
 
-    async def test_create_task_in_not_owned_group_returns_404(
+    async def test_create_task_in_not_owned_group_returns_403(
         self, test_client: AsyncClient, auth_headers: dict
     ):
-        """Create task in group owned by another user — returns 404."""
-        other_headers = await _register_user(
+        """Create task in group owned by another user — returns 403."""
+        other_headers = await register_user(
             test_client, "othercreator", "othercreator@test.com"
         )
         group_resp = await test_client.post(
@@ -164,7 +112,7 @@ class TestCreateTask:
             },
             headers=auth_headers,
         )
-        assert resp.status_code == 404
+        assert resp.status_code == 403
 
 
 class TestSearchTasks:
@@ -172,7 +120,7 @@ class TestSearchTasks:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Search all tasks — returns 200."""
-        await _create_group_and_task(
+        await create_group_and_task(
             test_client, auth_headers, "Search Tasks Group", "Searchable Task"
         )
         resp = await test_client.get("/tasks", headers=auth_headers)
@@ -183,7 +131,7 @@ class TestSearchTasks:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Search own tasks — returns 200."""
-        await _create_group_and_task(
+        await create_group_and_task(
             test_client, auth_headers, "My Tasks Group", "My Task"
         )
         resp = await test_client.get("/tasks/me", headers=auth_headers)
@@ -194,7 +142,7 @@ class TestSearchTasks:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Search tasks in group — returns 200."""
-        group_id, _ = await _create_group_and_task(
+        group_id, _ = await create_group_and_task(
             test_client, auth_headers, "Group Tasks Group", "Group Task"
         )
         resp = await test_client.get(f"/tasks/groups/{group_id}", headers=auth_headers)
@@ -212,13 +160,13 @@ class TestSearchTasks:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Search tasks with limit — returns limited results."""
-        await _create_group_and_task(
+        await create_group_and_task(
             test_client, auth_headers, "Limit Group 1", "Task 1"
         )
-        await _create_group_and_task(
+        await create_group_and_task(
             test_client, auth_headers, "Limit Group 2", "Task 2"
         )
-        await _create_group_and_task(
+        await create_group_and_task(
             test_client, auth_headers, "Limit Group 3", "Task 3"
         )
 
@@ -232,7 +180,7 @@ class TestSearchTasks:
         """Search tasks with offset — skips first results."""
         # Create unique group and task for this test
         unique_id = str(uuid.uuid4())[:8]
-        group_id, _ = await _create_group_and_task(
+        group_id, _ = await create_group_and_task(
             test_client,
             auth_headers,
             f"Offset Group Unique_{unique_id}",
@@ -257,7 +205,7 @@ class TestSearchTasks:
     ):
         """Search tasks by status filter — returns matching tasks."""
         # '_' is task_id
-        group_id, _ = await _create_group_and_task(
+        group_id, _ = await create_group_and_task(
             test_client, auth_headers, "Status Filter Group", "Status Task"
         )
 
@@ -285,7 +233,7 @@ class TestUpdateTask:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Update task — returns 200."""
-        _, task_id = await _create_group_and_task(
+        _, task_id = await create_group_and_task(
             test_client, auth_headers, "Update Task Group", "Updatable Task"
         )
 
@@ -301,10 +249,10 @@ class TestUpdateTask:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Update task in another user's group — returns 403."""
-        other_headers = await _register_user(
+        other_headers = await register_user(
             test_client, "otherupdate", "otherupdate@test.com"
         )
-        _, task_id = await _create_group_and_task(
+        _, task_id = await create_group_and_task(
             test_client, other_headers, "Protected Task Group", "Protected Task"
         )
 
@@ -319,7 +267,7 @@ class TestUpdateTask:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Update task status — returns 200."""
-        _, task_id = await _create_group_and_task(
+        _, task_id = await create_group_and_task(
             test_client, auth_headers, "Status Task Group", "Status Task"
         )
         resp = await test_client.patch(
@@ -334,7 +282,7 @@ class TestUpdateTask:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Update task status to same value — returns 409."""
-        _, task_id = await _create_group_and_task(
+        _, task_id = await create_group_and_task(
             test_client, auth_headers, "Same Status Group", "Same Status Task"
         )
         # Default status is pending, try setting it again
@@ -351,7 +299,7 @@ class TestDeleteTask:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Delete task — returns 204."""
-        group_id, task_id = await _create_group_and_task(
+        group_id, task_id = await create_group_and_task(
             test_client, auth_headers, "Delete Task Group", "Deletable Task"
         )
 
@@ -364,10 +312,10 @@ class TestDeleteTask:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Delete task in another user's group — returns 403."""
-        other_headers = await _register_user(
+        other_headers = await register_user(
             test_client, "otherdelete", "otherdelete@test.com"
         )
-        group_id, task_id = await _create_group_and_task(
+        group_id, task_id = await create_group_and_task(
             test_client, other_headers, "Protected Delete Group", "Protected Task"
         )
 
@@ -382,7 +330,7 @@ class TestTaskMemberManagement:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Add user to task — returns 201."""
-        _, task_id = await _create_group_and_task(
+        _, task_id = await create_group_and_task(
             test_client, auth_headers, "Add User Group", "Add User Task"
         )
 
@@ -411,7 +359,7 @@ class TestTaskMemberManagement:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Remove user from task — returns 204."""
-        _, task_id = await _create_group_and_task(
+        _, task_id = await create_group_and_task(
             test_client, auth_headers, "Remove User Group", "Remove User Task"
         )
 
@@ -445,10 +393,10 @@ class TestTaskMemberManagement:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Add user to task in another user's group — returns 403."""
-        other_headers = await _register_user(
+        other_headers = await register_user(
             test_client, "otheradd", "otheradd@test.com"
         )
-        _, task_id = await _create_group_and_task(
+        _, task_id = await create_group_and_task(
             test_client, other_headers, "Protected Add Group", "Protected Task"
         )
 

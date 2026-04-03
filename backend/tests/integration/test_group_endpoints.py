@@ -1,25 +1,6 @@
 from httpx import AsyncClient
 
-
-async def _register_user(client: AsyncClient, username: str, email: str) -> dict:
-    """Register user (or login if exists) and return auth headers."""
-    resp = await client.post(
-        "/auth",
-        json={
-            "username": username,
-            "email": email,
-            "password": "Password123",
-            "first_name": "Test",
-            "last_name": "User",
-        },
-    )
-    if resp.status_code == 409:
-        resp = await client.post(
-            "/auth/token",
-            data={"username": username, "password": "Password123"},
-        )
-    token = resp.json()["access_token"]
-    return {"Authorization": f"Bearer {token}"}
+from tests.conftest import register_user
 
 
 class TestCreateGroup:
@@ -81,7 +62,7 @@ class TestGetGroup:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Get group owned by another user — returns 403."""
-        other_headers = await _register_user(
+        other_headers = await register_user(
             test_client, "otherget", "otherget@test.com"
         )
 
@@ -274,7 +255,7 @@ class TestUpdateGroup:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Update group owned by another user — returns 403."""
-        other_headers = await _register_user(
+        other_headers = await register_user(
             test_client, "otherupdate", "otherupdate@test.com"
         )
         create_resp = await test_client.post(
@@ -327,7 +308,7 @@ class TestDeleteGroup:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Delete group owned by another user — returns 403."""
-        other_headers = await _register_user(
+        other_headers = await register_user(
             test_client, "otherdelete", "otherdelete@test.com"
         )
         create_resp = await test_client.post(
@@ -415,7 +396,7 @@ class TestMemberManagement:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Add member to group owned by another user — returns 403."""
-        other_headers = await _register_user(
+        other_headers = await register_user(
             test_client, "othermember", "othermember@test.com"
         )
         create_resp = await test_client.post(
