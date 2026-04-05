@@ -1,7 +1,7 @@
 import uuid
 
 from httpx import AsyncClient
-
+import jwt
 
 class TestAdminUsers:
     async def test_admin_get_all_users_returns_200(
@@ -25,7 +25,6 @@ class TestAdminUsers:
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
         """Admin can delete user."""
-        import jwt
 
         username = f"delete_{uuid.uuid4().hex[:8]}"
         resp = await test_client.post(
@@ -51,7 +50,6 @@ class TestAdminUsers:
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
         """Admin cannot delete themselves."""
-        import jwt
 
         token = admin_auth_headers["Authorization"].replace("Bearer ", "")
         payload = jwt.decode(token, options={"verify_signature": False})

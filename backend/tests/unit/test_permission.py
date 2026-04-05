@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.core.exceptions import security_exc
-from app.core.permission.check_permission import require_permissions_db
+from app.core.permission import require_permissions_db
 
 
 class TestRequirePermissionsDb:

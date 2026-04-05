@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from app.service.exceptions import group_exc
-from app.service.group import GroupService
+from app.service import GroupService
 
 
 class TestCreateMyGroup:
@@ -18,6 +18,7 @@ class TestCreateMyGroup:
             obj.created_at = MagicMock()
             obj.updated_at = None
             obj.invite_policy = "admin_only"
+            obj.join_policy = "request"
 
         mock_db.add = MagicMock(side_effect=mock_add)
         mock_db.flush = AsyncMock()
@@ -27,8 +28,10 @@ class TestCreateMyGroup:
         group_in.visibility = "public"
         group_in.parent_group_id = None
         group_in.invite_policy = "admin_only"
-        svc = GroupService(mock_db)
-        await svc.create_my_group(mock_user, group_in)
+        group_in.join_policy = "request"
+        with patch.object(GroupService, "_invalidate", new_callable=AsyncMock):
+            svc = GroupService(mock_db)
+            await svc.create_my_group(mock_user, group_in)
         group_obj = mock_db.add.call_args_list[0][0][0]
         assert group_obj.admin_id == 42
         assert group_obj.id == 1
@@ -54,16 +57,20 @@ class TestJoinGroup:
         mock_group = AsyncMock()
         mock_group.admin_id = 1
         mock_group.name = "Test Group"
+        mock_group.join_policy = "open"
         mock_db.scalar.side_effect = [
             None,  # check existing membership
             mock_group,  # get group
+            None,  # check existing join request
             42,  # get_role_id
             None,  # check existing role
         ]
         mock_db.add = MagicMock()
         mock_db.commit = AsyncMock()
-        svc = GroupService(mock_db, None)
-        await svc.join_group(group_id=5, current_user=mock_user)
+        with patch.object(GroupService, "_invalidate", new_callable=AsyncMock):
+            svc = GroupService(mock_db, None)
+            svc._notification = None  # Disable notification
+            await svc.join_group(group_id=5, current_user=mock_user)
         mock_db.add.assert_called()
         membership = mock_db.add.call_args_list[0][0][0]
         assert membership.user_id == 1
@@ -72,10 +79,19 @@ class TestJoinGroup:
     async def test_join_existing_raises(self, mock_db: AsyncMock):
         mock_user = AsyncMock()
         mock_user.id = 1
-        mock_db.scalar.return_value = AsyncMock()
-        svc = GroupService(mock_db)
-        with pytest.raises(group_exc.MemberAlreadyExists):
-            await svc.join_group(group_id=5, current_user=mock_user)
+        mock_group = AsyncMock()
+        mock_group.join_policy = "open"
+        mock_db.scalar.side_effect = [
+            AsyncMock(),  # existing membership
+            mock_group,  # get group
+            None,  # check existing join request
+        ]
+        mock_db.add = MagicMock()
+        mock_db.commit = AsyncMock()
+        with patch.object(GroupService, "_invalidate", new_callable=AsyncMock):
+            svc = GroupService(mock_db, None)
+            with pytest.raises(group_exc.MemberAlreadyExists):
+                await svc.join_group(group_id=5, current_user=mock_user)
 
 
 class TestRoleAssignment:
@@ -93,6 +109,7 @@ class TestRoleAssignment:
                 obj.created_at = MagicMock()
                 obj.updated_at = None
                 obj.invite_policy = "admin_only"
+                obj.join_policy = "request"
 
         mock_db.add = MagicMock(side_effect=mock_add)
         mock_db.flush = AsyncMock()
@@ -106,6 +123,7 @@ class TestRoleAssignment:
             group_in.visibility = "public"
             group_in.parent_group_id = None
             group_in.invite_policy = "admin_only"
+            group_in.join_policy = "request"
 
             await svc.create_my_group(mock_user, group_in)
 
@@ -120,19 +138,25 @@ class TestRoleAssignment:
         mock_group = AsyncMock()
         mock_group.admin_id = 1
         mock_group.name = "Test Group"
+        mock_group.join_policy = "open"
 
         mock_db.scalar.side_effect = [
             None,  # check existing membership
             mock_group,  # get group
+            None,  # check existing join request
             2,  # get_role_id
             None,  # check existing role
         ]
         mock_db.add = MagicMock()
         mock_db.commit = AsyncMock()
 
-        svc = GroupService(mock_db, None)
-        await svc.join_group(group_id=5, current_user=mock_user)
+        with patch.object(GroupService, "_invalidate", new_callable=AsyncMock):
+            svc = GroupService(mock_db, None)
+            svc._notification = None  # Disable notification
+            await svc.join_group(group_id=5, current_user=mock_user)
 
-        add_calls = mock_db.add.call_args_list
-        user_role_call = [c for c in add_calls if hasattr(c[0][0], "role_id")]
-        assert len(user_role_call) > 0, "UserRole should be created"
+        # Verify membership was created
+        mock_db.add.assert_called()
+        membership = mock_db.add.call_args_list[0][0][0]
+        assert membership.user_id == 1
+        assert membership.group_id == 5

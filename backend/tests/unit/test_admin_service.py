@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.schemas import GlobalUserRole
+from app.schemas.enum import GlobalUserRole
 from app.service.admin import AdminService
 from app.service.exceptions import user_exc
 

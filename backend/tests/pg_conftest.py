@@ -5,14 +5,18 @@ import subprocess
 
 # Import uuid for fixtures
 import uuid
+import jwt
 
+from app.models import User
+from app.schemas.enum import GlobalUserRole
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from testcontainers.postgres import PostgresContainer
-
+import app.cache as cache_module
+from main import app
 from tests.base_conftest import (
     cleanup_db,  # noqa: F401
     create_group_and_task,  # noqa: F401
@@ -93,8 +97,6 @@ async def init_rbac(session_factory):
 @pytest.fixture(scope="session")
 async def test_client(session_factory):
     """HTTP client with test DB."""
-    import app.cache as cache_module
-    from main import app
 
     original_init_cache = cache_module.init_cache
 
@@ -133,10 +135,6 @@ async def auth_headers(test_client: AsyncClient, session_factory):
 @pytest.fixture
 async def admin_auth_headers(test_client: AsyncClient, session_factory):
     """Create unique admin for each test - returns auth headers."""
-    import jwt
-
-    from app.models import User
-    from app.schemas import GlobalUserRole
 
     uid = uuid.uuid4().hex[:8]
     resp = await test_client.post(
@@ -200,10 +198,6 @@ async def testuser_auth_headers(test_client: AsyncClient, session_factory):
 @pytest.fixture
 async def testadmin_auth_headers(test_client: AsyncClient, session_factory):
     """Fixed admin 'testadmin' for strict assertions."""
-    import jwt
-
-    from app.models import User
-    from app.schemas import GlobalUserRole
 
     resp = await test_client.post(
         "/auth",

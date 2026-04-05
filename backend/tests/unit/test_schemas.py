@@ -1,9 +1,9 @@
 import pytest
 from pydantic import ValidationError
 
-from app.schemas.task import TaskCreate, TaskPriority, TaskStatus, TaskUpdate
-from app.schemas.user import UserCreate
-
+from app.schemas import TaskCreate, TaskUpdate
+from app.schemas import UserCreate
+from app.schemas.enum import TaskPriority, TaskStatus
 
 class TestTaskSchemas:
     def test_task_create_validates_priority(self):
