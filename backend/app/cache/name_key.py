@@ -3,8 +3,23 @@ from typing import Any
 
 from fastapi import Request
 
+from .exceptions import cache_exc
+
 
 def key_builder_factory(id_field: str) -> Callable[..., str]:
+    """
+    Factory function to create a key builder for a given id field.
+
+    Details:
+        The key builder function uses the id field value
+            from kwargs or args to construct a cache key.
+
+    Args:
+        id_field (str): The name of the field to use as the key value.
+
+    Returns:
+        Callable[..., str]: A key builder function that can be used with fastapi-cache2.
+    """
 
     def key_builder(
         func: Callable[..., Any],
@@ -33,7 +48,7 @@ def key_builder_factory(id_field: str) -> Callable[..., str]:
             value = request.path_params.get(id_field)
 
         if not value:
-            raise ValueError(f"{id_field} not found")
+            raise cache_exc.CacheNotFoundError(message=f"{id_field} not found")
 
         # Use namespace as-is (includes prefix from fastapi-cache2)
         return f"{namespace}:{id_field}:{value}"
