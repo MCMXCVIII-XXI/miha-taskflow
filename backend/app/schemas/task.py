@@ -1,32 +1,36 @@
 import re
 from datetime import datetime
-from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-class TaskStatus(Enum):
-    PENDING = "pending"
-    IN_PROGRESS = "in_progress"
-    DONE = "done"
-
-
-class TaskPriority(Enum):
-    LOW = "low"
-    MEDIUM = "medium"
-    HIGH = "high"
+from .enum import (
+    TaskDifficulty,
+    TaskPriority,
+    TaskSphere,
+    TaskStatus,
+    TaskVisibility,
+)
 
 
-class TaskDifficulty(Enum):
-    EASY = "easy"
-    MEDIUM = "medium"
-    HARD = "hard"
+class TaskSphereWeight(BaseModel):
+    """Weight of a task sphere."""
+
+    sphere: TaskSphere = Field(description="Task sphere")
+    weight: float = Field(ge=0.1, le=1.0, description="Task sphere weight")
+
+    model_config = ConfigDict(from_attributes=True)
 
 
-class TaskVisibility(Enum):
-    PUBLIC = "public"
-    PRIVATE = "private"
-    GROUP = "group"
+class TaskSpheresInput(BaseModel):
+    """Data model for task spheres input."""
+
+    spheres: list[TaskSphereWeight] = Field(
+        description="List of task spheres with weights"
+    )
+
+    def to_xp_format(self) -> list[dict[str, float | str]]:
+        """For XPService.calculate_task_xp()."""
+        return [{"sphere": s.sphere.value, "weight": s.weight} for s in self.spheres]
 
 
 class TaskRead(BaseModel):
@@ -42,6 +46,7 @@ class TaskRead(BaseModel):
         TaskVisibility.PRIVATE, description="Task visibility"
     )
     group_id: int | None = Field(None, description="Group ID")
+    deadline: datetime | None = Field(None, description="Task deadline")
     created_at: datetime = Field(description="Task creation date")
 
     model_config = ConfigDict(from_attributes=True)
@@ -61,7 +66,11 @@ class TaskCreate(BaseModel):
     visibility: TaskVisibility = Field(
         default=TaskVisibility.PRIVATE, description="Task visibility"
     )
+    spheres: list[TaskSphereWeight] | None = Field(
+        None, description="Task spheres (1-3)"
+    )
     group_id: int = Field(description="Put task in group")
+    deadline: datetime | None = Field(None, description="Task deadline")
 
     @field_validator("title", mode="before")
     @classmethod
