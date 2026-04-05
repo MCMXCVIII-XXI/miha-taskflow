@@ -1,12 +1,21 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, DateTime, Enum, String, func
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Integer,
+    String,
+    UniqueConstraint,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.db.mixins import IdPkMixin
-from app.schemas import GlobalUserRole
+from app.schemas.enum import GlobalUserRole, TaskSphere
 
 if TYPE_CHECKING:
     from .group import UserGroupMembership
@@ -47,3 +56,25 @@ class User(Base, IdPkMixin):
     group_memberships: Mapped[list["UserGroupMembership"]] = relationship(
         "UserGroupMembership", back_populates="user"
     )
+
+
+class UserSkill(Base, IdPkMixin):
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    sphere: Mapped[TaskSphere] = mapped_column(Enum(TaskSphere), index=True)
+    xp_total: Mapped[int] = mapped_column(Integer, default=0)
+    level: Mapped[int] = mapped_column(Integer, default=1)
+    streak: Mapped[int] = mapped_column(Integer, default=0)
+    last_xp_date: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    is_frozen: Mapped[bool] = mapped_column(Boolean, default=False)
+    frozen_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    __table_args__ = (UniqueConstraint("user_id", "sphere", name="uq_user_sphere"),)
