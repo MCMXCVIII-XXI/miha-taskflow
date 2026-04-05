@@ -17,7 +17,8 @@ from app.core.security import (
 )
 from app.db import db_helper
 from app.models import User as UserModel
-from app.schemas import RefreshTokenRequest, TokenResponse, TokenType, UserCreate
+from app.schemas import RefreshTokenRequest, TokenResponse, UserCreate
+from app.schemas.enum import TokenType
 
 from .base import BaseService
 from .exceptions import user_exc

@@ -9,9 +9,10 @@ from app.db import db_helper
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
 from app.schemas import UserRead, UserSearch, UserUpdate
+from .xp import XPService
 
 from .base import BaseService
-from .exceptions import group_exc, user_exc
+from .exceptions import group_exc, level_exc, user_exc
 from .query_db import GroupQueries, UserQueries
 from .search import user_search
 
@@ -66,6 +67,7 @@ class UserService(BaseService):
         super().__init__(db)
         self._user_queries = UserQueries
         self._group_queries = GroupQueries
+        self._xp_service = XPService(db)
 
     async def _get_my_group(self, group_id: int, user_id: int) -> UserGroupModel:
         """
@@ -149,6 +151,17 @@ class UserService(BaseService):
         """
         user = await self._assert_active_current_user(current_user)
         return UserRead.model_validate(user)
+
+    async def get_user(self, user_id: int) -> dict[str, Any]:
+        user = self._user_queries.by_id(user_id, is_active=True)
+        top_skills = await self._xp_service.get_top_skills(user_id, 3)
+        if not user:
+            raise user_exc.UserNotFound(message=f"User with id {user_id} not found")
+        if not top_skills:
+            raise level_exc.LevelNotFoundError(
+                message=f"Top skills not found for user with id {user_id}"
+            )
+        return {**UserRead.model_validate(user).model_dump(), "top_skills": top_skills}
 
     @user_search
     async def search_users(
