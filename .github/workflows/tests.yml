@@ -27,4 +27,4 @@ jobs:
           python-version: 3.11
 
       - name: Tests
-        run: make test-pg
+        run: make test-pg-coverage

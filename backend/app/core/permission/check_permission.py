@@ -16,6 +16,16 @@ from app.models import UserRole as UserRoleModel
 async def get_user_permissions_db(user_id: int, db: AsyncSession) -> set[str]:
     """
     Get user permissions from database
+
+    Details:
+        This function retrieves the user's permissions from the database.
+
+    Args:
+        user_id (int): The user ID
+        db (AsyncSession): The database session
+
+    Returns:
+        set[str]: The user's permissions
     """
     global_query = (
         select(Permission.name)

@@ -6,7 +6,7 @@ from sqlalchemy import select
 from app.core.security import get_password_hash
 from app.db import db_helper
 from app.models import User
-from app.schemas import GlobalUserRole
+from app.schemas.enum import GlobalUserRole
 
 app = typer.Typer()
 
@@ -22,6 +22,21 @@ def create_admin(
         confirmation_prompt=True,
     ),
 ) -> None:
+    """
+    Create an admin user
+
+    Details:
+        This command creates a new admin user with the specified email and password.
+        If the user already exists, an error message is displayed and the command exits.
+
+    Args:
+        email (str): The admin email
+        password (str): The admin password
+
+    Returns:
+        None
+    """
+
     async def _create_admin() -> None:
         async with db_helper.get_session_ctx() as session:
             result = await session.execute(select(User).where(User.email == email))

@@ -42,6 +42,18 @@ class SecuritySettings(BaseSettings):
     )
 
 
+class SSESettings(BaseSettings):
+    ENABLED: bool = True
+    HEARTBEAT_INTERVAL: int = 30
+    RECONNECT_INTERVAL: int = 5
+    MAX_CONNECTIONS_PER_USER: int = 3
+    model_config = SettingsConfigDict(
+        env_file=".env", env_prefix="SSE_", extra="ignore"
+    )
+
+
 token_settings = TokenSettings()
 db_settings = DBSettings()
 cache_settings = CacheSettings()
+security_settings = SecuritySettings()
+sse_settings = SSESettings()
