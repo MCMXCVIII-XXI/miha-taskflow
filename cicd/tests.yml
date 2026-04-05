@@ -18,7 +18,7 @@ tests:
     - uv cache dir
   script:
     - cd backend
-    - make test-coverage
+    - make test-pg-coverage
   cache:
     key: ${CI_COMMIT_REF_SLUG}
     paths:
