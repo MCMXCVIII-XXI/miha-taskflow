@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, Query, status
 
 from app.core.permission import require_permissions_db
@@ -15,6 +17,17 @@ async def get_my_profile(
 ) -> UserRead:
     """Get current user profile."""
     return await svc.get_my_profile(current_user=current_user)
+
+
+@router.get(
+    "/users/{user_id}", response_model=dict[str, Any], status_code=status.HTTP_200_OK
+)
+async def get_user(
+    user_id: int,
+    current_user: UserModel = Depends(require_permissions_db("user:view:any")),
+    svc: UserService = Depends(get_user_service),
+) -> dict[str, Any]:
+    return await svc.get_user(user_id)
 
 
 @router.get("", response_model=list[UserRead], status_code=status.HTTP_200_OK)

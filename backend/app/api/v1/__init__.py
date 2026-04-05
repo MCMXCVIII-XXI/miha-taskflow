@@ -7,6 +7,7 @@ from .endpoints import (
     notifications_router,
     tasks_router,
     users_router,
+    xp_router,
 )
 
 api_router = APIRouter()
@@ -19,3 +20,4 @@ api_router.include_router(
 )
 api_router.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(users_router, prefix="/users", tags=["users"])
+api_router.include_router(xp_router, prefix="/xp", tags=["xp"])
