@@ -15,7 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.db.mixins import IdPkMixin
-from app.schemas import GroupVisibility, InvitePolicy
+from app.schemas.enum import GroupVisibility, InvitePolicy, JoinPolicy
 
 if TYPE_CHECKING:
     from .task import Task
@@ -28,6 +28,9 @@ class UserGroup(Base, IdPkMixin):
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
     visibility: Mapped[GroupVisibility] = mapped_column(
         Enum(GroupVisibility), default=GroupVisibility.PUBLIC, index=True
+    )
+    join_policy: Mapped[JoinPolicy] = mapped_column(
+        Enum(JoinPolicy), default=JoinPolicy.OPEN, index=True
     )
     parent_group_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("user_groups.id"), nullable=True, index=True
