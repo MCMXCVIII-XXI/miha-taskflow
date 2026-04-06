@@ -1,3 +1,4 @@
+from .comment import Comment
 from .group import UserGroup, UserGroupMembership
 from .join import JoinRequest
 from .notification import Notification
@@ -6,6 +7,7 @@ from .task import Task, TaskAssignee
 from .user import User, UserSkill
 
 __all__ = [
+    "Comment",
     "JoinRequest",
     "Notification",
     "Permission",

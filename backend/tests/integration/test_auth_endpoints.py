@@ -105,6 +105,45 @@ class TestRegister:
         )
         assert resp.status_code == 422
 
+    async def test_register_empty_username_returns_422(self, test_client: AsyncClient):
+        resp = await test_client.post(
+            "/auth",
+            json={
+                "username": "",
+                "email": "empty@test.com",
+                "password": "Password123",
+                "first_name": "Empty",
+                "last_name": "User",
+            },
+        )
+        assert resp.status_code == 422
+
+    async def test_register_empty_password_returns_422(self, test_client: AsyncClient):
+        resp = await test_client.post(
+            "/auth",
+            json={
+                "username": "emptypw",
+                "email": "emptypw@test.com",
+                "password": "",
+                "first_name": "Empty",
+                "last_name": "Pw",
+            },
+        )
+        assert resp.status_code == 422
+
+    async def test_register_weak_password_returns_422(self, test_client: AsyncClient):
+        resp = await test_client.post(
+            "/auth",
+            json={
+                "username": "weakpw",
+                "email": "weakpw@test.com",
+                "password": "123",
+                "first_name": "Weak",
+                "last_name": "Pw",
+            },
+        )
+        assert resp.status_code == 422
+
 
 class TestLogin:
     async def test_login_returns_200(self, test_client: AsyncClient):
@@ -177,6 +216,26 @@ class TestLogin:
             },
         )
         assert resp.status_code == 404
+
+    async def test_login_empty_username_returns_422(self, test_client: AsyncClient):
+        resp = await test_client.post(
+            "/auth/token",
+            data={
+                "username": "",
+                "password": "Password123",
+            },
+        )
+        assert resp.status_code == 422
+
+    async def test_login_empty_password_returns_422(self, test_client: AsyncClient):
+        resp = await test_client.post(
+            "/auth/token",
+            data={
+                "username": "testuser",
+                "password": "",
+            },
+        )
+        assert resp.status_code == 422
 
 
 class TestAccessToken:

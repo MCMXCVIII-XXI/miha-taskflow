@@ -18,6 +18,7 @@ from app.db.mixins import IdPkMixin
 from app.schemas.enum import GlobalUserRole, TaskSphere
 
 if TYPE_CHECKING:
+    from .comment import Comment
     from .group import UserGroupMembership
     from .notification import Notification
     from .task import TaskAssignee
@@ -53,6 +54,7 @@ class User(Base, IdPkMixin):
     assigned_tasks: Mapped[list["TaskAssignee"]] = relationship(
         "TaskAssignee", back_populates="user"
     )
+    comments: Mapped[list["Comment"]] = relationship("Comment", back_populates="user")
     group_memberships: Mapped[list["UserGroupMembership"]] = relationship(
         "UserGroupMembership", back_populates="user"
     )
