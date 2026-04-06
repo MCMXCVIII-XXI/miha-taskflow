@@ -341,25 +341,6 @@ class TestUpdateGroup:
 
 
 class TestExitGroup:
-    async def test_delete_not_owned_group_returns_403(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Delete group owned by another user — returns 403."""
-        other_headers = await register_user(
-            test_client, "otherdelete", "otherdelete@test.com"
-        )
-        create_resp = await test_client.post(
-            "/groups",
-            json={"name": "Not Mine Delete", "description": "Other's group"},
-            headers=other_headers,
-        )
-        group_id = create_resp.json()["id"]
-
-        resp = await test_client.delete(f"/groups/{group_id}", headers=auth_headers)
-        assert resp.status_code == 403
-
-
-class TestExitGroup:
     async def test_exit_group_returns_204(
         self, test_client: AsyncClient, auth_headers: dict
     ):
