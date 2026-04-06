@@ -2,8 +2,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.service.exceptions import group_exc
 from app.service import GroupService
+from app.service.exceptions import group_exc
 
 
 class TestCreateMyGroup:

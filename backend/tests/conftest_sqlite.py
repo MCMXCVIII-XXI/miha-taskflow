@@ -3,15 +3,16 @@
 # Import uuid for fixtures
 import uuid
 
+import jwt
 import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
-import jwt
+
 import app.cache as cache_module
+from app.db import Base
 from app.models import User
 from app.schemas.enum import GlobalUserRole
-from app.db import Base
 from main import app
 from tests.base_conftest import (
     cleanup_db,

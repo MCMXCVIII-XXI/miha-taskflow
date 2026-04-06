@@ -66,7 +66,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import rbac_exc
 from app.models import Role as RoleModel
 from app.models import UserRole as UserRoleModel
-from app.schemas.enum import BaseRank, TaskSphere, XPThreshold, TaskDifficulty
+from app.schemas.enum import BaseRank, TaskDifficulty, TaskSphere, XPThreshold
 from app.schemas.enum import SecondaryUserRole as SecondaryUserRoleEnum
 from app.service.utils import StatsGroups, StatsTasks, StatsUsers
 

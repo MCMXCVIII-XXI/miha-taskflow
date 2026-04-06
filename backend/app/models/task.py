@@ -36,7 +36,9 @@ class Task(Base, IdPkMixin):
         Enum(TaskVisibility), default=TaskVisibility.PRIVATE, index=True
     )
     spheres: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
-    deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deadline: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

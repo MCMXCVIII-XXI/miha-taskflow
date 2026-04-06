@@ -1,7 +1,8 @@
 import uuid
 
-from httpx import AsyncClient
 import jwt
+from httpx import AsyncClient
+
 
 class TestAdminUsers:
     async def test_admin_get_all_users_returns_200(

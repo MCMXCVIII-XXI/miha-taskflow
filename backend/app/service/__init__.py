@@ -1,15 +1,15 @@
 from .auth import AuthenticationService, get_authentication_service
+from .base import BaseService
 from .group import GroupService, get_group_service
 from .notification import NotificationService, get_notification_service
 from .sse import SSEService, get_sse_service
 from .task import TaskService, get_task_service
 from .user import UserService, get_user_service
 from .xp import XPService, get_xp_service
-from .base import BaseService
 
 __all__ = [
-    "BaseService",
     "AuthenticationService",
+    "BaseService",
     "GroupService",
     "NotificationService",
     "SSEService",

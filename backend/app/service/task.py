@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Depends
@@ -25,17 +26,16 @@ from app.schemas import (
 from app.schemas.enum import (
     JoinPolicy,
     JoinRequestStatus,
-    TaskStatus,
     TaskSphere,
+    TaskStatus,
 )
-from .notification import NotificationService
 
 from .base import GroupTaskBaseService
 from .exceptions import group_exc, task_exc
+from .notification import NotificationService
 from .query_db import TaskQueries
 from .search import task_search
 from .xp import XPService
-from datetime import datetime, UTC
 
 logger = get_logger("service.task")
 

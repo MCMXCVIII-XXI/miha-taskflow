@@ -13,7 +13,6 @@ from .notification import (
     NotificationStatus,
     NotificationTargetType,
     NotificationType,
-
 )
 from .role import GlobalUserRole, SecondaryUserRole
 from .task import TaskDifficulty, TaskPriority, TaskSphere, TaskStatus, TaskVisibility

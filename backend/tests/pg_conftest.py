@@ -5,17 +5,18 @@ import subprocess
 
 # Import uuid for fixtures
 import uuid
-import jwt
 
-from app.models import User
-from app.schemas.enum import GlobalUserRole
+import jwt
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from testcontainers.postgres import PostgresContainer
+
 import app.cache as cache_module
+from app.models import User
+from app.schemas.enum import GlobalUserRole
 from main import app
 from tests.base_conftest import (
     cleanup_db,  # noqa: F401

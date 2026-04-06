@@ -9,12 +9,12 @@ from app.db import db_helper
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
 from app.schemas import UserRead, UserSearch, UserUpdate
-from .xp import XPService
 
 from .base import BaseService
 from .exceptions import group_exc, level_exc, user_exc
 from .query_db import GroupQueries, UserQueries
 from .search import user_search
+from .xp import XPService
 
 logger = get_logger("service.user")
 
