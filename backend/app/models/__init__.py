@@ -2,6 +2,7 @@ from .comment import Comment
 from .group import UserGroup, UserGroupMembership
 from .join import JoinRequest
 from .notification import Notification
+from .rating import Rating
 from .role import Permission, Role, RolePermission, UserRole
 from .task import Task, TaskAssignee
 from .user import User, UserSkill
@@ -11,6 +12,7 @@ __all__ = [
     "JoinRequest",
     "Notification",
     "Permission",
+    "Rating",
     "Role",
     "RolePermission",
     "Task",

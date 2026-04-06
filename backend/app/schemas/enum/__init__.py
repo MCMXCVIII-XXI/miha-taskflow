@@ -14,6 +14,7 @@ from .notification import (
     NotificationTargetType,
     NotificationType,
 )
+from .rating import RatingTarget
 from .role import GlobalUserRole, SecondaryUserRole
 from .task import TaskDifficulty, TaskPriority, TaskSphere, TaskStatus, TaskVisibility
 from .token import TokenType
@@ -34,6 +35,7 @@ __all__ = [
     "NotificationType",
     "ProductRank",
     "QARank",
+    "RatingTarget",
     "SecondaryUserRole",
     "TaskDifficulty",
     "TaskPriority",
