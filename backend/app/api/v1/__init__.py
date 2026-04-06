@@ -6,6 +6,7 @@ from .endpoints import (
     comment_router,
     groups_router,
     notifications_router,
+    rating_router,
     tasks_router,
     users_router,
     xp_router,
@@ -20,6 +21,9 @@ api_router.include_router(groups_router, prefix="/groups", tags=["groups"])
 api_router.include_router(
     notifications_router, prefix="/notifications", tags=["notifications"]
 )
+api_router.include_router(rating_router, prefix="/tasks", tags=["ratings"])
+api_router.include_router(rating_router, prefix="/groups", tags=["ratings"])
+api_router.include_router(rating_router, prefix="/ratings", tags=["ratings"])
 api_router.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 api_router.include_router(users_router, prefix="/users", tags=["users"])
 api_router.include_router(xp_router, prefix="/xp", tags=["xp"])

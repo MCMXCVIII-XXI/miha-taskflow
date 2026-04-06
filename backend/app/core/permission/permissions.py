@@ -158,6 +158,34 @@ PERM_COMMENT = [
     ),
 ]
 
+# RATING
+PERM_RATING = [
+    Permission.create(
+        resource="rating",
+        action="create",
+        context="own",
+        description="Create rating",
+    ),
+    Permission.create(
+        resource="rating",
+        action="view",
+        context="any",
+        description="View any ratings",
+    ),
+    Permission.create(
+        resource="rating",
+        action="delete",
+        context="own",
+        description="Delete own ratings",
+    ),
+]
+
 PERMISSIONS = (
-    PERM_USER + PERM_GROUP + PERM_TASK + PERM_ADMIN + PERM_NOTIFICATION + PERM_COMMENT
+    PERM_USER
+    + PERM_GROUP
+    + PERM_TASK
+    + PERM_ADMIN
+    + PERM_NOTIFICATION
+    + PERM_COMMENT
+    + PERM_RATING
 )

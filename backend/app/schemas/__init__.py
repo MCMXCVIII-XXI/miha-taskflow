@@ -11,6 +11,7 @@ from .notification import (
     NotificationRead,
     NotificationRespond,
 )
+from .rating import RatingCreate, RatingRead, RatingStats
 from .search import TaskSearch, UserGroupSearch, UserSearch
 from .task import (
     TaskCreate,
@@ -34,6 +35,9 @@ __all__ = [
     "JoinRequestRead",
     "NotificationRead",
     "NotificationRespond",
+    "RatingCreate",
+    "RatingRead",
+    "RatingStats",
     "RefreshTokenRequest",
     "TaskCreate",
     "TaskRead",
