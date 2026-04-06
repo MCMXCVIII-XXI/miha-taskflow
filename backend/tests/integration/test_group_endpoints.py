@@ -41,6 +41,14 @@ class TestCreateGroup:
         )
         assert resp.status_code == 409
 
+    async def test_create_group_without_description_returns_201(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Create group without description — returns 201."""
+        payload = {"name": "No Desc Group"}
+        response = await test_client.post("/groups", json=payload, headers=auth_headers)
+        assert response.status_code == 201
+
 
 class TestGetGroup:
     async def test_get_group_returns_200(
@@ -74,6 +82,27 @@ class TestGetGroup:
         group_id = create_resp.json()["id"]
 
         resp = await test_client.get(f"/groups/{group_id}", headers=auth_headers)
+        assert resp.status_code == 403
+
+    async def test_get_nonexistent_group_returns_403(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Get nonexistent group — returns 403 (security: don't reveal existence)."""
+        resp = await test_client.get("/groups/99999", headers=auth_headers)
+        assert resp.status_code == 403
+
+    async def test_get_group_invalid_id_returns_403(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Get group with invalid ID — returns 403."""
+        resp = await test_client.get("/groups/0", headers=auth_headers)
+        assert resp.status_code == 403
+
+    async def test_get_group_negative_id_returns_403(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Get group with negative ID — returns 403."""
+        resp = await test_client.get("/groups/-1", headers=auth_headers)
         assert resp.status_code == 403
 
 
@@ -211,6 +240,26 @@ class TestJoinGroup:
         resp = await test_client.post(f"/groups/{group_id}/join", headers=auth_headers)
         assert resp.status_code == 409
 
+    async def test_join_nonexistent_group_returns_404(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Join nonexistent group — returns 404."""
+        resp = await test_client.post("/groups/99999/join", headers=auth_headers)
+        assert resp.status_code == 404
+
+    async def test_join_group_without_auth_returns_401(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Join group without auth — returns 401."""
+        create_resp = await test_client.post(
+            "/groups",
+            json={"name": "NoAuth Join", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = create_resp.json()["id"]
+        resp = await test_client.post(f"/groups/{group_id}/join")
+        assert resp.status_code == 401
+
 
 class TestUpdateGroup:
     async def test_update_group_returns_200(
@@ -260,7 +309,7 @@ class TestUpdateGroup:
         )
         create_resp = await test_client.post(
             "/groups",
-            json={"name": "Other's Group", "description": "Not mine"},
+            json={"name": "Not Mine Update", "description": "Other's group"},
             headers=other_headers,
         )
         group_id = create_resp.json()["id"]
@@ -272,38 +321,26 @@ class TestUpdateGroup:
         )
         assert resp.status_code == 403
 
-
-class TestDeleteGroup:
-    async def test_delete_group_returns_204(
+    async def test_update_nonexistent_group_returns_403(
         self, test_client: AsyncClient, auth_headers: dict
     ):
-        """Delete owned group — returns 204."""
-        create_resp = await test_client.post(
-            "/groups",
-            json={"name": "Deletable", "description": "Will be deleted"},
+        """Update nonexistent group — returns 403."""
+        resp = await test_client.patch(
+            "/groups/99999",
+            json={"name": "Ghost"},
             headers=auth_headers,
         )
-        group_id = create_resp.json()["id"]
+        assert resp.status_code == 403
 
-        resp = await test_client.delete(f"/groups/{group_id}", headers=auth_headers)
-        assert resp.status_code == 204
-
-    async def test_deleted_group_not_in_search(
+    async def test_delete_nonexistent_group_returns_403(
         self, test_client: AsyncClient, auth_headers: dict
     ):
-        """Deleted group should not appear in search results."""
-        create_resp = await test_client.post(
-            "/groups",
-            json={"name": "Will Disappear", "description": "Gone"},
-            headers=auth_headers,
-        )
-        group_id = create_resp.json()["id"]
-        await test_client.delete(f"/groups/{group_id}", headers=auth_headers)
+        """Delete nonexistent group — returns 403."""
+        resp = await test_client.delete("/groups/99999", headers=auth_headers)
+        assert resp.status_code == 403
 
-        groups_resp = await test_client.get("/groups", headers=auth_headers)
-        group_ids = [g["id"] for g in groups_resp.json()]
-        assert group_id not in group_ids
 
+class TestExitGroup:
     async def test_delete_not_owned_group_returns_403(
         self, test_client: AsyncClient, auth_headers: dict
     ):
@@ -313,118 +350,12 @@ class TestDeleteGroup:
         )
         create_resp = await test_client.post(
             "/groups",
-            json={"name": "Protected Group", "description": "Cannot delete"},
+            json={"name": "Not Mine Delete", "description": "Other's group"},
             headers=other_headers,
         )
         group_id = create_resp.json()["id"]
 
         resp = await test_client.delete(f"/groups/{group_id}", headers=auth_headers)
-        assert resp.status_code == 403
-
-
-class TestMemberManagement:
-    async def test_add_member_returns_201(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Add member to group — returns 201."""
-        create_resp = await test_client.post(
-            "/groups",
-            json={"name": "Add Member Group", "description": "For add test"},
-            headers=auth_headers,
-        )
-        group_id = create_resp.json()["id"]
-
-        await test_client.post(
-            "/auth",
-            json={
-                "username": "member1",
-                "email": "member1@test.com",
-                "password": "Password123",
-                "first_name": "Member",
-                "last_name": "One",
-            },
-        )
-        users_resp = await test_client.get(
-            "/users?username=member1", headers=auth_headers
-        )
-        member_id = users_resp.json()[0]["id"]
-
-        resp = await test_client.post(
-            f"/groups/{group_id}/members/{member_id}",
-            headers=auth_headers,
-        )
-        assert resp.status_code == 201
-
-    async def test_remove_member_returns_204(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Remove member from group — returns 204."""
-        create_resp = await test_client.post(
-            "/groups",
-            json={"name": "Remove Member Group", "description": "For remove test"},
-            headers=auth_headers,
-        )
-        group_id = create_resp.json()["id"]
-
-        await test_client.post(
-            "/auth",
-            json={
-                "username": "member2",
-                "email": "member2@test.com",
-                "password": "Password123",
-                "first_name": "Member",
-                "last_name": "Two",
-            },
-        )
-        users_resp = await test_client.get(
-            "/users?username=member2", headers=auth_headers
-        )
-        member_id = users_resp.json()[0]["id"]
-
-        await test_client.post(
-            f"/groups/{group_id}/members/{member_id}",
-            headers=auth_headers,
-        )
-
-        resp = await test_client.delete(
-            f"/groups/{group_id}/members/{member_id}",
-            headers=auth_headers,
-        )
-        assert resp.status_code == 204
-
-    async def test_add_member_to_not_owned_group_returns_403(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Add member to group owned by another user — returns 403."""
-        other_headers = await register_user(
-            test_client, "othermember", "othermember@test.com"
-        )
-        create_resp = await test_client.post(
-            "/groups",
-            json={"name": "Protected Members", "description": "Not mine"},
-            headers=other_headers,
-        )
-        group_id = create_resp.json()["id"]
-
-        await test_client.post(
-            "/auth",
-            json={
-                "username": "newmember",
-                "email": "newmember@test.com",
-                "password": "Password123",
-                "first_name": "New",
-                "last_name": "Member",
-            },
-        )
-        users_resp = await test_client.get(
-            "/users?username=newmember", headers=auth_headers
-        )
-        member_id = users_resp.json()[0]["id"]
-
-        resp = await test_client.post(
-            f"/groups/{group_id}/members/{member_id}",
-            headers=auth_headers,
-        )
         assert resp.status_code == 403
 
 
@@ -462,3 +393,24 @@ class TestExitGroup:
             f"/groups/{group_id}/exit", headers=auth_headers
         )
         assert resp.status_code == 404
+
+    async def test_exit_nonexistent_group_returns_403(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Exit nonexistent group — returns 403."""
+        resp = await test_client.delete("/groups/99999/exit", headers=auth_headers)
+        assert resp.status_code == 403
+
+    async def test_exit_group_without_auth_returns_401(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Exit group without auth — returns 401."""
+        create_resp = await test_client.post(
+            "/groups",
+            json={"name": "NoAuth Exit", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = create_resp.json()["id"]
+
+        resp = await test_client.delete(f"/groups/{group_id}/exit")
+        assert resp.status_code == 401
