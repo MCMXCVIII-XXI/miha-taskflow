@@ -519,10 +519,12 @@ class TaskService(GroupTaskBaseService):
             for assignee in assignees:
                 for sphere_data in task.spheres:
                     sphere = TaskSphere[sphere_data["sphere"].upper()]
-                    skill = await self._xp.get_or_create_skill(assignee.user_id, sphere)
+                    skill = await self._xp_service.get_or_create_skill(
+                        assignee.user_id, sphere
+                    )
                     streak = skill.streak
 
-                    xp_distribution = self._xp.calculate_task_xp(
+                    xp_distribution = self._xp_service.calculate_task_xp(
                         spheres=task.spheres,
                         story_points=story_points,
                         deadline_days=deadline_days,
@@ -531,12 +533,12 @@ class TaskService(GroupTaskBaseService):
                     )
 
                     xp = xp_distribution.get(sphere.value, 0)
-                    leveled_up, new_level = await self._xp.add_sphere_xp(
+                    leveled_up, new_level = await self._xp_service.add_sphere_xp(
                         assignee.user_id, sphere, xp
                     )
 
                     if leveled_up:
-                        title = self._xp.get_title(sphere, new_level)
+                        title = self._xp_service.get_title(sphere, new_level)
                         await self._notification.notify_level_up(
                             user_id=assignee.user_id,
                             sphere=sphere.value,
