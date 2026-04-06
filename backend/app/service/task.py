@@ -512,7 +512,9 @@ class TaskService(GroupTaskBaseService):
 
             story_points = task.difficulty.value if task.difficulty else 1
             actual_days = max(1, (datetime.now(UTC) - task.created_at).days)
-            deadline_days = task.deadline.days if task.deadline else 7
+            deadline_days = (
+                (task.deadline - task.created_at).days if task.deadline else 7
+            )
 
             for assignee in assignees:
                 for sphere_data in task.spheres:
