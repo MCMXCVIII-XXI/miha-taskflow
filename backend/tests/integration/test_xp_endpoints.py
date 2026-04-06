@@ -1,10 +1,4 @@
-import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 from httpx import AsyncClient
-
-from tests.conftest import register_user
 
 
 class TestGetUserSkills:
