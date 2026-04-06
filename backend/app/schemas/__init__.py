@@ -1,3 +1,4 @@
+from .comment import CommentCreate, CommentRead, CommentUpdate
 from .group import (
     UserGroupCreate,
     UserGroupMembership,
@@ -27,6 +28,9 @@ from .user import UserCreate, UserRead, UserSkillRead, UserSkillWithTitle, UserU
 
 __all__ = [
     "AccessTokenRequest",
+    "CommentCreate",
+    "CommentRead",
+    "CommentUpdate",
     "JoinRequestRead",
     "NotificationRead",
     "NotificationRespond",

@@ -18,6 +18,7 @@ from app.db.mixins import IdPkMixin
 from app.schemas.enum import TaskDifficulty, TaskPriority, TaskStatus, TaskVisibility
 
 if TYPE_CHECKING:
+    from .comment import Comment
     from .group import UserGroup
     from .user import User
 
@@ -49,10 +50,13 @@ class Task(Base, IdPkMixin):
     group_id: Mapped[int | None] = mapped_column(
         ForeignKey("user_groups.id"), index=True
     )
+
     assignees: Mapped[list["TaskAssignee"]] = relationship(
         "TaskAssignee", back_populates="task", cascade="all, delete-orphan"
     )
-
+    comments: Mapped[list["Comment"]] = relationship(
+        "Comment", back_populates="task", cascade="all, delete-orphan"
+    )
     group: Mapped["UserGroup"] = relationship("UserGroup", back_populates="tasks")
 
 

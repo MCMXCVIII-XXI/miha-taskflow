@@ -130,4 +130,34 @@ PERM_NOTIFICATION = [
     ),
 ]
 
-PERMISSIONS = PERM_USER + PERM_GROUP + PERM_TASK + PERM_ADMIN + PERM_NOTIFICATION
+# COMMENT
+PERM_COMMENT = [
+    Permission.create(
+        resource="comment",
+        action="view",
+        context="any",
+        description="View any comments",
+    ),
+    Permission.create(
+        resource="comment",
+        action="create",
+        context="own",
+        description="Create comments",
+    ),
+    Permission.create(
+        resource="comment",
+        action="update",
+        context="own",
+        description="Update own comments",
+    ),
+    Permission.create(
+        resource="comment",
+        action="delete",
+        context="own",
+        description="Delete own comments",
+    ),
+]
+
+PERMISSIONS = (
+    PERM_USER + PERM_GROUP + PERM_TASK + PERM_ADMIN + PERM_NOTIFICATION + PERM_COMMENT
+)
