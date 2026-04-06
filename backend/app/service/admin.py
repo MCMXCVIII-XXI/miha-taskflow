@@ -8,22 +8,17 @@ from app.core.log import get_logger
 from app.db import db_helper
 from app.models import User as UserModel
 from app.schemas import (
-    GlobalUserRole,
     UserRead,
     UserSearch,
 )
+from app.schemas.enum import GlobalUserRole
+from app.service.utils.get_stats import StatsGroups, StatsTasks, StatsUsers
 
 from .base import BaseService
 from .exceptions import user_exc
 from .query_db import GroupQueries, UserQueries
 
 logger = get_logger("service.admin")
-
-
-def get_admin_service(
-    db: AsyncSession = Depends(db_helper.get_session),
-) -> "AdminService":
-    return AdminService(db)
 
 
 class AdminService(BaseService):
@@ -96,8 +91,6 @@ class AdminService(BaseService):
         )
 
     async def get_stats(self) -> dict[str, Any]:
-        from app.service.utils.get_stats import StatsGroups, StatsTasks, StatsUsers
-
         stats_users = StatsUsers(self._db)
         stats_groups = StatsGroups(self._db)
         stats_tasks = StatsTasks(self._db)
@@ -107,3 +100,9 @@ class AdminService(BaseService):
             "groups": await stats_groups.get_stats(),
             "tasks": await stats_tasks.get_stats(),
         }
+
+
+def get_admin_service(
+    db: AsyncSession = Depends(db_helper.get_session),
+) -> AdminService:
+    return AdminService(db)

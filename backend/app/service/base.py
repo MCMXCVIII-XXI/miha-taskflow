@@ -66,8 +66,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import rbac_exc
 from app.models import Role as RoleModel
 from app.models import UserRole as UserRoleModel
-from app.schemas import SecondaryUserRole as SecondaryUserRoleEnum
+from app.schemas.enum import BaseRank, TaskDifficulty, TaskSphere, XPThreshold
+from app.schemas.enum import SecondaryUserRole as SecondaryUserRoleEnum
 from app.service.utils import StatsGroups, StatsTasks, StatsUsers
+
+from .exceptions import group_exc
 
 
 class BaseService:
@@ -84,6 +87,20 @@ class BaseService:
 
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
+
+    async def _invalidate(self, namespace: str) -> None:
+        """
+        Invalidate all cached entries under the given namespace.
+
+        Arguments:
+            namespace (str): Cache namespace to clear.
+        """
+        await FastAPICache.clear(namespace=namespace)
+
+
+class GroupTaskBaseService(BaseService):
+    def __init__(self, db: AsyncSession) -> None:
+        super().__init__(db)
         self._role = SecondaryUserRoleEnum
 
     async def _get_role_id(
@@ -116,7 +133,9 @@ class BaseService:
         elif task_id is not None:
             return query.where(UserRoleModel.task_id == task_id)
         else:
-            raise ValueError("You must pass the group_id or task_id.")
+            raise group_exc.GroupMissingContextIdError(
+                message="You must pass the group_id or task_id."
+            )
 
     async def _grant_role_if_not_exists(
         self,
@@ -139,15 +158,6 @@ class BaseService:
                 user_id=user_id, role_id=role_id, group_id=group_id, task_id=task_id
             )
             self._db.add(user_role)
-
-    async def _invalidate(self, namespace: str) -> None:
-        """
-        Invalidate all cached entries under the given namespace.
-
-        Arguments:
-            namespace (str): Cache namespace to clear.
-        """
-        await FastAPICache.clear(namespace=namespace)
 
 
 class AdminBaseService(BaseService):
@@ -173,3 +183,31 @@ class AdminBaseService(BaseService):
             stats["tasks"] = await self._stats_tasks.get_stats() or {}
 
         return stats
+
+
+class XPBaseService(BaseService):
+    def __init__(self, db: AsyncSession) -> None:
+        super().__init__(db)
+        self._spheres = TaskSphere
+        self._base_rank = BaseRank
+        self._xp_thresholds = XPThreshold
+        self._task_difficulty = TaskDifficulty
+        self._max_daily_xp = 500
+        self._frozen_days = 60
+
+    def _get_xp_thresholds(self) -> dict[int, int]:
+        data_xp_level: dict[int, int] = {}
+        for indx, xp in enumerate(self._xp_thresholds):
+            level = indx + 1
+            data_xp_level.setdefault(level, xp.value)
+        return data_xp_level
+
+    def _get_levels_all_rank(self) -> list[type[BaseRank]]:
+        return BaseRank.__subclasses__()
+
+    def _get_sphere_titles(self) -> dict[str, dict[int, str]]:
+        data_spheres = {}
+        ranks = self._get_levels_all_rank()
+        for sphere, rank_class in zip(self._spheres, ranks, strict=True):
+            data_spheres[sphere.value] = {rank.level: rank.title for rank in rank_class}
+        return data_spheres

@@ -32,7 +32,7 @@ async def delete_user(
     return await svc.delete_user(user_id=user_id, admin_id=current_user.id)
 
 
-@router.get("/stats")
+@router.get("/stats", response_model=dict[str, Any], status_code=status.HTTP_200_OK)
 async def get_stats(
     current_user: UserModel = Depends(require_permissions_db("admin:stats:view")),
     svc: AdminService = Depends(get_admin_service),

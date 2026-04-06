@@ -1,3 +1,4 @@
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Depends
@@ -7,29 +8,39 @@ from sqlalchemy.orm import joinedload
 
 from app.core.log import get_logger
 from app.db import db_helper
+from app.models import JoinRequest as JoinRequestModel
 from app.models import Task as TaskModel
 from app.models import TaskAssignee
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
 from app.models import UserRole as UserRoleModel
+from app.models.group import UserGroupMembership as UserGroupMembershipModel
 from app.schemas import (
+    JoinRequestRead,
+    NotificationRead,
     TaskCreate,
     TaskRead,
     TaskSearch,
-    TaskStatus,
     TaskUpdate,
 )
+from app.schemas.enum import (
+    JoinPolicy,
+    JoinRequestStatus,
+    TaskSphere,
+    TaskStatus,
+)
 
-from .base import BaseService
+from .base import GroupTaskBaseService
 from .exceptions import group_exc, task_exc
 from .notification import NotificationService
 from .query_db import TaskQueries
 from .search import task_search
+from .xp import XPService
 
 logger = get_logger("service.task")
 
 
-class TaskService(BaseService):
+class TaskService(GroupTaskBaseService):
     """
     Task lifecycle management service with advanced search and assignee operations.
 
@@ -79,11 +90,17 @@ class TaskService(BaseService):
     def __init__(
         self,
         db: AsyncSession,
-        notification_service: NotificationService | None = None,
     ) -> None:
         super().__init__(db)
         self._task_queries = TaskQueries
-        self._notification = notification_service
+        self._notification = NotificationService(db)
+        self._xp_service = XPService(db)
+
+    async def _get_task_assignees(self, task_id: int) -> list[TaskAssignee]:
+        result = await self._db.scalars(
+            select(TaskAssignee).where(TaskAssignee.task_id == task_id)
+        )
+        return list(result.all())
 
     async def _get_id_admin_groups(self, current_user: UserModel) -> list[int]:
         """
@@ -490,6 +507,45 @@ class TaskService(BaseService):
         await self._db.refresh(task)
         await self._invalidate("tasks")
 
+        if status == TaskStatus.DONE and task.spheres:
+            assignees = await self._get_task_assignees(task_id)
+
+            story_points = task.difficulty.value if task.difficulty else 1
+            actual_days = max(1, (datetime.now(UTC) - task.created_at).days)
+            deadline_days = (
+                (task.deadline - task.created_at).days if task.deadline else 7
+            )
+
+            for assignee in assignees:
+                for sphere_data in task.spheres:
+                    sphere = TaskSphere[sphere_data["sphere"].upper()]
+                    skill = await self._xp_service.get_or_create_skill(
+                        assignee.user_id, sphere
+                    )
+                    streak = skill.streak
+
+                    xp_distribution = self._xp_service.calculate_task_xp(
+                        spheres=task.spheres,
+                        story_points=story_points,
+                        deadline_days=deadline_days,
+                        actual_days=actual_days,
+                        streak=streak,
+                    )
+
+                    xp = xp_distribution.get(sphere.value, 0)
+                    leveled_up, new_level = await self._xp_service.add_sphere_xp(
+                        assignee.user_id, sphere, xp
+                    )
+
+                    if leveled_up:
+                        title = self._xp_service.get_title(sphere, new_level)
+                        await self._notification.notify_level_up(
+                            user_id=assignee.user_id,
+                            sphere=sphere.value,
+                            new_level=new_level,
+                            title=title,
+                        )
+
         logger.info(
             "Task status updated: task_id={task_id}, \
                 {old_status} -> {new_status}, user_id={user_id}",
@@ -623,6 +679,30 @@ class TaskService(BaseService):
             by_user_id=current_user.id,
         )
 
+    async def _add_member_directly(self, task_id: int, user_id: int) -> None:
+        """Add user directly to task without admin checks (for free join)."""
+        existing = await self._db.scalar(
+            select(TaskAssignee).where(
+                TaskAssignee.task_id == task_id,
+                TaskAssignee.user_id == user_id,
+            )
+        )
+        if existing:
+            raise task_exc.UserAlreadyInTask(
+                message="User is already assigned to this task"
+            )
+
+        assignee = TaskAssignee(task_id=task_id, user_id=user_id)
+        self._db.add(assignee)
+        await self._db.commit()
+        await self._invalidate("tasks")
+
+        logger.info(
+            "User joined task directly: user_id={user_id}, task_id={task_id}",
+            user_id=user_id,
+            task_id=task_id,
+        )
+
     async def remove_user_from_task(
         self,
         task_id: int,
@@ -663,38 +743,180 @@ class TaskService(BaseService):
             by_user_id=current_user.id,
         )
 
-    async def join_task(self, task_id: int, current_user: UserModel) -> None:
-        task_assignee = await self._db.scalar(
-            select(TaskAssignee).where(
-                TaskAssignee.task_id == task_id,
-                TaskAssignee.user_id == current_user.id,
+    async def get_task_join_requests(
+        self, task_id: int, current_user: UserModel
+    ) -> list[JoinRequestRead]:
+        task = await self._db.get(TaskModel, task_id)
+        if not task:
+            raise task_exc.TaskNotFound(message="Task not found")
+
+        group = await self._db.get(UserGroupModel, task.group_id)
+        if group and group.admin_id != current_user.id:
+            raise task_exc.TaskAccessDenied(
+                message="Only group admin can view join requests"
+            )
+
+        result = await self._db.scalars(
+            select(JoinRequestModel).where(
+                JoinRequestModel.task_id == task_id,
+                JoinRequestModel.status == JoinRequestStatus.PENDING,
             )
         )
-        if task_assignee:
-            logger.warning(
-                "Join task failed: user {user_id} already in task {task_id}",
-                user_id=current_user.id,
-                task_id=task_id,
-            )
-            raise task_exc.UserAlreadyInTask("User is already assigned to this task")
+        return [JoinRequestRead.model_validate(request) for request in result.all()]
 
-        assignee = TaskAssignee(task_id=task_id, user_id=current_user.id)
+    async def approve_task_join_request(
+        self, request_id: int, current_user: UserModel
+    ) -> NotificationRead:
+        request = await self._db.scalar(
+            select(JoinRequestModel).where(
+                JoinRequestModel.id == request_id,
+            )
+        )
+        if not request:
+            raise task_exc.JoinRequestNotFound(message="Join request not found")
+
+        task = await self._db.scalar(
+            select(TaskModel).where(
+                TaskModel.id == request.task_id,
+            )
+        )
+        if not task or not task.group_id:
+            raise task_exc.TaskNotFound(message=f"Task {request.task_id} not found")
+        group = await self._db.scalar(
+            select(UserGroupModel).where(
+                UserGroupModel.id == task.group_id,
+            )
+        )
+        if not group:
+            raise group_exc.GroupNotFound(message=f"Group {task.group_id} not found")
+
+        if group.admin_id != current_user.id:
+            raise task_exc.TaskAccessDenied(
+                message="Only group admin can approve join requests"
+            )
+
+        if request.status != JoinRequestStatus.PENDING:
+            raise task_exc.JoinRequestAlreadyHandled(
+                message="Join request already processed"
+            )
+
+        request.status = JoinRequestStatus.APPROVED
+        await self._db.commit()
+
+        is_member = await self._db.scalar(
+            select(UserGroupMembershipModel).where(
+                UserGroupMembershipModel.user_id == request.user_id,
+                UserGroupMembershipModel.group_id == task.group_id,
+            )
+        )
+
+        if not is_member:
+            membership = UserGroupMembershipModel(
+                user_id=request.user_id, group_id=task.group_id
+            )
+            self._db.add(membership)
+            await self._db.commit()
+
+            if self._notification:
+                await self._notification.notify_group_join(
+                    requester_id=current_user.id,
+                    user_id=request.user_id,
+                    group_id=group.id,
+                    group_name=group.name,
+                )
+
+        assignee = TaskAssignee(user_id=request.user_id, task_id=request.task_id)
         self._db.add(assignee)
         await self._db.commit()
-        await self._grant_role_if_not_exists(
-            task_id=task_id,
-            user_id=current_user.id,
-            role_name=self._role.ASSIGNEE.value,
-        )
-        await self._db.commit()
-        await self._invalidate("tasks")
-        await self._invalidate("rbac")
 
-        logger.info(
-            "User joined task: user_id={user_id}, task_id={task_id}",
-            user_id=current_user.id,
-            task_id=task_id,
+        notification = await self._notification.notify_join_request_approved(
+            admin_id=current_user.id,
+            user_id=request.user_id,
+            group_id=group.id,
+            group_name=group.name,
         )
+        return notification
+
+    async def reject_task_join_request(
+        self, request_id: int, current_user: UserModel
+    ) -> NotificationRead:
+        request = await self._db.get(JoinRequestModel, request_id)
+        if not request:
+            raise task_exc.JoinRequestNotFound(message="Join request not found")
+
+        task = await self._db.get(TaskModel, request.task_id)
+
+        if task is None:
+            raise task_exc.TaskNotFound(message=f"Task {request.task_id} not found")
+
+        group = await self._db.get(UserGroupModel, task.group_id)
+
+        if group is None:
+            raise group_exc.GroupNotFound(message=f"Group {task.group_id} not found")
+
+        if group and group.admin_id != current_user.id:
+            raise task_exc.TaskAccessDenied(
+                message="Only group admin can reject join requests"
+            )
+
+        request.status = JoinRequestStatus.REJECTED
+        await self._db.commit()
+
+        notification = await self._notification.notify_join_request_rejected(
+            admin_id=current_user.id,
+            user_id=request.user_id,
+            group_id=group.id,
+            group_name=group.name,
+        )
+        return notification
+
+    async def join_task(self, task_id: int, current_user: UserModel) -> None:
+        existing = await self._db.scalar(
+            select(TaskAssignee).where(
+                TaskAssignee.user_id == current_user.id,
+                TaskAssignee.task_id == task_id,
+            )
+        )
+        if existing:
+            raise task_exc.UserAlreadyInTask(
+                message="User is already assigned to this task"
+            )
+        task = await self._db.get(TaskModel, task_id)
+        if not task:
+            raise task_exc.TaskNotFound(message="Task not found")
+        group = await self._db.get(UserGroupModel, task.group_id)
+        if not group:
+            raise task_exc.TaskNotInGroup(message="Task is not in a group")
+        existing_request = await self._db.scalar(
+            select(JoinRequestModel).where(
+                JoinRequestModel.user_id == current_user.id,
+                JoinRequestModel.task_id == task_id,
+                JoinRequestModel.status == JoinRequestStatus.PENDING,
+            )
+        )
+        if existing_request:
+            raise task_exc.JoinRequestAlreadyExists(
+                message="Join request already exists"
+            )
+        if group.join_policy == JoinPolicy.OPEN:
+            await self._add_member_directly(task_id, current_user.id)
+        else:
+            request = JoinRequestModel(
+                user_id=current_user.id,
+                group_id=group.id,
+                task_id=task_id,
+                status=JoinRequestStatus.PENDING,
+            )
+            self._db.add(request)
+            await self._db.commit()
+
+            if self._notification:
+                await self._notification.notify_join_request_created(
+                    requester_id=current_user.id,
+                    admin_id=group.admin_id,
+                    group_id=group.id,
+                    group_name=group.name,
+                )
 
     async def exit_task(self, task_id: int, current_user: UserModel) -> None:
         """
@@ -749,7 +971,5 @@ def get_task_service(db: AsyncSession = Depends(db_helper.get_session)) -> TaskS
             return await task_service.search_tasks()
         ```
     """
-    from app.service.notification import NotificationService
 
-    notification_svc = NotificationService(db)
-    return TaskService(db, notification_svc)
+    return TaskService(db)

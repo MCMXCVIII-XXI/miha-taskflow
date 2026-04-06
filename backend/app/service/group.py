@@ -6,23 +6,36 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import get_logger
 from app.db import db_helper
+from app.models import (
+    JoinRequest as JoinRequestModel,
+)
+from app.models import (
+    Task as TaskModel,
+)
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
 from app.models import (
     UserGroupMembership as UserGroupMembershipModel,
 )
 from app.models import (
-    UserRole,
+    UserRole as UserRoleModel,
 )
 from app.schemas import (
+    JoinRequestRead,
+    NotificationRead,
     UserGroupCreate,
     UserGroupRead,
     UserGroupSearch,
     UserGroupUpdate,
 )
+from app.schemas.enum import (
+    JoinPolicy,
+    JoinRequestStatus,
+)
+from app.service.task import TaskService
 
-from .base import BaseService
-from .exceptions import group_exc
+from .base import GroupTaskBaseService
+from .exceptions import group_exc, join_request_exc
 from .notification import NotificationService
 from .query_db import GroupQueries
 from .search import group_search
@@ -30,7 +43,7 @@ from .search import group_search
 logger = get_logger("service.group")
 
 
-class GroupService(BaseService):
+class GroupService(GroupTaskBaseService):
     """
     Group lifecycle management service with membership operations.
 
@@ -80,7 +93,8 @@ class GroupService(BaseService):
     ) -> None:
         super().__init__(db)
         self._group_queries = GroupQueries
-        self._notification = notification_service
+        self._task_service = TaskService(db)
+        self._notification = NotificationService(db)
 
     async def _get_my_group(self, group_id: int, user_id: int) -> UserGroupModel:
         """
@@ -351,9 +365,9 @@ class GroupService(BaseService):
             role_id = await self._get_role_id(role)
             if role_id:
                 user_role = await self._db.scalar(
-                    select(UserRole).where(
-                        UserRole.user_id == user_id,
-                        UserRole.role_id == role_id,
+                    select(UserRoleModel).where(
+                        UserRoleModel.user_id == user_id,
+                        UserRoleModel.role_id == role_id,
                     )
                 )
                 if user_role:
@@ -449,6 +463,25 @@ class GroupService(BaseService):
             removed_user=user_id,
         )
 
+    async def create_join_request(self, group_id: int, user_id: int) -> None:
+        join_request = await self._db.scalar(
+            select(JoinRequestModel).where(
+                JoinRequestModel.group_id == group_id,
+                JoinRequestModel.user_id == user_id,
+            )
+        )
+        if join_request:
+            raise join_request_exc.JoinRequestAlreadyExists(
+                message="Join request already exists."
+            )
+
+        join_request = JoinRequestModel(
+            group_id=group_id,
+            user_id=user_id,
+        )
+        self._db.add(join_request)
+        await self._db.commit()
+
     async def update_my_group(
         self, group_id: int, current_user: UserModel, group_in: UserGroupUpdate
     ) -> UserGroupRead:
@@ -534,10 +567,10 @@ class GroupService(BaseService):
         group = await self._get_my_group(group_id, current_user.id)
         role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
         user_role = await self._db.scalar(
-            select(UserRole).where(
-                UserRole.user_id == current_user.id,
-                UserRole.role_id == role_id,
-                UserRole.group_id == group_id,
+            select(UserRoleModel).where(
+                UserRoleModel.user_id == current_user.id,
+                UserRoleModel.role_id == role_id,
+                UserRoleModel.group_id == group_id,
             )
         )
 
@@ -558,6 +591,144 @@ class GroupService(BaseService):
             user_id=current_user.id,
         )
 
+    async def _handle_task_join_after_approval(
+        self, request: JoinRequestModel, current_user: UserModel
+    ) -> None:
+        task = await self._db.get(TaskModel, request.task_id)
+        if not task:
+            return
+
+        is_member = await self._db.scalar(
+            select(UserGroupMembershipModel).where(
+                UserGroupMembershipModel.user_id == request.user_id,
+                UserGroupMembershipModel.group_id == task.group_id,
+            )
+        )
+
+        if not is_member:
+            membership = UserGroupMembershipModel(
+                user_id=request.user_id, group_id=task.group_id
+            )
+            self._db.add(membership)
+            await self._db.commit()
+
+            if self._notification:
+                group = await self._db.get(UserGroupModel, task.group_id)
+                if group:
+                    await self._notification.notify_group_join(
+                        requester_id=request.user_id,
+                        user_id=request.user_id,
+                        group_id=group.id,
+                        group_name=group.name,
+                    )
+
+        if request.task_id is not None:
+            await self._task_service.add_user_to_task(
+                task_id=request.task_id,
+                user_id=request.user_id,
+                current_user=current_user,
+            )
+
+    async def reject_join_request(
+        self, request_id: int, current_user: UserModel
+    ) -> None:
+        request = await self._db.get(JoinRequestModel, request_id)
+        if not request:
+            raise group_exc.JoinRequestNotFound(message="Join request not found")
+
+        group = await self._db.get(UserGroupModel, request.group_id)
+
+        if not group:
+            raise group_exc.GroupNotFound(message=f"Group {request.group_id} not found")
+
+        if group.admin_id != current_user.id:
+            raise group_exc.MemberNotAdmin(
+                message="Only group admin can reject join requests"
+            )
+
+        request.status = JoinRequestStatus.REJECTED
+        await self._db.commit()
+
+        if self._notification and group:
+            await self._notification.notify_join_request_rejected(
+                admin_id=current_user.id,
+                user_id=request.user_id,
+                group_id=group.id,
+                group_name=group.name,
+            )
+
+    async def approve_join_request(
+        self, request_id: int, current_user: UserModel
+    ) -> NotificationRead:
+        request = await self._db.get(JoinRequestModel, request_id)
+        if not request:
+            raise group_exc.JoinRequestNotFound(message="Join request not found")
+
+        group = await self._db.get(UserGroupModel, request.group_id)
+
+        if not group:
+            raise group_exc.GroupNotFound("Group not found")
+
+        if group.admin_id != current_user.id:
+            raise group_exc.MemberNotAdmin(
+                message="Only group admin can approve join requests"
+            )
+
+        if request.status != JoinRequestStatus.PENDING:
+            raise group_exc.JoinRequestAlreadyHandled(
+                message="Join request already processed"
+            )
+
+        request.status = JoinRequestStatus.APPROVED
+        await self._db.commit()
+
+        membership = UserGroupMembershipModel(
+            user_id=request.user_id, group_id=request.group_id
+        )
+        self._db.add(membership)
+        await self._db.commit()
+
+        await self._grant_role_if_not_exists(
+            group_id=request.group_id,
+            user_id=request.user_id,
+            role_name=self._role.MEMBER.value,
+        )
+        await self._db.commit()
+
+        if request.task_id:
+            await self._handle_task_join_after_approval(request, current_user)
+
+        notification = await self._notification.notify_join_request_approved(
+            admin_id=current_user.id,
+            user_id=request.user_id,
+            group_id=group.id,
+            group_name=group.name,
+        )
+        return notification
+
+    async def get_join_requests(
+        self, group_id: int, current_user: UserModel
+    ) -> list[JoinRequestRead]:
+        group = await self._db.scalar(
+            self._group_queries.by_id(group_id, is_active=True)
+        )
+        if not group:
+            raise group_exc.GroupNotFound(message="Group not found")
+
+        if group.admin_id != current_user.id:
+            raise group_exc.MemberNotAdmin(
+                message="Only group admin can view join requests"
+            )
+
+        result = await self._db.scalars(
+            select(JoinRequestModel).where(
+                JoinRequestModel.group_id == group_id,
+                JoinRequestModel.task_id.is_(None),
+                JoinRequestModel.status == JoinRequestStatus.PENDING,
+            )
+        )
+        return [JoinRequestRead.model_validate(req) for req in result.all()]
+
     async def join_group(self, group_id: int, current_user: UserModel) -> None:
         user_group_membership = await self._db.scalar(
             select(UserGroupMembershipModel).where(
@@ -566,42 +737,66 @@ class GroupService(BaseService):
             )
         )
         if user_group_membership:
-            logger.warning(
-                "Join group failed: user {user_id} already member of group {group_id}",
-                user_id=current_user.id,
-                group_id=group_id,
-            )
             raise group_exc.MemberAlreadyExists(
                 message="User is already a member of this group"
             )
-
         group = await self._db.scalar(
             select(UserGroupModel).where(UserGroupModel.id == group_id)
         )
         if not group:
             raise group_exc.GroupNotFound(message="Group not found")
 
-        membership = UserGroupMembershipModel(
-            user_id=current_user.id, group_id=group_id
-        )
-        self._db.add(membership)
-        await self._db.commit()
-        await self._grant_role_if_not_exists(
-            group_id=group_id,
-            user_id=current_user.id,
-            role_name=self._role.MEMBER.value,
-        )
-        await self._db.commit()
-        await self._invalidate("groups")
-        await self._invalidate("rbac")
-
-        if self._notification:
-            await self._notification.notify_group_join_request(
-                requester_id=current_user.id,
-                admin_id=group.admin_id,
-                group_id=group_id,
-                group_name=group.name,
+        existing_request = await self._db.scalar(
+            select(JoinRequestModel).where(
+                JoinRequestModel.user_id == current_user.id,
+                JoinRequestModel.group_id == group_id,
+                JoinRequestModel.task_id.is_(None),
+                JoinRequestModel.status == JoinRequestStatus.PENDING,
             )
+        )
+        if existing_request:
+            raise group_exc.JoinRequestAlreadyExists(
+                message="Join request already exists"
+            )
+        if group.join_policy == JoinPolicy.OPEN:
+            membership = UserGroupMembershipModel(
+                user_id=current_user.id, group_id=group_id
+            )
+            self._db.add(membership)
+            await self._db.commit()
+            await self._grant_role_if_not_exists(
+                group_id=group_id,
+                user_id=current_user.id,
+                role_name=self._role.MEMBER.value,
+            )
+            await self._db.commit()
+            await self._invalidate("groups")
+            await self._invalidate("rbac")
+
+            if self._notification:
+                await self._notification.notify_group_join(
+                    requester_id=current_user.id,
+                    user_id=current_user.id,
+                    group_id=group_id,
+                    group_name=group.name,
+                )
+        else:
+            request = JoinRequestModel(
+                user_id=current_user.id,
+                group_id=group_id,
+                task_id=None,
+                status=JoinRequestStatus.PENDING,
+            )
+            self._db.add(request)
+            await self._db.commit()
+
+            if self._notification:
+                await self._notification.notify_join_request_created(
+                    requester_id=current_user.id,
+                    admin_id=group.admin_id,
+                    group_id=group_id,
+                    group_name=group.name,
+                )
 
         logger.info(
             "User joined group: user_id={user_id}, group_id={group_id}",
@@ -664,7 +859,5 @@ def get_group_service(
             return await group_svc.search_my_groups(current_user)
         ```
     """
-    from app.service.notification import NotificationService
 
-    notification_svc = NotificationService(db)
-    return GroupService(db, notification_svc)
+    return GroupService(db)

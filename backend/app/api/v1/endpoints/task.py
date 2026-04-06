@@ -2,7 +2,17 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.core.permission import require_permissions_db
 from app.models import User as UserModel
-from app.schemas import TaskCreate, TaskRead, TaskSearch, TaskStatus, TaskUpdate
+from app.schemas import (
+    JoinRequestRead,
+    NotificationRead,
+    TaskCreate,
+    TaskRead,
+    TaskSearch,
+    TaskUpdate,
+)
+from app.schemas.enum import (
+    TaskStatus,
+)
 from app.service import TaskService, get_task_service
 
 router = APIRouter()
@@ -51,6 +61,50 @@ async def search_my_tasks(
     return await svc.search_my_tasks(
         search=search, sort=sort, limit=limit, offset=offset, current_user=current_user
     )
+
+
+@router.get(
+    "/{task_id}/join-requests",
+    response_model=list[JoinRequestRead],
+    status_code=status.HTTP_200_OK,
+)
+async def get_task_join_requests(
+    task_id: int,
+    current_user: UserModel = Depends(require_permissions_db("task:view:group")),
+    svc: TaskService = Depends(get_task_service),
+) -> list[JoinRequestRead]:
+    """Get join requests for task (group admin only)."""
+    return await svc.get_task_join_requests(task_id, current_user)
+
+
+@router.post(
+    "/{task_id}/join-requests/{request_id}/approve",
+    response_model=NotificationRead,
+    status_code=status.HTTP_200_OK,
+)
+async def approve_task_join_request(
+    task_id: int,
+    request_id: int,
+    current_user: UserModel = Depends(require_permissions_db("task:update:own")),
+    svc: TaskService = Depends(get_task_service),
+) -> NotificationRead:
+    """Approve join request (group admin only)."""
+    return await svc.approve_task_join_request(request_id, current_user)
+
+
+@router.post(
+    "/{task_id}/join-requests/{request_id}/reject",
+    response_model=NotificationRead,
+    status_code=status.HTTP_200_OK,
+)
+async def reject_task_join_request(
+    task_id: int,
+    request_id: int,
+    current_user: UserModel = Depends(require_permissions_db("task:update:own")),
+    svc: TaskService = Depends(get_task_service),
+) -> NotificationRead:
+    """Reject join request (group admin only)."""
+    return await svc.reject_task_join_request(request_id, current_user)
 
 
 @router.get(

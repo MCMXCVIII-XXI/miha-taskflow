@@ -1,17 +1,8 @@
 from datetime import datetime
-from enum import Enum
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-
-class GroupVisibility(Enum):
-    PUBLIC = "public"
-    PRIVATE = "private"
-
-
-class InvitePolicy(Enum):
-    ADMIN_ONLY = "admin_only"
-    ALL_MEMBERS = "all_members"
+from .enum import GroupVisibility, InvitePolicy, JoinPolicy
 
 
 class UserGroupRead(BaseModel):
@@ -24,6 +15,7 @@ class UserGroupRead(BaseModel):
     visibility: GroupVisibility = Field(
         GroupVisibility.PUBLIC, description="Group visibility"
     )
+    join_policy: JoinPolicy = Field(JoinPolicy.REQUEST, description="Join policy")
     is_active: bool = Field(description="Group is active")
     invite_policy: InvitePolicy = Field(
         InvitePolicy.ADMIN_ONLY, description="Invite policy"

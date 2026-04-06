@@ -3,7 +3,7 @@ from typing import Literal
 from sqlalchemy import Select, select
 
 from app.models import Task, TaskAssignee, User, UserGroup, UserGroupMembership
-from app.schemas import GlobalUserRole
+from app.schemas.enum import GlobalUserRole
 
 
 class UserQueries:

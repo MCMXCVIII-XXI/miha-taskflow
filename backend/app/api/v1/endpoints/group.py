@@ -2,7 +2,14 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.core.permission import require_permissions_db
 from app.models import User as UserModel
-from app.schemas import UserGroupCreate, UserGroupRead, UserGroupSearch, UserGroupUpdate
+from app.schemas import (
+    JoinRequestRead,
+    NotificationRead,
+    UserGroupCreate,
+    UserGroupRead,
+    UserGroupSearch,
+    UserGroupUpdate,
+)
 from app.service import GroupService, get_group_service
 
 router = APIRouter()
@@ -125,6 +132,46 @@ async def delete_my_group(
 ) -> None:
     """Soft-delete owned group (GROUP_ADMIN)."""
     return await svc.delete_my_group(group_id=group_id, current_user=current_user)
+
+
+@router.get(
+    "/{group_id}/join-requests",
+    response_model=list[JoinRequestRead],
+    status_code=status.HTTP_200_OK,
+)
+async def get_join_requests(
+    group_id: int,
+    current_user: UserModel = Depends(require_permissions_db("group:view:own")),
+    svc: GroupService = Depends(get_group_service),
+) -> list[JoinRequestRead]:
+    return await svc.get_join_requests(group_id, current_user)
+
+
+@router.post(
+    "/{group_id}/join-requests/{request_id}/approve",
+    response_model=NotificationRead,
+    status_code=status.HTTP_200_OK,
+)
+async def approve_join_request(
+    group_id: int,
+    request_id: int,
+    current_user: UserModel = Depends(require_permissions_db("group:update:own")),
+    svc: GroupService = Depends(get_group_service),
+) -> NotificationRead:
+    return await svc.approve_join_request(request_id, current_user)
+
+
+@router.post(
+    "/{group_id}/join-requests/{request_id}/reject",
+    status_code=status.HTTP_200_OK,
+)
+async def reject_join_request(
+    group_id: int,
+    request_id: int,
+    current_user: UserModel = Depends(require_permissions_db("group:update:own")),
+    svc: GroupService = Depends(get_group_service),
+) -> None:
+    return await svc.reject_join_request(request_id, current_user)
 
 
 @router.post("/{group_id}/join", status_code=status.HTTP_201_CREATED)

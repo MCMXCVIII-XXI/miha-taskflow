@@ -17,6 +17,7 @@ from app.core.exceptions.security_exc import BaseSecurityError
 from app.core.log import get_logger, setup_logging
 from app.core.middleware import http_logging_middleware
 from app.core.permission import init_rbac
+from app.core.sse import sse_manager
 from app.db import db_helper
 from app.service.exceptions.group_exc import BaseGroupError
 from app.service.exceptions.group_membership_exc import BaseGroupMembershipError
@@ -44,20 +45,21 @@ sentry_sdk.init(
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # startup
     logger.info("Starting TaskFlow application")
-
-    # Initialize cache Redis
+    # Cache Redis
     await init_cache()
     logger.info("Cache initialized")
-
-    # Adding values to the RBAC tables
+    # RBAC
     await init_rbac()
     logger.info("RBAC initialized")
-
+    # SSE Manager
+    await sse_manager.start()
+    logger.info("SSE Manager initialized")
     yield
-
     # shutdown
     logger.info("Shutting down TaskFlow application")
-    # Closing the database connection
+    # SSE Manager
+    await sse_manager.stop()
+    # Database
     await db_helper.dispose()
     logger.info("Database connections closed")
 

@@ -122,3 +122,88 @@ class UserAlreadyInTask(BaseTaskError):
             headers=headers,
             details=details,
         )
+
+
+class TaskAccessDenied(BaseTaskError):
+    """Access to the task is denied."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_403_FORBIDDEN,
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class JoinRequestNotFound(BaseTaskError):
+    """Join request not found."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_404_NOT_FOUND,
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class JoinRequestAlreadyExists(BaseTaskError):
+    """Join request already exists."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_409_CONFLICT,
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class JoinRequestAlreadyHandled(BaseTaskError):
+    """Join request already handled."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_400_BAD_REQUEST,
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class TaskNotInGroup(BaseTaskError):
+    """Task not in group."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_404_NOT_FOUND,
+            message=message,
+            headers=headers,
+            details=details,
+        )

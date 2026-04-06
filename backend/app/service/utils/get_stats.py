@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import Task as TaskModel
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
-from app.schemas import (
+from app.schemas.enum import (
     GlobalUserRole,
     TaskPriority,
     TaskStatus,

@@ -14,9 +14,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.cache as cache_module
 from app.core.permission import PERMISSIONS
-from app.db.db_helper import db_helper
+from app.db import db_helper
 from app.models import Permission, Role, RolePermission, User
-from app.schemas import GlobalUserRole
+from app.schemas.enum import GlobalUserRole
 from main import app
 
 logger = logging.getLogger(__name__)
@@ -288,6 +288,7 @@ async def cleanup_db(session_factory) -> None:
             await session.execute(text("DELETE FROM user_group_memberships"))
             await session.execute(text("DELETE FROM user_groups"))
             await session.execute(text("DELETE FROM notifications"))
+            await session.execute(text("DELETE FROM join_requests"))
             await session.execute(text("DELETE FROM user_roles"))
             await session.execute(text("DELETE FROM users"))
             await session.commit()

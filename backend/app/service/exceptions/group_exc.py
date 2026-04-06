@@ -105,3 +105,88 @@ class MemberNotFound(BaseGroupError):
             headers=headers,
             details=details,
         )
+
+
+class MemberNotAdmin(BaseGroupError):
+    """Member is not an admin."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_403_FORBIDDEN,
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class JoinRequestNotFound(BaseGroupError):
+    """Join request not found."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_404_NOT_FOUND,
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class JoinRequestAlreadyExists(BaseGroupError):
+    """Join request already exists."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_409_CONFLICT,
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class JoinRequestAlreadyHandled(BaseGroupError):
+    """Join request already handled."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_400_BAD_REQUEST,
+            message=message,
+            headers=headers,
+            details=details,
+        )
+
+
+class GroupMissingContextIdError(BaseGroupError):
+    """Group missing context id."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_400_BAD_REQUEST,
+            message=message,
+            headers=headers,
+            details=details,
+        )

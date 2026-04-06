@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import jwt
 
 from app.core.config import token_settings
-from app.schemas import TokenType
+from app.schemas.enum import TokenType
 
 
 def create_access_token(data: dict[str, str | datetime]) -> str:

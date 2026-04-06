@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from app.service.auth import AuthenticationService
+from app.service import AuthenticationService
 from app.service.exceptions import user_exc
 
 

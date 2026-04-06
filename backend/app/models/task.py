@@ -1,7 +1,8 @@
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     DateTime,
     Enum,
@@ -14,7 +15,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
 from app.db.mixins import IdPkMixin
-from app.schemas import TaskDifficulty, TaskPriority, TaskStatus, TaskVisibility
+from app.schemas.enum import TaskDifficulty, TaskPriority, TaskStatus, TaskVisibility
 
 if TYPE_CHECKING:
     from .group import UserGroup
@@ -33,6 +34,10 @@ class Task(Base, IdPkMixin):
     )
     visibility: Mapped[TaskVisibility] = mapped_column(
         Enum(TaskVisibility), default=TaskVisibility.PRIVATE, index=True
+    )
+    spheres: Mapped[list[dict[str, Any]] | None] = mapped_column(JSON, nullable=True)
+    deadline: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()

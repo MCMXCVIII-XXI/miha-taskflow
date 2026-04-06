@@ -3,7 +3,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
 
-from .role import GlobalUserRole
+from app.schemas.enum import TaskSphere
+
+from .enum import GlobalUserRole
 
 
 class UserRead(BaseModel):
@@ -64,3 +66,25 @@ class UserUpdate(BaseModel):
     first_name: str | None = Field(None, description="First name")
     last_name: str | None = Field(None, description="Last name")
     patronymic: str | None = Field(None, description="Patronymic")
+
+
+class UserSkillRead(BaseModel):
+    """Schema for reading user skill."""
+
+    id: int = Field(description="Skill ID")
+    user_id: int = Field(description="User ID")
+    sphere: TaskSphere = Field(description="Task sphere")
+    xp_total: int = Field(description="Total XP")
+    level: int = Field(description="Level")
+    streak: int = Field(description="Streak")
+    is_frozen: bool = Field(description="Is frozen")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class UserSkillWithTitle(UserSkillRead):
+    """Schema for reading user skill with title."""
+
+    title: str = Field(description="Skill title")
+    xp_to_next_level: int = Field(description="XP to next level")
+    progress_percent: int = Field(description="Progress percent")

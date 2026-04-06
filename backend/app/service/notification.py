@@ -8,6 +8,8 @@ from app.models import Notification as NotificationModel
 from app.models import User as UserModel
 from app.schemas import (
     NotificationRead,
+)
+from app.schemas.enum import (
     NotificationResponse,
     NotificationStatus,
     NotificationTargetType,
@@ -16,6 +18,7 @@ from app.schemas import (
 
 from .base import BaseService
 from .exceptions import notifi_exc
+from .sse import get_sse_service
 
 logger = get_logger("service.notification")
 
@@ -23,6 +26,7 @@ logger = get_logger("service.notification")
 class NotificationService(BaseService):
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(db)
+        self._sse_svc = get_sse_service()
 
     async def _get_notification(
         self, notification_id: int, user_id: int | None = None
@@ -56,7 +60,7 @@ class NotificationService(BaseService):
         result = await self._db.scalars(query)
         return list(result.all())
 
-    async def create_notification(
+    async def _add_data_to_notification(
         self,
         sender_id: int,
         recipient_id: int,
@@ -65,7 +69,7 @@ class NotificationService(BaseService):
         message: str,
         target_id: int,
         target_type: NotificationTargetType,
-    ) -> NotificationRead:
+    ) -> NotificationModel:
         notification = NotificationModel(
             sender_id=sender_id,
             recipient_id=recipient_id,
@@ -87,6 +91,58 @@ class NotificationService(BaseService):
         self._db.add(notification)
         await self._db.commit()
         await self._db.refresh(notification)
+        return notification
+
+    async def create_notification(
+        self,
+        sender_id: int,
+        recipient_id: int,
+        type: NotificationType,
+        title: str,
+        message: str,
+        target_id: int,
+        target_type: NotificationTargetType,
+        sphere: str | None = None,
+        new_level: int | None = None,
+    ) -> NotificationRead:
+        notification = await self._add_data_to_notification(
+            sender_id=sender_id,
+            recipient_id=recipient_id,
+            type=type,
+            title=title,
+            message=message,
+            target_id=target_id,
+            target_type=target_type,
+        )
+
+        if type == NotificationType.LEVEL_UP:
+            await self._sse_svc.send_notification(
+                user_id=recipient_id,
+                event_type="level_up",
+                data={
+                    "sphere": sphere,
+                    "new_level": new_level,
+                    "title": title,
+                },
+            )
+        else:
+            await self._sse_svc.send_notification(
+                user_id=notification.recipient_id,
+                event_type="notification",
+                data={
+                    "id": notification.id,
+                    "type": notification.type.value,
+                    "title": notification.title,
+                    "message": notification.message,
+                    "target_id": notification.target_id,
+                    "target_type": notification.target_type.value,
+                    "status": notification.status.value,
+                    "created_at": notification.created_at.isoformat()
+                    if notification.created_at
+                    else None,
+                },
+            )
+
         return NotificationRead.model_validate(notification)
 
     async def get_my_notifications(
@@ -168,7 +224,6 @@ class NotificationService(BaseService):
             notification_id, user_id
         )
 
-        # Проверить, что уведомление требует ответа
         if notification.type not in [
             NotificationType.GROUP_INVITE,
             NotificationType.GROUP_JOIN,
@@ -302,6 +357,93 @@ class NotificationService(BaseService):
             message=f"Your {target_name} received a rating of {rating}/10",
             target_id=target_id,
             target_type=target_type,
+        )
+
+    async def notify_group_join(
+        self,
+        requester_id: int,
+        user_id: int,
+        group_id: int,
+        group_name: str,
+    ) -> NotificationRead:
+        return await self.create_notification(
+            sender_id=requester_id,
+            recipient_id=user_id,
+            type=NotificationType.GROUP_JOIN,
+            title="Joined group",
+            message=f"User joined the group '{group_name}'",
+            target_id=group_id,
+            target_type=NotificationTargetType.GROUP,
+        )
+
+    async def notify_join_request_created(
+        self,
+        requester_id: int,
+        admin_id: int,
+        group_id: int,
+        group_name: str,
+    ) -> NotificationRead:
+        return await self.create_notification(
+            sender_id=requester_id,
+            recipient_id=admin_id,
+            type=NotificationType.GROUP_JOIN,
+            title="New join request",
+            message=f"User wants to join the group '{group_name}'",
+            target_id=group_id,
+            target_type=NotificationTargetType.GROUP,
+        )
+
+    async def notify_join_request_approved(
+        self,
+        admin_id: int,
+        user_id: int,
+        group_id: int,
+        group_name: str,
+    ) -> NotificationRead:
+        return await self.create_notification(
+            sender_id=admin_id,
+            recipient_id=user_id,
+            type=NotificationType.GROUP_JOIN,
+            title="Join request approved",
+            message=f"Your request to join '{group_name}' was approved",
+            target_id=group_id,
+            target_type=NotificationTargetType.GROUP,
+        )
+
+    async def notify_join_request_rejected(
+        self,
+        admin_id: int,
+        user_id: int,
+        group_id: int,
+        group_name: str,
+    ) -> NotificationRead:
+        return await self.create_notification(
+            sender_id=admin_id,
+            recipient_id=user_id,
+            type=NotificationType.GROUP_JOIN,
+            title="Join request rejected",
+            message=f"Your request to join '{group_name}' was rejected",
+            target_id=group_id,
+            target_type=NotificationTargetType.GROUP,
+        )
+
+    async def notify_level_up(
+        self,
+        user_id: int,
+        sphere: str,
+        new_level: int,
+        title: str,
+    ) -> NotificationRead:
+        return await self.create_notification(
+            sender_id=0,
+            recipient_id=user_id,
+            type=NotificationType.LEVEL_UP,
+            title="Level Up!",
+            message=f"You reached level {new_level} in {sphere}! Title: {title}",
+            target_id=user_id,
+            target_type=NotificationTargetType.USER,
+            sphere=sphere,
+            new_level=new_level,
         )
 
 

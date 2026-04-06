@@ -1,10 +1,12 @@
 from .group import UserGroup, UserGroupMembership
+from .join import JoinRequest
 from .notification import Notification
 from .role import Permission, Role, RolePermission, UserRole
 from .task import Task, TaskAssignee
-from .user import User
+from .user import User, UserSkill
 
 __all__ = [
+    "JoinRequest",
     "Notification",
     "Permission",
     "Role",
@@ -15,4 +17,5 @@ __all__ = [
     "UserGroup",
     "UserGroupMembership",
     "UserRole",
+    "UserSkill",
 ]

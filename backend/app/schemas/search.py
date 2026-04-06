@@ -2,14 +2,15 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
-from .notification import (
+from .enum import (
+    GlobalUserRole,
     NotificationResponse,
     NotificationStatus,
     NotificationTargetType,
     NotificationType,
+    TaskPriority,
+    TaskStatus,
 )
-from .role import GlobalUserRole
-from .task import TaskPriority, TaskStatus
 
 
 ###############################################################################
