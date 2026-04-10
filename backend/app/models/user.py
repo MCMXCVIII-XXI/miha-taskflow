@@ -25,6 +25,8 @@ if TYPE_CHECKING:
 
 
 class User(Base, IdPkMixin):
+    """Represents a registered user in the TaskFlow system."""
+
     username: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     first_name: Mapped[str] = mapped_column(String(50))
     last_name: Mapped[str] = mapped_column(String(50))
@@ -61,6 +63,8 @@ class User(Base, IdPkMixin):
 
 
 class UserSkill(Base, IdPkMixin):
+    """Tracks user progress in skill spheres with XP and leveling system."""
+
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     sphere: Mapped[TaskSphere] = mapped_column(Enum(TaskSphere), index=True)
     xp_total: Mapped[int] = mapped_column(Integer, default=0)

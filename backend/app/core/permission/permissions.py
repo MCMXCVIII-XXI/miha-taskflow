@@ -66,6 +66,9 @@ PERM_TASK = [
     Permission.create(
         resource="task", action="exit", context="assignee", description="Exit task"
     ),
+    Permission.create(
+        resource="task", action="exit", context="own", description="Exit own task"
+    ),
 ]
 # GROUP
 PERM_GROUP = [
@@ -180,6 +183,15 @@ PERM_RATING = [
     ),
 ]
 
+# SEARCH
+PERM_SEARCH = [
+    Permission.create(
+        resource="search",
+        action="view",
+        context="any",
+        description="Search all entities",
+    ),
+]
 PERMISSIONS = (
     PERM_USER
     + PERM_GROUP
@@ -188,4 +200,5 @@ PERMISSIONS = (
     + PERM_NOTIFICATION
     + PERM_COMMENT
     + PERM_RATING
+    + PERM_SEARCH
 )

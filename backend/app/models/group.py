@@ -23,6 +23,8 @@ if TYPE_CHECKING:
 
 
 class UserGroup(Base, IdPkMixin):
+    """User group model in the TaskFlow system."""
+
     name: Mapped[str] = mapped_column(String(50), unique=True, index=True)
     admin_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     description: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -66,6 +68,8 @@ class UserGroup(Base, IdPkMixin):
 
 
 class UserGroupMembership(Base, IdPkMixin):
+    """User group membership model."""
+
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     group_id: Mapped[int] = mapped_column(ForeignKey("user_groups.id"))
     created_at: Mapped[datetime] = mapped_column(

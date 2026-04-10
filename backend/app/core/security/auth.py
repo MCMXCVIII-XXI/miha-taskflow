@@ -1,3 +1,10 @@
+"""Authentication utilities for JWT-based user verification.
+
+This module provides functions for validating JWT tokens and retrieving
+authenticated user information from the database. It implements the
+core authentication logic for the TaskFlow application.
+"""
+
 import jwt
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordBearer
@@ -17,6 +24,22 @@ async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(db_helper.get_session),
 ) -> UserModel:
+    """Get current authenticated user from JWT token.
+
+    Validates the provided JWT token and retrieves the corresponding
+    user from the database. Ensures the user account is active.
+
+    Args:
+        token (str): JWT token from Authorization header (via OAuth2 scheme)
+        db (AsyncSession): Database session for user lookup
+
+    Returns:
+        UserModel: Authenticated user instance
+
+    Raises:
+        security_exc.SecurityExpired: When token has expired
+        security_exc.SecurityCouldNotVerify: When token is invalid or user not found
+    """
     try:
         payload = decode_token(token)
         sub = payload.get("sub")

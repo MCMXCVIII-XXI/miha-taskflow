@@ -27,7 +27,7 @@ class LevelNotFoundError(BaseLevelError):
 
     def __init__(
         self,
-        message: str = "Level not found",
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:

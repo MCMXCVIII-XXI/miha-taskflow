@@ -1,3 +1,16 @@
+"""Application logging configuration and utilities.
+
+This module provides centralized logging configuration for the TaskFlow application
+using Loguru. It sets up both console and file logging with appropriate formatting
+for development and production environments.
+
+The logging system supports:
+- Console output with colored formatting for development
+- File output with JSON formatting for production
+- Automatic log rotation and retention
+- Structured logging with context binding
+"""
+
 import os
 import sys
 from pathlib import Path
@@ -7,11 +20,14 @@ from loguru import logger
 
 
 def setup_logging() -> None:
-    """
-    Configure application logging.
+    """Configure application logging with console and file outputs.
 
-    - stdout: human-readable format for development
-    - file: JSON format for production
+    Sets up two logging handlers:
+    1. Console handler with human-readable colored format for development
+    2. File handler with JSON format for production environments
+
+    Log files are automatically rotated daily and retained for 30 days.
+    JSON serialization can be enabled via LOG_JSON environment variable.
     """
     # Get log path from environment or default
     log_path = Path("logs/app.log")
@@ -54,14 +70,21 @@ def setup_logging() -> None:
 
 
 def get_logger(name: str | None = None) -> Any:
-    """
-    Get a logger instance.
+    """Get a logger instance with optional name binding.
+
+    Creates a logger instance that can be bound to a specific name
+    for contextual logging. This helps identify the source of log
+    messages in large applications.
 
     Args:
-        name: Optional name for the logger
+        name (str, optional): Name to bind to the logger instance
 
     Returns:
-        Logger instance
+        Logger: Configured logger instance
+
+    Example:
+        logger = get_logger(__name__)
+        logger.info("This is a log message")
     """
     if name:
         return logger.bind(name=name)

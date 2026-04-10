@@ -1,3 +1,10 @@
+"""Initializes FastAPI-Cache with Redis backend for application caching.
+
+This module sets up the Redis caching system for the application including
+connection establishment, configuration loading, and error handling.
+Provides application-wide caching functionality for performance optimization.
+"""
+
 from fastapi_cache import FastAPICache
 from fastapi_cache.backends.redis import RedisBackend
 from redis import asyncio as aioredis
@@ -8,11 +15,20 @@ from .exceptions import cache_exc
 
 
 async def init_cache() -> None:
+    """Configures and initializes Redis cache backend for the application.
+
+    Establishes connection to Redis server using cache_settings configuration
+    and initializes FastAPI-Cache with Redis backend. Performs connection
+    validation and handles initialization errors appropriately.
+
+    Raises:
+        cache_exc.CacheConnectionError: When Redis connection cannot be established
+    """
     redis = aioredis.from_url(
-        url=cache_settings.URL,
-        socket_timeout=cache_settings.socket_timeout,
-        socket_connect_timeout=cache_settings.socket_connect_timeout,
-        max_connections=cache_settings.max_connections,
+        url=str(cache_settings.URL),
+        socket_timeout=cache_settings.SOCKET_TIMEOUT,
+        socket_connect_timeout=cache_settings.SOCKET_CONNECT_TIMEOUT,
+        max_connections=cache_settings.MAX_CONNECTIONS,
     )
     prefix = "fastapi-cache"
 

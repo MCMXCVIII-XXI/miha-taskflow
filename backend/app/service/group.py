@@ -49,43 +49,30 @@ class GroupService(GroupTaskBaseService):
     """
     Group lifecycle management service with membership operations.
 
-    Details:
-        Complete group CRUD for group admins, membership management (add/remove/exit),
-        advanced search via @group_search decorator, name conflict validation,
-        soft-delete pattern (is_active=False), owner validation.
+    Complete group CRUD for group admins, membership management (add/remove/exit),
+    advanced search via @group_search decorator, name conflict validation,
+    soft-delete pattern (is_active=False), owner validation.
+
+    Args:
+        db: SQLAlchemy async database session
+        indexer: Elasticsearch indexer instance
+        notification_service: Notification service instance
+        group_queries: Group-specific optimized query builders
+        task_service: Task service instance
 
     Attributes:
-        _db (AsyncSession): SQLAlchemy async database session
-        _group_queries (GroupQueries): Group-specific optimized query builders
-
-    Methods:
-        • _get_my_group(group_id, user_id) → UserGroupModel
-        • get_my_group(group_id, current_user) → UserGroupRead
-        • search_groups() → Select[tuple[UserGroupModel]]
-        • search_my_groups(current_user) → Select[tuple[UserGroupModel]]
-        • search_member_groups(current_user) → Select[tuple[UserGroupModel]]
-        • create_my_group(current_user, group_in) → UserGroupRead
-        • add_member_to_group(group_id, user_id, current_user) → UserGroupRead
-        • remove_member_from_group(group_id, user_id, current_user) → None
-        • update_my_group(group_id, current_user, group_in) → UserGroupRead
-        • delete_my_group(group_id, current_user) → None
-        • exit_group(group_id, current_user) → None
-
-    Returns:
-        UserGroupRead, Select[tuple[UserGroupModel]], None
+        _db: SQLAlchemy async database session
+        _group_queries: Group-specific optimized query builders
+        _indexer: Elasticsearch indexer wrapper
+        _notification: Notification service instance
+        _task_svc: Task service instance
 
     Raises:
-        group_exc.ForbiddenGroupAccess
-        group_exc.GroupNotFound
-        group_exc.GroupNameConflict
-        group_exc.MemberNotFound
-        group_exc.MemberAlreadyExists
-
-    Example Usage:
-        group_svc = GroupService(db)
-        group = await group_svc.create_my_group(current_user, group_create)
-        members = await group_svc.search_member_groups(current_user)
-        await group_svc.add_member_to_group(group_id, user_id, current_user)
+        group_exc.ForbiddenGroupAccess: When user is not authorized
+        group_exc.GroupNotFound: When group is not found or inactive
+        group_exc.GroupNameConflict: When group name already exists
+        group_exc.MemberNotFound: When member is not found
+        group_exc.MemberAlreadyExists: When member already exists
     """
 
     def __init__(
@@ -106,32 +93,35 @@ class GroupService(GroupTaskBaseService):
         """
         Retrieve group where user is owner/admin.
 
-        Details:
-            Single scalar query via GroupQueries.by_admin_group.
-            Only active groups (is_active=True).
-
-        Arguments:
-            group_id (int): Target group ID
-            user_id (int): User ID to verify as owner
+        Args:
+            group_id: Target group ID
+            user_id: User ID to verify as owner
 
         Returns:
-            UserGroupModel: Active owned group
+            Active owned group
 
         Raises:
             group_exc.ForbiddenGroupAccess: Not owner or inactive group
-
-        Example Usage:
-            group = await self._get_my_group(123, current_user.id)
         """
         group = await self._db.scalar(
             self._group_queries.by_admin_group(user_id, group_id, is_active=True)
         )
 
         if not group:
+            logger.warning(
+                "Group access denied: user {user_id} not owner of group {group_id}",
+                user_id=user_id,
+                group_id=group_id,
+            )
             raise group_exc.ForbiddenGroupAccess(
                 message="You are not the owner of the group"
             )
 
+        logger.info(
+            "Group accessed: group_id={group_id}, user_id={user_id}",
+            group_id=group_id,
+            user_id=user_id,
+        )
         return group
 
     async def get_my_group(
@@ -251,22 +241,15 @@ class GroupService(GroupTaskBaseService):
         """
         Create new group owned by current user.
 
-        Details:
-            Name conflict check within user's groups only.
-            Automatic cache invalidation for "groups".
-
-        Arguments:
-            current_user (UserModel): Group owner
-            group_in (UserGroupCreate): Group creation payload
+        Args:
+            current_user: Group owner
+            group_in: Group creation payload
 
         Returns:
-            UserGroupRead: Created group
+            Created group
 
         Raises:
             group_exc.GroupNameConflict: Duplicate name
-
-        Example Usage:
-            group = await group_svc.create_my_group(current_user, group_create)
         """
         if group_in.name:
             name_conflict = await self._db.scalar(
@@ -318,29 +301,33 @@ class GroupService(GroupTaskBaseService):
         """
         Get active UserGroupMembership record.
 
-        Details:
-            Validates group/user active status.
-
-        Arguments:
-            group_id (int): Target group ID
-            user_id (int): Target user ID
+        Args:
+            group_id: Target group ID
+            user_id: Target user ID
 
         Returns:
-            UserGroupMembership: Active membership
+            Active membership record
 
         Raises:
-            group_exc.MemberNotFound: No membership or inactive
-
-        Example Usage:
-            membership = await self._get_active_group_member(123, 456)
+            group_exc.MemberNotFound: No active membership
         """
         membership = await self._db.scalar(
             self._group_queries.by_user_member(user_id, group_id, is_active=True)
         )
 
         if not membership:
+            logger.warning(
+                "Member not found: group_id={group_id}, user_id={user_id}",
+                group_id=group_id,
+                user_id=user_id,
+            )
             raise group_exc.MemberNotFound(message="Member not found")
 
+        logger.info(
+            "Member accessed: group_id={group_id}, user_id={user_id}",
+            group_id=group_id,
+            user_id=user_id,
+        )
         return membership
 
     async def _get_remaining_group_or_member(

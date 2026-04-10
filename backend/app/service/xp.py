@@ -16,6 +16,27 @@ from .base import XPBaseService
 
 
 class XPService(XPBaseService):
+    """Experience Points (XP) service for user leveling and skill tracking.
+
+    This service implements the XP calculation and leveling system for users.
+    It tracks user progress in different skill spheres and calculates XP
+    based on task completion, difficulty, and timing.
+
+    XP Calculation Formula:
+    1. Base XP = story_points * 10
+    2. Time Bonus = 0.5x - 2x (based on deadline adherence)
+    3. Streak Bonus = 1.2x (5+ consecutive days) or 1.5x (10+ consecutive days)
+
+    Attributes:
+        _db (AsyncSession): SQLAlchemy async database session
+        _spheres (TaskSphere): Available task spheres enumeration
+        _base_rank (BaseRank): Base ranking system
+        _xp_thresholds (XPThreshold): XP thresholds for level progression
+        _task_difficulty (TaskDifficulty): Task difficulty levels
+        _max_daily_xp (int): Maximum XP that can be earned per day (500)
+        _frozen_days (int): Number of days skills remain frozen (60)
+    """
+
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(db)
 

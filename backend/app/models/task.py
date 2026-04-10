@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Index,
     String,
     UniqueConstraint,
     func,
@@ -24,6 +25,8 @@ if TYPE_CHECKING:
 
 
 class Task(Base, IdPkMixin):
+    """Task model representing a work item in the TaskFlow system."""
+
     title: Mapped[str] = mapped_column(String(200), index=True)
     description: Mapped[str | None] = mapped_column(String(1000), nullable=True)
     status: Mapped[TaskStatus] = mapped_column(
@@ -59,8 +62,16 @@ class Task(Base, IdPkMixin):
     )
     group: Mapped["UserGroup"] = relationship("UserGroup", back_populates="tasks")
 
+    __table_args__ = (
+        Index("idx_task_group_status_priority", "group_id", "status", "priority"),
+        Index("idx_task_created_updated", "created_at", "updated_at"),
+        Index("idx_task_active_group", "is_active", "group_id"),
+    )
+
 
 class TaskAssignee(Base, IdPkMixin):
+    """Model representing assignment of users to tasks."""
+
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     assigned_at: Mapped[datetime] = mapped_column(
@@ -71,5 +82,7 @@ class TaskAssignee(Base, IdPkMixin):
     user: Mapped["User"] = relationship("User", back_populates="assigned_tasks")
 
     __table_args__ = (
+        Index("idx_taskassignee_task", "task_id"),
+        Index("idx_taskassignee_user", "user_id"),
         UniqueConstraint("user_id", "task_id", name="uq_user_task_assignee"),
     )

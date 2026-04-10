@@ -1,60 +1,32 @@
-"""
-================================
-Base Management Service Module
-================================
+"""Base service classes for all domain-specific services.
 
-Module Description
-=================
-Base service class for all domain-specific services. Provides shared infrastructure
+This module provides base service classes that contain shared infrastructure
 for database operations and cache management across all service implementations.
+It also includes common functionality for role management and XP calculations.
 
-Module Components
-=================
-- BaseService: Abstract foundation for all services
-  * AsyncSession injection and lifecycle management
-  * FastAPICache namespace invalidation utilities
-  * Standardized error handling patterns
+The module contains:
+- BaseService: Core base class with database session and cache invalidation
+- GroupTaskBaseService: Base for services dealing with groups and tasks
+- AdminBaseService: Base for administrative services with stats functionality
+- XPBaseService: Base for services with XP and leveling functionality
 
-Dependencies
-============
-- SQLAlchemy 2.x (AsyncSession for async ORM operations)
-- fastapi-cache (namespace-based cache invalidation)
-- FastAPI (dependency injection integration)
+Example:
+    ```python
+    from app.service.base import BaseService
+    from app.db import db_helper
 
-Usage
-=====
-```python
-from app.services.base import BaseService
-from app._db import _db_helper
+    class UserService(BaseService):
+        async def some_operation(self):
+            await self._invalidate("users")  # Clear user cache
+            result = await self._db.scalars(...)
+            return result.all()
 
-class UserService(BaseService):
-    async def some_operation(self):
-        await self._invalidate("users")  # Clear user cache
-        result = await self._db.scalars(...)
-        return result.all()
-
-@app.get("/users/")
-async def get_users(db: AsyncSession = Depends(_db_helper.get_session)):
-    user_svc = UserService(db)
-    return await user_svc.some_operation()
-
-Version History
-v1.0.0 (2026-03-20)
-
-    Initial release with AsyncSession injection
-
-    FastAPICache namespace invalidation support
-
-    Standardized service initialization pattern
-
-v1.1.0 (Upcoming)
-
-    Distributed cache support (Redis clustering)
-
-    Automatic cache invalidation by model change
-
-    Health checks and metrics integration
-
+    # Usage in FastAPI endpoint
+    @app.get("/users/")
+    async def get_users(db: AsyncSession = Depends(db_helper.get_session)):
+        user_svc = UserService(db)
+        return await user_svc.some_operation()
+    ```
 """
 
 from typing import Any, Literal
@@ -74,38 +46,71 @@ from .exceptions import group_exc
 
 
 class BaseService:
-    """
-    Base service class for all domain services.
+    """Base service class for all domain services.
 
-    Provides:
-        - Database session via self._db
-        - Cache namespace invalidation via FastAPICache singleton
+    Provides common functionality for all service classes including database
+    session management and cache invalidation. This is the foundation for all
+    domain-specific service classes.
 
     Attributes:
-        _db (AsyncSession): SQLAlchemy async session for DB operations.
+        _db (AsyncSession): SQLAlchemy async session for database operations
     """
 
     def __init__(self, db: AsyncSession) -> None:
+        """Initialize base service with database session.
+
+        Args:
+            db: SQLAlchemy async session for database operations
+        """
         self._db = db
 
-    async def _invalidate(self, namespace: str) -> None:
-        """
-        Invalidate all cached entries under the given namespace.
+    async def _invalidate(self, namespace: str, tags: list[str] | None = None) -> None:
+        """Invalidate all cached entries under the given namespace and/or tags.
 
-        Arguments:
-            namespace (str): Cache namespace to clear.
+        Args:
+            namespace: Cache namespace to clear
+            tags: Optional list of tags to invalidate
         """
         await FastAPICache.clear(namespace=namespace)
+        # TODO: Implement tag-based invalidation when FastAPI-Cache supports it
+        # For now, we only support namespace invalidation
+        if tags:
+            # In a real implementation, we would invalidate by tags
+            # This is a placeholder for future enhancement
+            pass
 
 
 class GroupTaskBaseService(BaseService):
+    """Base service class for services dealing with groups and tasks.
+
+    Provides common functionality for services that need to manage group
+    memberships, task assignments, and related role management operations.
+
+    Attributes:
+        _db (AsyncSession): SQLAlchemy async session for database operations
+        _role (SecondaryUserRoleEnum): Secondary user role enumeration
+    """
+
     def __init__(self, db: AsyncSession) -> None:
+        """Initialize GroupTaskBaseService with database session.
+
+        Args:
+            db: SQLAlchemy async session for database operations
+        """
         super().__init__(db)
         self._role = SecondaryUserRoleEnum
 
     async def _get_role_id(
         self, role_name: Literal["MEMBER", "GROUP_ADMIN", "ASSIGNEE"]
     ) -> int | None:
+        """Get the database ID for a role by name.
+
+        Args:
+            role_name: Name of the role to look up (MEMBER, GROUP_ADMIN, ASSIGNEE)
+
+        Returns:
+            int | None: Database ID of the role or None if not found
+        """
         if role_name == self._role.MEMBER.value:
             return await self._db.scalar(
                 select(RoleModel.id).where(RoleModel.name == self._role.MEMBER.value)
@@ -124,6 +129,21 @@ class GroupTaskBaseService(BaseService):
     async def _build_query_for_user_role(
         self, group_id: int | None, task_id: int | None, user_id: int, role_id: int
     ) -> Select[tuple[UserRoleModel]]:
+        """Build SQLAlchemy query for checking user role assignments.
+
+        Args:
+            group_id: Group ID for group-specific roles (can be None)
+            task_id: Task ID for task-specific roles (can be None)
+            user_id: User ID to check role for
+            role_id: Role ID to check
+
+        Returns:
+            Select[tuple[UserRoleModel]]: SQLAlchemy query for role checking
+
+        Raises:
+            group_exc.GroupMissingContextIdError:
+                If neither group_id nor task_id provided
+        """
         query = select(UserRoleModel).where(
             UserRoleModel.user_id == user_id,
             UserRoleModel.role_id == role_id,
@@ -144,6 +164,19 @@ class GroupTaskBaseService(BaseService):
         group_id: int | None = None,
         task_id: int | None = None,
     ) -> None:
+        """Grant a role to a user if they don't already have it.
+
+        Args:
+            user_id: ID of user to grant role to
+            role_name: Name of role to grant (MEMBER, ASSIGNEE, GROUP_ADMIN)
+            group_id: Optional group ID for group-specific roles
+            task_id: Optional task ID for task-specific roles
+
+        Raises:
+            rbac_exc.RoleNotFound: If the role doesn't exist in the database
+            group_exc.GroupMissingContextIdError:
+                If neither group_id nor task_id provided
+        """
         role_id = await self._get_role_id(role_name)
 
         if not role_id:
@@ -161,7 +194,24 @@ class GroupTaskBaseService(BaseService):
 
 
 class AdminBaseService(BaseService):
+    """Base service class for administrative services with statistics functionality.
+
+    Provides common functionality for administrative services that need to gather
+    and process system statistics about users, groups, and tasks.
+
+    Attributes:
+        _db (AsyncSession): SQLAlchemy async session for database operations
+        _stats_users (StatsUsers): User statistics utility
+        _stats_groups (StatsGroups): Group statistics utility
+        _stats_tasks (StatsTasks): Task statistics utility
+    """
+
     def __init__(self, db: AsyncSession) -> None:
+        """Initialize AdminBaseService with database session and stats utilities.
+
+        Args:
+            db: SQLAlchemy async session for database operations
+        """
         super().__init__(db)
         self._stats_users = StatsUsers(db)
         self._stats_groups = StatsGroups(db)
@@ -173,6 +223,19 @@ class AdminBaseService(BaseService):
         stat_groups: bool = False,
         stat_tasks: bool = False,
     ) -> dict[str, Any]:
+        """Get system statistics data.
+
+        Collects statistics about users, groups,
+            and tasks based on requested parameters.
+
+        Args:
+            stat_users: Whether to include user statistics
+            stat_groups: Whether to include group statistics
+            stat_tasks: Whether to include task statistics
+
+        Returns:
+            dict[str, Any]: Dictionary containing requested statistics data
+        """
         stats: dict[str, Any] = {"users": {}, "groups": {}, "tasks": {}}
 
         if stat_users:
@@ -186,7 +249,27 @@ class AdminBaseService(BaseService):
 
 
 class XPBaseService(BaseService):
+    """Base service class for services with XP and leveling functionality.
+
+    Provides common functionality for services that need to calculate XP,
+    manage user levels, and handle task difficulty-based rewards.
+
+    Attributes:
+        _db (AsyncSession): SQLAlchemy async session for database operations
+        _spheres (TaskSphere): Task sphere enumeration
+        _base_rank (BaseRank): Base rank enumeration
+        _xp_thresholds (XPThreshold): XP threshold enumeration
+        _task_difficulty (TaskDifficulty): Task difficulty enumeration
+        _max_daily_xp (int): Maximum XP that can be earned per day (500)
+        _frozen_days (int): Days after which XP is considered frozen (60)
+    """
+
     def __init__(self, db: AsyncSession) -> None:
+        """Initialize XPBaseService with database session and XP configurations.
+
+        Args:
+            db: SQLAlchemy async session for database operations
+        """
         super().__init__(db)
         self._spheres = TaskSphere
         self._base_rank = BaseRank
@@ -196,6 +279,11 @@ class XPBaseService(BaseService):
         self._frozen_days = 60
 
     def _get_xp_thresholds(self) -> dict[int, int]:
+        """Get XP thresholds for each level.
+
+        Returns:
+            dict[int, int]: Dictionary mapping level numbers to XP thresholds
+        """
         data_xp_level: dict[int, int] = {}
         for indx, xp in enumerate(self._xp_thresholds):
             level = indx + 1
@@ -203,9 +291,19 @@ class XPBaseService(BaseService):
         return data_xp_level
 
     def _get_levels_all_rank(self) -> list[type[BaseRank]]:
+        """Get all rank level classes.
+
+        Returns:
+            list[type[BaseRank]]: List of all rank level classes
+        """
         return BaseRank.__subclasses__()
 
     def _get_sphere_titles(self) -> dict[str, dict[int, str]]:
+        """Get titles for each sphere at each level.
+
+        Returns:
+            dict[str, dict[int, str]]: Dictionary mapping spheres to level titles
+        """
         data_spheres = {}
         ranks = self._get_levels_all_rank()
         for sphere, rank_class in zip(self._spheres, ranks, strict=True):

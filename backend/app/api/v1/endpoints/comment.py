@@ -19,7 +19,7 @@ async def create_comment(
     current_user: UserModel = Depends(require_permissions_db("comment:create:own")),
     comment_service: CommentService = Depends(get_comment_service),
 ) -> CommentRead:
-    """Create comment for a task."""
+    """Create a new comment for a task."""
     return await comment_service.create_comment(
         task_id=task_id,
         content=comment_in.content,
@@ -40,7 +40,7 @@ async def get_task_comments(
     current_user: UserModel = Depends(require_permissions_db("comment:view:any")),
     comment_service: CommentService = Depends(get_comment_service),
 ) -> list[CommentRead]:
-    """Get all comments for a task."""
+    """Get comments for a specific task with pagination."""
     return await comment_service.get_task_comments(task_id, limit, offset)
 
 

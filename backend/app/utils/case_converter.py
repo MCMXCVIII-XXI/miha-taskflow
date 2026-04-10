@@ -1,11 +1,25 @@
 def camel_to_snake(input_name: str) -> str:
-    """
-    >>> camel_to_snake('userName')
-    'user_name'
-    >>> camel_to_snake('HTTPResponseCode')
-    'http_response_code'
-    >>> camel_to_snake('SDKDemo')
-    'sdk_demo'
+    """Converts CamelCase strings to snake_case format.
+
+    Utility function for converting CamelCase class and variable names to
+    snake_case format used for database table and column names. Handles
+    consecutive uppercase letters and acronyms appropriately.
+
+    Args:
+        input_name (str): CamelCase string to convert
+
+    Returns:
+        str: Converted snake_case string
+
+    Examples:
+        >>> camel_to_snake('userName')
+        'user_name'
+        >>> camel_to_snake('HTTPResponseCode')
+        'http_response_code'
+        >>> camel_to_snake('SDKDemo')
+        'sdk_demo'
+        >>> camel_to_snake('UserProfile')
+        'user_profile'
     """
     chars = []
 

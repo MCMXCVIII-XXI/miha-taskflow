@@ -10,7 +10,7 @@ from typing import Any
 import redis.asyncio as redis
 from loguru import logger
 
-from app.core.config import cache_settings, sse_settings
+from app.core.config import CacheSettings, cache_settings, sse_settings
 
 
 class SSEManager:
@@ -18,8 +18,8 @@ class SSEManager:
     Manages SSE (Server-Sent Events) connections and events.
     """
 
-    def __init__(self, redis_url: str | None = None):
-        self.redis_url = redis_url or cache_settings.URL
+    def __init__(self, cache_settings: CacheSettings):
+        self.redis_url = cache_settings.URL
         self._redis: redis.Redis | None = None
         self._pubsub: redis.client.PubSub | None = None
         self._listener_task: asyncio.Task[Any] | None = None
@@ -65,7 +65,7 @@ class SSEManager:
             logger.warning("SSE is disabled in settings")
             return
 
-        self._redis = redis.from_url(self.redis_url, decode_responses=True)
+        self._redis = redis.from_url(str(self.redis_url), decode_responses=True)
         self._pubsub = self._redis.pubsub()
 
         await self._pubsub.psubscribe("sse:user:*")
@@ -114,4 +114,4 @@ class SSEManager:
 
 
 # SSE manager instance
-sse_manager = SSEManager(redis_url=cache_settings.URL)
+sse_manager = SSEManager(cache_settings=cache_settings)

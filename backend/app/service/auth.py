@@ -35,41 +35,28 @@ def _mask_email(email: str) -> str:
 
 
 class AuthenticationService(BaseService):
-    """
-    Authentication service for user registration, login, and token management.
+    """Authentication service implementing JWT-based authentication flow.
 
-    Details:
-        Complete JWT auth flow: register/login/token rotation/refresh.
-        Password hashing + double-field lookup (email/username).
-        Token validation with expiry + payload consistency checks.
-        Zero-cache auth operations.
+    This service handles user registration, authentication, and token management
+    using JSON Web Tokens (JWT). It supports both access and refresh tokens
+    with automatic rotation and validation.
+
+    Features:
+    - User registration with password hashing
+    - Username/email authentication
+    - Access and refresh token generation
+    - Token validation with expiration checks
+    - Token refresh and rotation mechanisms
 
     Attributes:
         _db (AsyncSession): SQLAlchemy async database session
 
-    Methods:
-        • _create_token_response(user, options) → TokenResponse
-        • register(user_in) → TokenResponse
-        • login(form_data) → TokenResponse
-        • _get_user_from_refresh_token(refresh_token) → UserModel
-        • access_token(body) → TokenResponse
-        • refresh_token(body) → TokenResponse
-
-    Returns:
-        TokenResponse, UserModel
-
     Raises:
-        user_exc.UserAlreadyExists
-        user_exc.UserNotFound
-        security_exc.SecurityCouldNotVerify
-        security_exc.SecurityExpired
-        security_exc.SecurityRefreshTokenError
-
-    Example Usage:
-        auth_svc = AuthenticationService(db)
-        tokens = await auth_svc.register(user_create)
-        tokens = await auth_svc.login(form_data)
-        new_access = await auth_svc.access_token(refresh_request)
+        user_exc.UserAlreadyExists: When trying to register with existing email/username
+        user_exc.UserNotFound: When user credentials are invalid
+        security_exc.SecurityCouldNotVerify: When authentication fails
+        security_exc.SecurityExpired: When token has expired
+        security_exc.SecurityRefreshTokenError: When refresh token is invalid
     """
 
     REFRESH_TOKEN_TYPE = TokenType.REFRESH.value

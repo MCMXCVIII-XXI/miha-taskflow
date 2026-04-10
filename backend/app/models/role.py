@@ -6,7 +6,7 @@ from app.db.mixins import IdPkMixin
 
 
 class Permission(IdPkMixin, Base):
-    """Permission model with computed name via hybrid_property"""
+    """Permission model for Role-Based Access Control (RBAC) system."""
 
     name: Mapped[str] = mapped_column(String(200), unique=True, index=True)
     resource: Mapped[str] = mapped_column(String(50), index=True)
@@ -22,18 +22,7 @@ class Permission(IdPkMixin, Base):
         context: str | None = None,
         description: str | None = None,
     ) -> "Permission":
-        """
-        Factory: creates a Permission with name auto-generation
-
-        Args:
-            resource (str): Resource name
-            action (str): Action name
-            context (str | None): Optional context
-            description (str | None): Optional description
-
-        Returns:
-            Permission with filled in name
-        """
+        """Factory method to create a Permission with auto-generated name."""
         name = f"{resource}:{action}:{context}" if context else f"{resource}:{action}"
         return cls(
             resource=resource,
@@ -45,11 +34,15 @@ class Permission(IdPkMixin, Base):
 
 
 class Role(IdPkMixin, Base):
+    """Role model for Role-Based Access Control (RBAC) system."""
+
     name: Mapped[str] = mapped_column(unique=True, index=True)
     description: Mapped[str | None] = mapped_column()
 
 
 class RolePermission(Base):
+    """Association model linking roles to permissions."""
+
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"), primary_key=True)
     permission_id: Mapped[int] = mapped_column(
         ForeignKey("permissions.id"), primary_key=True
@@ -57,6 +50,8 @@ class RolePermission(Base):
 
 
 class UserRole(IdPkMixin, Base):
+    """Model representing user role assignments in specific contexts."""
+
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     role_id: Mapped[int] = mapped_column(ForeignKey("roles.id"))
     group_id: Mapped[int | None] = mapped_column(

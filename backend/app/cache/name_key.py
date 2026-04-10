@@ -1,3 +1,9 @@
+"""Cache key builder utilities for Redis caching.
+
+This module provides functions to generate cache keys for different
+types of cached data, ensuring consistent key naming and retrieval.
+"""
+
 from collections.abc import Callable
 from typing import Any
 
@@ -7,18 +13,21 @@ from .exceptions import cache_exc
 
 
 def key_builder_factory(id_field: str) -> Callable[..., str]:
-    """
-    Factory function to create a key builder for a given id field.
+    """Creates a cache key builder function for a specified ID field.
 
-    Details:
-        The key builder function uses the id field value
-            from kwargs or args to construct a cache key.
+    Generates a function that extracts an ID field value from various sources
+    including function arguments, request parameters, or keyword arguments
+    to produce consistent cache keys for FastAPI-Cache.
 
     Args:
-        id_field (str): The name of the field to use as the key value.
+        id_field (str): Name of the field to use as the key identifier
 
     Returns:
-        Callable[..., str]: A key builder function that can be used with fastapi-cache2.
+        Callable[..., str]: Key builder function for FastAPI-Cache integration
+
+    Example:
+        rbac_key = key_builder_factory("user_id")
+        # Generates keys like "namespace:user_id:123"
     """
 
     def key_builder(
@@ -29,6 +38,25 @@ def key_builder_factory(id_field: str) -> Callable[..., str]:
         *args: Any,
         **kwargs: Any,
     ) -> str:
+        """Build cache key using ID field value.
+
+        Extracts the ID field value from various sources and constructs
+        a cache key in the format: "{namespace}:{id_field}:{value}"
+
+        Args:
+            func: The decorated function
+            namespace: Cache namespace prefix
+            request: HTTP request object (for endpoint caching)
+            response: HTTP response object
+            *args: Positional arguments to the function
+            **kwargs: Keyword arguments to the function
+
+        Returns:
+            str: Generated cache key
+
+        Raises:
+            cache_exc.CacheNotFoundError: When ID field value cannot be found
+        """
         # fastapi-cache2 already includes prefix in namespace
         # namespace format: "prefix:original_namespace"
 
@@ -56,5 +84,6 @@ def key_builder_factory(id_field: str) -> Callable[..., str]:
     return key_builder
 
 
+# Pre-configured key builders for common use cases
 rbac_key = key_builder_factory("user_id")
 item_key = key_builder_factory("item_id")

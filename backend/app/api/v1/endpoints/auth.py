@@ -15,7 +15,7 @@ async def login(
     db: AsyncSession = Depends(db_helper.get_session),
     svc: AuthenticationService = Depends(get_authentication_service),
 ) -> TokenResponse:
-    """Endpoint for user login"""
+    """Authenticate user and generate access/refresh tokens."""
     return await svc.login(form_data)
 
 
@@ -25,7 +25,7 @@ async def register(
     db: AsyncSession = Depends(db_helper.get_session),
     svc: AuthenticationService = Depends(get_authentication_service),
 ) -> TokenResponse:
-    """Endpoint for user registration"""
+    """Register new user account and generate initial authentication tokens."""
     return await svc.register(user_in)
 
 
@@ -37,7 +37,7 @@ async def access_token(
     db: AsyncSession = Depends(db_helper.get_session),
     svc: AuthenticationService = Depends(get_authentication_service),
 ) -> TokenResponse:
-    """Endpoint for accessing a new access token using a refresh token"""
+    """Generate new access token using a valid refresh token."""
     return await svc.access_token(body)
 
 
@@ -51,5 +51,5 @@ async def refresh_token(
     db: AsyncSession = Depends(db_helper.get_session),
     svc: AuthenticationService = Depends(get_authentication_service),
 ) -> TokenResponse:
-    """Endpoint for refreshing a token using a refresh token"""
+    """Generate new access and refresh tokens using a valid refresh token."""
     return await svc.refresh_token(body)

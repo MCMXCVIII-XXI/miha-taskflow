@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 
 class Comment(Base, IdPkMixin):
+    """Comment model for task discussions and feedback."""
+
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id"))
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     content: Mapped[str] = mapped_column(String(255))

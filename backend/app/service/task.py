@@ -33,69 +33,57 @@ from app.schemas.enum import (
 
 from .base import GroupTaskBaseService
 from .exceptions import group_exc, task_exc
-from .notification import NotificationService
+from .notification import NotificationService, get_notification_service
 from .query_db import TaskQueries
 from .search import task_search
-from .xp import XPService
+from .utils import Indexer
+from .xp import XPService, get_xp_service
 
 logger = get_logger("service.task")
 
 
 class TaskService(GroupTaskBaseService):
-    """
-    Task lifecycle management service with advanced search and assignee operations.
+    """Task management service for handling task lifecycle,
+        assignments, and related operations.
 
-    Details:
-        Complete task CRUD with group ownership validation, assignee management,
-        advanced search via @task_search decorator, conflict-checked updates,
-        soft-delete pattern (is_active=False), status transitions.
+    This service provides comprehensive task management functionality including:
+    - Task creation, update, and deletion within groups
+    - Task assignment and unassignment of users
+    - Status management and workflow transitions
+    - Search functionality with caching
+    - Integration with XP/leveling system for completed tasks
+    - Elasticsearch indexing for search functionality
 
     Attributes:
         _db (AsyncSession): SQLAlchemy async database session
         _task_queries (TaskQueries): Task-specific optimized query builders
-
-    Methods:
-        • _check_task_access(task_id, current_user) → None
-        • _check_group_access(group_id, current_user) → None
-        • create_task_for_group(group_id, task_in, current_user) → TaskRead
-        • search_tasks() → Select[tuple[TaskModel]]
-        • search_my_tasks(current_user) → Select[tuple[TaskModel]]
-        • search_group_tasks(group_id, current_user) → Select[tuple[TaskModel]]
-        • search_assigned_tasks(current_user) → Select[tuple[TaskModel]]
-        • update_my_task(task_id, task_in, current_user) → TaskRead
-        • delete_my_task(task_id, current_user) → None
-        • update_status_task(task_id, status, current_user) → TaskRead
-        • add_user_to_task(task_id, user_id, current_user) → None
-        • remove_user_from_task(task_id, user_id, current_user) → None
-        • exit_task(task_id, current_user) → None
-
-    Returns:
-        TaskRead, Select[tuple[TaskModel]], None
+        _notification (NotificationService): Service for sending notifications
+        _xp_service (XPService): XP calculation and management service
+        _indexer (Indexer): Elasticsearch indexer wrapper
 
     Raises:
-        task_exc.ForbiddenTaskAccess
-        task_exc.TaskNotFound
-        task_exc.TaskTitleConflict
-        task_exc.TaskStatusAlreadySet
-        task_exc.UserNotInTask
-        task_exc.UserAlreadyInTask
-        group_exc.GroupNotFound
-
-    Example Usage:
-        task_svc = TaskService(db)
-        task = await task_svc.create_task_for_group(group_id, task_in, current_user)
-        tasks = await task_svc.search_my_tasks(current_user)
-        await task_svc.add_user_to_task(task_id, user_id, current_user)
+        task_exc.ForbiddenTaskAccess: When user doesn't have access to a task
+        task_exc.TaskNotFound: When task is not found or inactive
+        task_exc.TaskTitleConflict: When task title already exists in group
+        task_exc.TaskStatusAlreadySet: When trying to set the same status
+        task_exc.UserNotInTask: When user is not assigned to a task
+        task_exc.UserAlreadyInTask: When user is already assigned to a task
+        group_exc.GroupNotFound: When group is not found or inactive
     """
 
     def __init__(
         self,
         db: AsyncSession,
+        indexer: ElasticsearchIndexer,
+        notification_service: NotificationService,
+        task_queries: TaskQueries,
+        xp_service: XPService,
     ) -> None:
         super().__init__(db)
-        self._task_queries = TaskQueries
-        self._notification = NotificationService(db)
-        self._xp_service = XPService(db)
+        self._task_queries = task_queries
+        self._notification = notification_service
+        self._xp_service = xp_service
+        self._indexer = Indexer(indexer)
 
     async def _get_task_assignees(self, task_id: int) -> list[TaskAssignee]:
         result = await self._db.scalars(
@@ -180,72 +168,32 @@ class TaskService(GroupTaskBaseService):
         """
         Create new task in user's group.
 
-        Details:
-            Group ownership validation + title conflict check.
-            Automatic cache invalidation for "tasks" namespace.
-
-        Arguments:
-            group_id (int): Target group ID
-            task_in (TaskCreate): Task creation payload
-            current_user (UserModel): Authenticated group admin
+        Args:
+            group_id: Target group ID
+            task_in: Task creation payload
+            current_user: Authenticated group admin
 
         Returns:
-            TaskRead: Created task
+            Created task
 
         Raises:
             group_exc.GroupNotFound: Group inactive/not owned
             task_exc.TaskTitleConflict: Duplicate title in group
-
-        Example Usage:
-            task = await task_svc.create_task_for_group(123, task_create, current_user)
         """
         await self._check_group_access(group_id, current_user)
+        await self._validate_task_title_unique(group_id, task_in.title, current_user)
+        group = await self._get_active_group(group_id)
 
-        result = await self._db.scalars(
-            self._task_queries.by_group(group_id).where(
-                TaskModel.title == task_in.title,
-            )
-        )
-        if result.first():
-            logger.warning(
-                "Task creation failed: duplicate title {title} \
-                    in group {group_id} by user {user_id}",
-                title=task_in.title,
-                group_id=group_id,
-                user_id=current_user.id,
-            )
-            raise task_exc.TaskTitleConflict(
-                message="Task with this title already exists"
-            )
-        group = await self._db.scalar(
-            select(UserGroupModel).where(
-                UserGroupModel.id == group_id, UserGroupModel.is_active
-            )
-        )
-        if not group:
-            raise group_exc.GroupNotFound(message="Group not found or inactive")
+        task = await self._create_task_model(task_in, group)
+        user_role = await self._create_user_role(task, current_user, group_id)
 
-        task = TaskModel(
-            title=task_in.title,
-            description=task_in.description,
-            priority=task_in.priority,
-            group_id=group.id,
-        )
         self._db.add(task)
+        self._db.add(user_role)
         await self._db.flush()
-        role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
-        user_role = UserRoleModel(
-            task_id=task.id,
-            user_id=current_user.id,
-            role_id=role_id,
-            group_id=group_id,
-        )
+        await self._db.commit()
+        await self._db.refresh(task)
 
-    async def _index_task_and_invalidate_cache(self, task: TaskModel) -> None:
-        """Index task in Elasticsearch and invalidate caches."""
-        await self._indexer.index(task)
-        await self._invalidate("tasks")
-        await self._invalidate("rbac")
+        await self._index_task_and_invalidate_cache(task)
 
         logger.info(
             "Task created: id={task_id}, title={title}, \
@@ -257,6 +205,67 @@ class TaskService(GroupTaskBaseService):
         )
 
         return TaskRead.model_validate(task)
+
+    async def _validate_task_title_unique(
+        self, group_id: int, title: str, current_user: UserModel
+    ) -> None:
+        """Validate that task title is unique within the group."""
+        result = await self._db.scalars(
+            self._task_queries.by_group(group_id).where(
+                TaskModel.title == title,
+            )
+        )
+        if result.first():
+            logger.warning(
+                "Task creation failed: duplicate title {title} \
+                    in group {group_id} by user {user_id}",
+                title=title,
+                group_id=group_id,
+                user_id=current_user.id,
+            )
+            raise task_exc.TaskTitleConflict(
+                message="Task with this title already exists"
+            )
+
+    async def _get_active_group(self, group_id: int) -> UserGroupModel:
+        """Get active group by ID."""
+        group = await self._db.scalar(
+            select(UserGroupModel).where(
+                UserGroupModel.id == group_id, UserGroupModel.is_active
+            )
+        )
+        if not group:
+            raise group_exc.GroupNotFound(message="Group not found or inactive")
+        return group
+
+    async def _create_task_model(
+        self, task_in: TaskCreate, group: UserGroupModel
+    ) -> TaskModel:
+        """Create task model from input data."""
+        return TaskModel(
+            title=task_in.title,
+            description=task_in.description,
+            priority=task_in.priority,
+            group_id=group.id,
+        )
+
+    async def _create_user_role(
+        self, task: TaskModel, current_user: UserModel, group_id: int
+    ) -> UserRoleModel:
+        """Create user role for task owner."""
+        role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
+        return UserRoleModel(
+            task_id=task.id,
+            user_id=current_user.id,
+            role_id=role_id,
+            group_id=group_id,
+        )
+
+    async def _index_task_and_invalidate_cache(self, task: TaskModel) -> None:
+        """Index task in Elasticsearch and invalidate caches."""
+        await self._indexer.index(task)
+        await self._invalidate("tasks")
+        await self._invalidate("rbac")
 
     @task_search
     async def search_tasks(
@@ -475,80 +484,31 @@ class TaskService(GroupTaskBaseService):
         """
         Update task status (group admin only).
 
-        Details:
-            Validates status change (no duplicate).
-            Ownership + cache invalidation.
+        Validates status change (no duplicate) and handles XP calculation
+        when task is marked as DONE.
 
-        Arguments:
-            task_id (int): Target task ID
-            status (TaskStatus): New status enum
-            current_user (UserModel): Group admin
+        Args:
+            task_id: Target task ID
+            status: New status enum
+            current_user: Group admin
 
         Returns:
-            TaskRead: Updated task
+            Updated task
 
         Raises:
-            task_exc.ForbiddenTaskAccess: Not owner
             task_exc.TaskNotFound: Task inactive
             task_exc.TaskStatusAlreadySet: No change
-
-        Example Usage:
-            task = await task_svc.update_status_task(123, TaskStatus.DONE, current_user)
         """
-
-        task = await self._db.scalar(self._task_queries.by_id(task_id, is_active=True))
-
-        if not task:
-            raise task_exc.TaskNotFound(message="Task not found or inactive")
-        if task.status == status:
-            raise task_exc.TaskStatusAlreadySet(
-                message="Task status is already set to this value"
-            )
-
+        task = await self._validate_task_status_update(task_id, status)
         old_status = task.status
         task.status = status
         await self._db.commit()
         await self._db.refresh(task)
         await self._invalidate("tasks")
 
+        # Handle XP calculation when task is completed
         if status == TaskStatus.DONE and task.spheres:
-            assignees = await self._get_task_assignees(task_id)
-
-            story_points = task.difficulty.value if task.difficulty else 1
-            actual_days = max(1, (datetime.now(UTC) - task.created_at).days)
-            deadline_days = (
-                (task.deadline - task.created_at).days if task.deadline else 7
-            )
-
-            for assignee in assignees:
-                for sphere_data in task.spheres:
-                    sphere = TaskSphere[sphere_data["sphere"].upper()]
-                    skill = await self._xp_service.get_or_create_skill(
-                        assignee.user_id, sphere
-                    )
-                    streak = skill.streak
-
-                    xp_distribution = self._xp_service.calculate_task_xp(
-                        spheres=task.spheres,
-                        story_points=story_points,
-                        deadline_days=deadline_days,
-                        actual_days=actual_days,
-                        streak=streak,
-                    )
-
-                    xp = xp_distribution.get(sphere.value, 0)
-                    leveled_up, new_level = await self._xp_service.add_sphere_xp(
-                        assignee.user_id, sphere, xp
-                    )
-
-                    if leveled_up:
-                        title = self._xp_service.get_title(sphere, new_level)
-                        await self._notification.notify_level_up(
-                            user_id=assignee.user_id,
-                            sphere=sphere.value,
-                            new_level=new_level,
-                            title=title,
-                        )
+            await self._process_task_completion_xp(task, current_user)
 
         logger.info(
             "Task status updated: task_id={task_id}, \
@@ -560,6 +520,100 @@ class TaskService(GroupTaskBaseService):
         )
 
         return TaskRead.model_validate(task)
+
+    async def _validate_task_status_update(
+        self, task_id: int, status: TaskStatus
+    ) -> TaskModel:
+        """
+        Validate that task exists and status is changing.
+
+        Args:
+            task_id: Target task ID
+            status: New status to set
+
+        Returns:
+            Validated task model
+
+        Raises:
+            task_exc.TaskNotFound: Task not found or inactive
+            task_exc.TaskStatusAlreadySet: Status is already set to this value
+        """
+        task = await self._db.scalar(self._task_queries.by_id(task_id, is_active=True))
+
+        if not task:
+            raise task_exc.TaskNotFound(message="Task not found or inactive")
+        if task.status == status:
+            raise task_exc.TaskStatusAlreadySet(
+                message="Task status is already set to this value"
+            )
+        return task
+
+    async def _process_task_completion_xp(
+        self, task: TaskModel, current_user: UserModel
+    ) -> None:
+        """
+        Process XP rewards for task completion.
+
+        Args:
+            task: Completed task
+            current_user: User who completed the task
+        """
+        assignees = await self._get_task_assignees(task.id)
+
+        story_points = task.difficulty.value if task.difficulty else 1
+        actual_days = max(1, (datetime.now(UTC) - task.created_at).days)
+        deadline_days = (task.deadline - task.created_at).days if task.deadline else 7
+
+        for assignee in assignees:
+            await self._process_assignee_xp(
+                assignee, task, story_points, actual_days, deadline_days
+            )
+
+    async def _process_assignee_xp(
+        self,
+        assignee: TaskAssignee,
+        task: TaskModel,
+        story_points: int,
+        actual_days: int,
+        deadline_days: int,
+    ) -> None:
+        """
+        Process XP for a single assignee on a completed task.
+
+        Args:
+            assignee: Task assignee
+            task: Completed task
+            story_points: Story points for the task
+            actual_days: Days taken to complete
+            deadline_days: Days until deadline
+        """
+        spheres: list[dict[str, Any]] = task.spheres if task.spheres is not None else []
+        for sphere_data in spheres:
+            sphere = TaskSphere[sphere_data["sphere"].upper()]
+            skill = await self._xp_service.get_or_create_skill(assignee.user_id, sphere)
+            streak = skill.streak
+
+            xp_distribution = self._xp_service.calculate_task_xp(
+                spheres=spheres,
+                story_points=story_points,
+                deadline_days=deadline_days,
+                actual_days=actual_days,
+                streak=streak,
+            )
+
+            xp = xp_distribution.get(sphere.value, 0)
+            leveled_up, new_level = await self._xp_service.add_sphere_xp(
+                assignee.user_id, sphere, xp
+            )
+
+            if leveled_up and self._notification:
+                title = self._xp_service.get_title(sphere, new_level)
+                await self._notification.notify_level_up(
+                    user_id=assignee.user_id,
+                    sphere=sphere.value,
+                    new_level=new_level,
+                    title=title,
+                )
 
     async def _get_active_task_assignee(
         self, task_id: int, user_id: int
@@ -771,6 +825,38 @@ class TaskService(GroupTaskBaseService):
     async def approve_task_join_request(
         self, request_id: int, current_user: UserModel
     ) -> NotificationRead:
+        """
+        Approve a join request for a task.
+
+        Args:
+            request_id: ID of the join request to approve
+            current_user: Group admin approving the request
+
+        Returns:
+            Notification for the approval
+        """
+        request = await self._get_join_request(request_id)
+        task = await self._get_task_for_request(request)
+        group = await self._get_group_for_task(task)
+
+        await self._validate_join_request_approval(request, group, current_user)
+
+        request.status = JoinRequestStatus.APPROVED
+        await self._db.commit()
+
+        await self._handle_group_membership(request, task, group, current_user)
+        await self._add_user_to_task_assignees(request)
+
+        notification = await self._notification.notify_join_request_approved(
+            admin_id=current_user.id,
+            user_id=request.user_id,
+            group_id=group.id,
+            group_name=group.name,
+        )
+        return notification
+
+    async def _get_join_request(self, request_id: int) -> JoinRequestModel:
+        """Get join request by ID."""
         request = await self._db.scalar(
             select(JoinRequestModel).where(
                 JoinRequestModel.id == request_id,
@@ -778,7 +864,10 @@ class TaskService(GroupTaskBaseService):
         )
         if not request:
             raise task_exc.JoinRequestNotFound(message="Join request not found")
+        return request
 
+    async def _get_task_for_request(self, request: JoinRequestModel) -> TaskModel:
+        """Get task associated with join request."""
         task = await self._db.scalar(
             select(TaskModel).where(
                 TaskModel.id == request.task_id,
@@ -786,6 +875,10 @@ class TaskService(GroupTaskBaseService):
         )
         if not task or not task.group_id:
             raise task_exc.TaskNotFound(message=f"Task {request.task_id} not found")
+        return task
+
+    async def _get_group_for_task(self, task: TaskModel) -> UserGroupModel:
+        """Get group associated with task."""
         group = await self._db.scalar(
             select(UserGroupModel).where(
                 UserGroupModel.id == task.group_id,
@@ -793,7 +886,12 @@ class TaskService(GroupTaskBaseService):
         )
         if not group:
             raise group_exc.GroupNotFound(message=f"Group {task.group_id} not found")
+        return group
 
+    async def _validate_join_request_approval(
+        self, request: JoinRequestModel, group: UserGroupModel, current_user: UserModel
+    ) -> None:
+        """Validate that user can approve this join request."""
         if group.admin_id != current_user.id:
             raise task_exc.TaskAccessDenied(
                 message="Only group admin can approve join requests"
@@ -804,9 +902,14 @@ class TaskService(GroupTaskBaseService):
                 message="Join request already processed"
             )
 
-        request.status = JoinRequestStatus.APPROVED
-        await self._db.commit()
-
+    async def _handle_group_membership(
+        self,
+        request: JoinRequestModel,
+        task: TaskModel,
+        group: UserGroupModel,
+        current_user: UserModel,
+    ) -> None:
+        """Handle group membership for approved request."""
         is_member = await self._db.scalar(
             select(UserGroupMembershipModel).where(
                 UserGroupMembershipModel.user_id == request.user_id,
@@ -829,21 +932,25 @@ class TaskService(GroupTaskBaseService):
                     group_name=group.name,
                 )
 
+    async def _add_user_to_task_assignees(self, request: JoinRequestModel) -> None:
+        """Add user to task assignees."""
         assignee = TaskAssignee(user_id=request.user_id, task_id=request.task_id)
         self._db.add(assignee)
         await self._db.commit()
 
-        notification = await self._notification.notify_join_request_approved(
-            admin_id=current_user.id,
-            user_id=request.user_id,
-            group_id=group.id,
-            group_name=group.name,
-        )
-        return notification
-
     async def reject_task_join_request(
         self, request_id: int, current_user: UserModel
     ) -> NotificationRead:
+        """
+        Reject a join request for a task.
+
+        Args:
+            request_id: ID of the join request to reject
+            current_user: Group admin rejecting the request
+
+        Returns:
+            Notification for the rejection
+        """
         request = await self._db.get(JoinRequestModel, request_id)
         if not request:
             raise task_exc.JoinRequestNotFound(message="Join request not found")
@@ -875,6 +982,13 @@ class TaskService(GroupTaskBaseService):
         return notification
 
     async def join_task(self, task_id: int, current_user: UserModel) -> None:
+        """
+        Join a task by either direct assignment or creating a join request.
+
+        Args:
+            task_id: ID of the task to join
+            current_user: User joining the task
+        """
         existing = await self._db.scalar(
             select(TaskAssignee).where(
                 TaskAssignee.user_id == current_user.id,
@@ -926,18 +1040,14 @@ class TaskService(GroupTaskBaseService):
         """
         Remove self from task assignees.
 
-        Details:
-            User-initiated task exit (no admin rights needed).
+        User-initiated task exit (no admin rights needed).
 
-        Arguments:
-            task_id (int): Target task ID
-            current_user (UserModel): User exiting task
+        Args:
+            task_id: Target task ID
+            current_user: User exiting task
 
         Raises:
             task_exc.UserNotInTask: User not assigned
-
-        Example Usage:
-            await task_svc.exit_task(123, current_user)
         """
         assignee = await self._get_active_task_assignee(task_id, current_user.id)
         await self._db.delete(assignee)
@@ -950,28 +1060,31 @@ class TaskService(GroupTaskBaseService):
         return await self._indexer.bulk_index_tasks(tasks)
 
 
-def get_task_service(db: AsyncSession = Depends(db_helper.get_session)) -> TaskService:
+def get_task_service(
+    db: AsyncSession = Depends(db_helper.get_session),
+    indexer: ElasticsearchIndexer = Depends(get_es_indexer),
+    notification_service: NotificationService = Depends(get_notification_service),
+    xp_service: XPService = Depends(get_xp_service),
+) -> TaskService:
     """
     FastAPI dependency factory for TaskService injection.
 
-    Details:
-        Automatically creates TaskService with database session.
-        Follows FastAPI service layer isolation pattern.
+    Automatically creates TaskService with database session.
+    Follows FastAPI service layer isolation pattern.
 
-    Arguments:
-        db (AsyncSession): Database session from db_helper.get_session
+    Args:
+        db: Database session from db_helper.get_session
+        indexer: Elasticsearch indexer from get_es_indexer
+        notification_service: Notification service instance
+        xp_service: XP service instance
 
     Returns:
-        TaskService: Fresh TaskService instance
-
-    Example Usage:
-        ```python
-        @router.get("/tasks/")
-        async def search_tasks(
-            task_service: TaskService = Depends(get_task_service)
-        ):
-            return await task_service.search_tasks()
-        ```
+        Fresh TaskService instance with injected dependencies
     """
-
-    return TaskService(db)
+    return TaskService(
+        db=db,
+        indexer=indexer,
+        notification_service=notification_service,
+        xp_service=xp_service,
+        task_queries=TaskQueries(),
+    )

@@ -26,7 +26,48 @@ logger = get_logger("service.notification")
 
 
 class NotificationService(BaseService):
-    def __init__(self, db: AsyncSession) -> None:
+    """Service for managing user notifications and real-time messaging.
+
+    This service handles creation, retrieval, and management of notifications
+    for users. It integrates with Server-Sent Events (SSE) for real-time
+    notification delivery and Elasticsearch for search functionality.
+
+    Features:
+    - Create notifications for various user actions and system events
+    - Retrieve notifications with filtering and pagination
+    - Mark notifications as read/unread
+    - Real-time notification delivery via SSE
+    - Elasticsearch indexing for notification search
+    - Cache invalidation for improved performance
+
+    Attributes:
+        _db (AsyncSession): SQLAlchemy async database session
+        _sse_svc (SSEService): Server-Sent Events service for real-time delivery
+        _indexer (Indexer): Elasticsearch indexer wrapper
+
+    Example:
+        ```python
+        notification_service = NotificationService(db_session, es_indexer)
+        notification = await notification_service.create_notification(
+            sender_id=1,
+            recipient_id=2,
+            type=NotificationType.TASK_ASSIGNED,
+            title="Task Assigned",
+            message="You have been assigned to a task",
+            target_id=1,
+            target_type=NotificationTargetType.TASK
+        )
+        ```
+    """
+
+    def __init__(self, db: AsyncSession, indexer: ElasticsearchIndexer) -> None:
+        """Initialize NotificationService
+            with database session and Elasticsearch indexer.
+
+        Args:
+            db: SQLAlchemy async database session
+            indexer: Elasticsearch indexer instance
+        """
         super().__init__(db)
         self._sse_svc = get_sse_service()
         self._indexer = Indexer(indexer)
