@@ -18,40 +18,32 @@ from app.schemas import (
     UserSearch,
 )
 
-from .exceptions import search_exc
+from ..exceptions import search_exc
 
 ModelT = TypeVar("ModelT", bound=Base)
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 
 
 class SearchParameters(Generic[ModelT]):
-    """
-    Generic search decorator configuration for SQLAlchemy models.
+    """Generic search decorator configuration for SQLAlchemy models.
 
-    Details:
-        Maps Pydantic search/sort schemas → SQLAlchemy model fields.
-        Automatic LIKE filtering, multi-field sorting (max 3), pagination.
-        Transforms Select[tuple[ModelT]] → list[SchemaT] automatically.
+    Maps Pydantic search/sort schemas to SQLAlchemy model fields and provides
+    automatic LIKE filtering, multi-field sorting (max 3), and pagination.
+    Transforms Select[tuple[ModelT]] to list[SchemaT] automatically.
 
     Attributes:
         search_schema: Pydantic model for search parameters
         sort_schema: Pydantic model for sort parameters
         model: SQLAlchemy model class
         schema_class: Pydantic schema class for serialization
-        search_fields: Field → column mapping
-        sort_fields: Sort field → column mapping
+        search_fields: Field to column mapping
+        sort_fields: Sort field to column mapping
+        MAX_SORT_FIELDS: Maximum number of sort fields allowed (3)
 
-    Methods:
-        • __call__(function) → decorated search handler
-        • _apply_search(query, search) → filtered query
-        • _apply_sort(query, sort) → ordered query
-
-    Raises:
-        search_exc.InvalidFieldError
-        search_exc.TooManySortFieldsError
-
-    Example Usage:
+    Example:
+        ```python
         user_search = SearchParameters(UserSearch, UserSearch, UserModel, UserRead)
+        ```
     """
 
     MAX_SORT_FIELDS = 3
@@ -80,23 +72,23 @@ class SearchParameters(Generic[ModelT]):
     def __call__(
         self, function: Callable[..., Any]
     ) -> Callable[..., Awaitable[list[SchemaT]]]:
-        """
-        Decorates service method to handle search/sort/pagination.
+        """Decorate service method to handle search/sort/pagination.
 
-        Details:
-            Injects search/sort/limit/offset parameters automatically.
-            Zero-boilerplate search API.
+        Injects search/sort/limit/offset parameters automatically to provide
+        a zero-boilerplate search API for service methods.
 
-        Arguments:
-            function (Callable): Base query method
+        Args:
+            function: Base query method to decorate
 
         Returns:
-            Callable: Decorated function → list[SchemaT]
+            Callable: Decorated function that returns list[SchemaT]
 
-        Example Usage:
+        Example:
+            ```python
             @user_search
             async def search_users(self):
                 return self._user_queries.all()
+            ```
         """
 
         async def decorated_function(
@@ -151,27 +143,27 @@ class SearchParameters(Generic[ModelT]):
     def _apply_search(
         self, query: Select[tuple[ModelT, ...]], search: BaseModel
     ) -> Select[tuple[ModelT, ...]]:
-        """
-        Apply dynamic search filters (LIKE/==).
+        """Apply dynamic search filters (LIKE/==).
 
-        Details:
-            String fields → ilike("%value%"), others → exact match.
-            Multi-field AND filtering from model_dump(exclude_none=True).
-            Validates field existence before filtering.
+        Applies string fields with ilike("%value%") and others with exact match.
+        Performs multi-field AND filtering from model_dump(exclude_none=True).
+        Validates field existence before applying filters.
 
-        Arguments:
-            query (Select[tuple[ModelT,...]]): Base query
-            search (BaseModel): Search filters
+        Args:
+            query: Base query to apply filters to
+            search: Search filters as Pydantic model
 
         Returns:
             Select[tuple[ModelT,...]]: Filtered query
 
         Raises:
-            search_exc.InvalidFieldError: Unknown search field
+            search_exc.InvalidFieldError: When search field doesn't exist in model
 
-        Example Usage:
+        Example:
+            ```python
             query = search_params._apply_search(base_query, UserSearch(username="john"))
             # → query.filter(User.username.ilike("%john%"))
+            ```
         """
         search_dict = search.model_dump(exclude_none=True)
 
@@ -191,31 +183,30 @@ class SearchParameters(Generic[ModelT]):
     def _apply_sort(
         self, query: Select[tuple[ModelT, ...]], sort: BaseModel
     ) -> Select[tuple[ModelT, ...]]:
-        """
-        Apply multi-field sorting (ASC/DESC).
+        """Apply multi-field sorting (ASC/DESC).
 
-        Details:
-            Max 3 sort fields (MAX_SORT_FIELDS=3).
-            Boolean direction → asc/desc mapping.
-            Chain multiple order_by() calls.
+        Applies sorting with maximum 3 sort fields (MAX_SORT_FIELDS=3).
+        Uses boolean direction mapping to asc/desc. Chains multiple order_by() calls.
 
-        Arguments:
-            query (Select[tuple[ModelT,...]]): Base query
-            sort (BaseModel): Sort directions {field: True/False}
+        Args:
+            query: Base query to apply sorting to
+            sort: Sort directions as Pydantic model {field: True/False}
 
         Returns:
             Select[tuple[ModelT,...]]: Ordered query
 
         Raises:
-            search_exc.TooManySortFieldsError: >3 sort fields
-            search_exc.InvalidFieldError: Unknown sort field
+            search_exc.TooManySortFieldsError: When more than 3 sort fields are provided
+            search_exc.InvalidFieldError: When sort field doesn't exist in model
 
-        Example Usage:
+        Example:
+            ```python
             query = search_params._apply_sort(
                         base_query,
                         UserSearch(sort={"name": True})
                         )
-            → query.order_by(desc(User.name))
+            # → query.order_by(desc(User.name))
+            ```
         """
         sort_dict = sort.model_dump(exclude_none=True)
 
