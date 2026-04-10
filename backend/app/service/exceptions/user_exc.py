@@ -95,7 +95,7 @@ class UserSelfDeleteError(BaseUserError):
 
     def __init__(
         self,
-        message: str = "Cannot delete yourself",
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:
@@ -112,7 +112,7 @@ class CannotDeleteLastAdmin(BaseUserError):
 
     def __init__(
         self,
-        message: str = "Cannot delete the last admin",
+        message: str,
         headers: dict[str, str] | None = None,
         details: dict[str, Any] | None = None,
     ) -> None:

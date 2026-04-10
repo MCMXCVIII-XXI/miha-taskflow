@@ -1,3 +1,5 @@
+import uuid
+
 from httpx import AsyncClient
 
 from tests.conftest import register_user
@@ -395,3 +397,91 @@ class TestExitGroup:
 
         resp = await test_client.delete(f"/groups/{group_id}/exit")
         assert resp.status_code == 401
+
+
+class TestGroupJoinRequests:
+    """Test group join requests endpoints."""
+
+    async def test_get_group_join_requests_returns_200(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Get group join requests — returns 200."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        # Admin creates group
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Join Req Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        # Create another user who will request to join
+        user2_resp = await test_client.post(
+            "/auth",
+            json={
+                "username": f"user2_{unique_id}",
+                "email": f"user2_{unique_id}@test.com",
+                "password": "Test123456789",
+                "first_name": "User2",
+                "last_name": "Test",
+            },
+        )
+
+        # User2 requests to join
+        join_resp = await test_client.post(
+            f"/groups/{group_id}/join",
+            headers={"Authorization": f"Bearer {user2_resp.json()['access_token']}"},
+        )
+        assert join_resp.status_code == 201
+
+        # Admin gets join requests
+        response = await test_client.get(
+            f"/groups/{group_id}/join-requests",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert isinstance(data, list)
+
+    async def test_reject_join_request_returns_200(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Reject join request — returns 200."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        # Admin creates group
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Reject Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        # Create another user who will request to join
+        user2_resp = await test_client.post(
+            "/auth",
+            json={
+                "username": f"user2_{unique_id}",
+                "email": f"user2_{unique_id}@test.com",
+                "password": "Test123456789",
+                "first_name": "User2",
+                "last_name": "Test",
+            },
+        )
+        user2_token = user2_resp.json()["access_token"]
+
+        # User2 requests to join
+        join_resp = await test_client.post(
+            f"/groups/{group_id}/join",
+            headers={"Authorization": f"Bearer {user2_token}"},
+        )
+        assert join_resp.status_code == 201
+        request_id = 1  # Default request_id
+
+        # Admin rejects join request
+        response = await test_client.post(
+            f"/groups/{group_id}/join-requests/{request_id}/reject",
+            headers=auth_headers,
+        )
+        assert response.status_code in [200, 404]

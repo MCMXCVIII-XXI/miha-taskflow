@@ -1,9 +1,11 @@
 from datetime import datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class CommentRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int = Field(description="Comment ID")
     task_id: int = Field(description="Task ID")
     user_id: int = Field(description="User ID")

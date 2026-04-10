@@ -24,7 +24,7 @@ async def search_groups(
     current_user: UserModel = Depends(require_permissions_db("group:view:any")),
     svc: GroupService = Depends(get_group_service),
 ) -> list[UserGroupRead]:
-    """Search all groups."""
+    """Search and filter groups with pagination and sorting."""
     return await svc.search_groups(search=search, sort=sort, limit=limit, offset=offset)
 
 
@@ -37,7 +37,7 @@ async def search_my_groups(
     current_user: UserModel = Depends(require_permissions_db("group:view:own")),
     svc: GroupService = Depends(get_group_service),
 ) -> list[UserGroupRead]:
-    """Get owned groups (GROUP_ADMIN)."""
+    """Get groups owned by current user with search and filtering."""
     return await svc.search_my_groups(
         search=search, sort=sort, limit=limit, offset=offset, current_user=current_user
     )

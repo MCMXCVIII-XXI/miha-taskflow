@@ -15,7 +15,7 @@ async def get_my_profile(
     current_user: UserModel = Depends(require_permissions_db("user:view:own")),
     svc: UserService = Depends(get_user_service),
 ) -> UserRead:
-    """Get current user profile."""
+    """Get current authenticated user's profile information."""
     return await svc.get_my_profile(current_user=current_user)
 
 
@@ -27,6 +27,7 @@ async def get_user(
     current_user: UserModel = Depends(require_permissions_db("user:view:any")),
     svc: UserService = Depends(get_user_service),
 ) -> dict[str, Any]:
+    """Get specific user's public profile information with top skills."""
     return await svc.get_user(user_id)
 
 
@@ -39,7 +40,7 @@ async def search_users(
     current_user: UserModel = Depends(require_permissions_db("user:view:any")),
     svc: UserService = Depends(get_user_service),
 ) -> list[UserRead]:
-    """Search users (autocomplete, lists)."""
+    """Search and filter users with pagination and sorting."""
     return await svc.search_users(search=search, sort=sort, limit=limit, offset=offset)
 
 
@@ -57,7 +58,7 @@ async def search_users_in_group(
     current_user: UserModel = Depends(require_permissions_db("group:view:group")),
     svc: UserService = Depends(get_user_service),
 ) -> list[UserRead]:
-    """Get group members."""
+    """Get members of a specific group with search and filtering."""
     return await svc.search_users_in_group(
         group_id=group_id, search=search, sort=sort, limit=limit, offset=offset
     )
@@ -77,7 +78,7 @@ async def search_users_in_task(
     current_user: UserModel = Depends(require_permissions_db("task:view:group")),
     svc: UserService = Depends(get_user_service),
 ) -> list[UserRead]:
-    """Get task assignees."""
+    """Get users assigned to a specific task with search and filtering."""
     return await svc.search_users_in_tasks(
         task_id=task_id, search=search, sort=sort, limit=limit, offset=offset
     )
@@ -89,7 +90,7 @@ async def update_my_profile(
     current_user: UserModel = Depends(require_permissions_db("user:update:own")),
     svc: UserService = Depends(get_user_service),
 ) -> UserRead:
-    """Update own profile."""
+    """Update current user's profile information."""
     return await svc.update_my_profile(current_user, user_in)
 
 
@@ -98,7 +99,7 @@ async def delete_my_profile(
     current_user: UserModel = Depends(require_permissions_db("user:delete:own")),
     svc: UserService = Depends(get_user_service),
 ) -> None:
-    """Soft-delete own profile."""
+    """Soft-delete current user's profile."""
     return await svc.delete_my_profile(current_user=current_user)
 
 

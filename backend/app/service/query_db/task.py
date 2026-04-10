@@ -1,17 +1,21 @@
 from typing import Literal
 
 from sqlalchemy import Select, select
+from sqlalchemy.orm import joinedload, selectinload
 
 from app.models import Task, TaskAssignee, UserGroup, UserGroupMembership
 
 
 class TaskQueries:
-    """
-    Task model repository pattern implementation.
+    """Provides database query builders for task-related operations.
 
-    Details:
-        This class provides static methods for querying tasks from the database.
+    This class implements the repository pattern for task entities, providing
+    reusable query builders for common task database operations. All methods
+    return SQLAlchemy Select objects that can be executed by services.
 
+    Note:
+        All query methods return Select objects, not actual results.
+        Execution is performed by the calling service layer.
     Methods:
         all: Returns a query for all tasks.
         by_id: Returns a query for a task by its ID.
@@ -19,6 +23,7 @@ class TaskQueries:
         by_assigned: Returns a query for tasks by their assigned user ID.
         by_member: Returns a query for tasks by their member user ID.
         by_owner: Returns a query for tasks by their owner user ID.
+        all_with_relations: Returns a query with preloaded relations for ES indexing.
     """
 
     @staticmethod
@@ -202,4 +207,32 @@ class TaskQueries:
             select(Task).where(Task.group_id.in_([1, 2])).where(Task.is_active == True)
         """
         base = select(Task).where(Task.group_id.in_(group_ids))
+        return TaskQueries._check_active(base, is_active)
+
+    @staticmethod
+    def all_with_relations(
+        is_active: Literal[True, False, None] = None,
+    ) -> Select[tuple[Task]]:
+        """
+        Returns a query for all tasks with preloaded relations for ES indexing.
+
+        Args:
+            is_active: The is_active to filter by
+                (True for active, False for inactive, None for all).
+                True: Filter for active tasks.
+                False: Filter for inactive tasks.
+                None: Return all tasks.
+
+        Returns:
+            The query for all tasks with preloaded relations.
+
+        Example usage:
+            >>> TaskQueries.all_with_relations(True)
+            select(Task).options(...).where(Task.is_active == True)
+        """
+        base = select(Task).options(
+            joinedload(Task.group),
+            selectinload(Task.assignees),
+            selectinload(Task.comments),
+        )
         return TaskQueries._check_active(base, is_active)

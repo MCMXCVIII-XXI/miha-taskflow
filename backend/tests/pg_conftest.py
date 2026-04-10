@@ -5,18 +5,25 @@ import subprocess
 
 # Import uuid for fixtures
 import uuid
+from unittest.mock import AsyncMock, MagicMock
 
 import jwt
 import pytest
+from fastapi import Depends
+from fastapi_cache import FastAPICache
+from fastapi_cache.backends.inmemory import InMemoryBackend
 from httpx import AsyncClient
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 from testcontainers.postgres import PostgresContainer
 
 import app.cache as cache_module
+from app.db import db_helper
+from app.es import ElasticsearchIndexer, es_helper, get_es_indexer, get_es_search
 from app.models import User
 from app.schemas.enum import GlobalUserRole
+from app.service.notification import NotificationService, get_notification_service
 from main import app
 from tests.base_conftest import (
     cleanup_db,  # noqa: F401
@@ -100,6 +107,99 @@ async def test_client(session_factory):
     """HTTP client with test DB."""
 
     original_init_cache = cache_module.init_cache
+
+    FastAPICache.init(InMemoryBackend(), prefix="test")
+
+    def override_get_notification_service(
+        db: AsyncSession = Depends(db_helper.get_session),
+        indexer: ElasticsearchIndexer = Depends(get_es_indexer),
+    ) -> NotificationService:
+        return NotificationService(db, indexer)
+
+    def override_get_es_indexer() -> ElasticsearchIndexer:
+        mock_indexer = MagicMock()
+        mock_indexer.index_task = AsyncMock()
+        mock_indexer.index_user = AsyncMock()
+        mock_indexer.index_group = AsyncMock()
+        mock_indexer.index_comment = AsyncMock()
+        mock_indexer.index_notification = AsyncMock()
+        mock_indexer.delete_task = AsyncMock(return_value=True)
+        mock_indexer.delete_user = AsyncMock(return_value=True)
+        mock_indexer.delete_group = AsyncMock(return_value=True)
+        mock_indexer.delete_comment = AsyncMock(return_value=True)
+        mock_indexer.delete_notification = AsyncMock(return_value=True)
+        return mock_indexer
+
+    def override_es_helper_get_client():
+        mock_client = MagicMock()
+        mock_client.ping = AsyncMock(return_value=True)
+        mock_client.search = AsyncMock(return_value={"hits": {"hits": []}})
+        mock_client.indices = MagicMock()
+        mock_client.indices.refresh = AsyncMock()
+        mock_client.indices.exists = AsyncMock(return_value=False)
+        mock_client.indices.create = AsyncMock()
+        return mock_client
+
+    def override_get_es_search():
+        mock_search = MagicMock()
+        mock_search.search_tasks = AsyncMock(return_value=[])
+        mock_search.search_tasks_faceted = AsyncMock(
+            return_value={
+                "results": [],
+                "aggregations": {},
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_users = AsyncMock(return_value=[])
+        mock_search.search_users_faceted = AsyncMock(
+            return_value={
+                "results": [],
+                "aggregations": {},
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_groups = AsyncMock(return_value=[])
+        mock_search.search_groups_faceted = AsyncMock(
+            return_value={
+                "results": [],
+                "aggregations": {},
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_comments = AsyncMock(return_value=[])
+        mock_search.search_comments_faceted = AsyncMock(
+            return_value={
+                "results": [],
+                "aggregations": {},
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_notifications = AsyncMock(return_value=[])
+        mock_search.search_notifications_faceted = AsyncMock(
+            return_value={
+                "results": [],
+                "aggregations": {},
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        return mock_search
+
+    app.dependency_overrides[get_notification_service] = (
+        override_get_notification_service
+    )
+    app.dependency_overrides[get_es_indexer] = override_get_es_indexer
+    app.dependency_overrides[es_helper.get_client] = override_es_helper_get_client
+    app.dependency_overrides[get_es_search] = override_get_es_search
 
     client = await create_test_client(session_factory)
     async with client as c:
@@ -262,12 +362,47 @@ async def cleanup_test_data(session_factory):
 
         from fastapi_cache import FastAPICache
 
-        backend = FastAPICache.get_backend()
-        if hasattr(backend, "_store"):
-            backend._store.clear()
+        try:
+            backend = FastAPICache.get_backend()
+            if hasattr(backend, "_store"):
+                backend._store.clear()
+        except AssertionError:
+            pass  # Cache not initialized
 
 
 @pytest.fixture
 def mock_db():
     """Mock session for unit tests."""
     return create_mock_db()
+
+
+@pytest.fixture
+def mock_es():
+    """Mock Elasticsearch client for unit tests."""
+    client = MagicMock()
+    client.index = AsyncMock()
+    client.delete = AsyncMock()
+    client.search = AsyncMock()
+    client.ping = AsyncMock(return_value=True)
+    client.indices = MagicMock()
+    client.indices.refresh = AsyncMock()
+    client.indices.exists = AsyncMock(return_value=False)
+    client.indices.create = AsyncMock()
+    return client
+
+
+@pytest.fixture
+def mock_indexer(mock_es):
+    """Mock ElasticsearchIndexer for unit tests."""
+    mock_indexer_instance = MagicMock()
+    mock_indexer_instance.index_task = AsyncMock()
+    mock_indexer_instance.index_user = AsyncMock()
+    mock_indexer_instance.index_group = AsyncMock()
+    mock_indexer_instance.index_comment = AsyncMock()
+    mock_indexer_instance.index_notification = AsyncMock()
+    mock_indexer_instance.delete_task = AsyncMock(return_value=True)
+    mock_indexer_instance.delete_user = AsyncMock(return_value=True)
+    mock_indexer_instance.delete_group = AsyncMock(return_value=True)
+    mock_indexer_instance.delete_comment = AsyncMock(return_value=True)
+    mock_indexer_instance.delete_notification = AsyncMock(return_value=True)
+    return mock_indexer_instance

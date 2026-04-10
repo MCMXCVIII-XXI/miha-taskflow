@@ -18,6 +18,8 @@ if TYPE_CHECKING:
 
 
 class Notification(Base, IdPkMixin):
+    """Notification model for system messages and user interactions."""
+
     sender_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     recipient_id: Mapped[int] = mapped_column(ForeignKey("users.id"))
     type: Mapped[NotificationType] = mapped_column(Enum(NotificationType), index=True)

@@ -5,7 +5,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Permission, Role, RolePermission
 
-from .permissions import PERMISSIONS
+from .role_permissions import (
+    ADMIN_PERMISSIONS,
+    ASSIGNEE_PERMISSIONS,
+    GROUP_ADMIN_PERMISSIONS,
+    MEMBER_PERMISSIONS,
+    USER_PERMISSIONS,
+)
 
 
 class SetupRolePermissions:
@@ -43,44 +49,11 @@ class SetupRolePermissions:
         all_perms (list[str]): List of all permissions
         """
         self.db = db
-        self.user_perms = {
-            "user:view:any",
-            "user:view:own",
-            "user:update:own",
-            "user:delete:own",
-            "group:create:own",
-            "group:view:any",
-            "group:join:any",
-            "task:view:any",
-            "task:join:any",
-        }
-
-        self.member_perms = {
-            "group:view:group",
-            "group:exit:member",
-            "task:view:group",
-        }
-
-        self.assignee_perms = {
-            "task:update:status",
-        }
-
-        self.group_admin_perms = {
-            "group:view:own",
-            "group:update:own",
-            "group:delete:own",
-            "group:add:own",
-            "group:remove:own",
-            "task:create:own",
-            "task:view:own",
-            "task:add:own",
-            "task:remove:own",
-            "task:update:own",
-            "task:delete:own",
-            "task:update:status",
-        }
-
-        self.admin_perms = PERMISSIONS
+        self.user_perms = USER_PERMISSIONS
+        self.member_perms = MEMBER_PERMISSIONS
+        self.assignee_perms = ASSIGNEE_PERMISSIONS
+        self.group_admin_perms = GROUP_ADMIN_PERMISSIONS
+        self.admin_perms = ADMIN_PERMISSIONS
 
     async def __get_role(self, name_role: str) -> Role | None:
         """

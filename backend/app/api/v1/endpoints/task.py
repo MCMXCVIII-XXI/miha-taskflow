@@ -29,7 +29,7 @@ async def create_task_for_group(
     current_user: UserModel = Depends(require_permissions_db("task:create:own")),
     svc: TaskService = Depends(get_task_service),
 ) -> TaskRead:
-    """Create task in group (GROUP_ADMIN only)."""
+    """Create a new task within a specific group."""
     return await svc.create_task_for_group(
         group_id=group_id, task_in=task_in, current_user=current_user
     )
@@ -44,7 +44,7 @@ async def search_tasks(
     current_user: UserModel = Depends(require_permissions_db("task:view:any")),
     svc: TaskService = Depends(get_task_service),
 ) -> list[TaskRead]:
-    """Search all tasks."""
+    """Search and filter tasks across all groups with pagination."""
     return await svc.search_tasks(search=search, sort=sort, limit=limit, offset=offset)
 
 
@@ -57,7 +57,7 @@ async def search_my_tasks(
     current_user: UserModel = Depends(require_permissions_db("task:view:own")),
     svc: TaskService = Depends(get_task_service),
 ) -> list[TaskRead]:
-    """Get own tasks (GROUP_ADMIN)."""
+    """Search and filter own tasks with pagination."""
     return await svc.search_my_tasks(
         search=search, sort=sort, limit=limit, offset=offset, current_user=current_user
     )
@@ -73,7 +73,7 @@ async def get_task_join_requests(
     current_user: UserModel = Depends(require_permissions_db("task:view:group")),
     svc: TaskService = Depends(get_task_service),
 ) -> list[JoinRequestRead]:
-    """Get join requests for task (group admin only)."""
+    """Get join requests for a specific task."""
     return await svc.get_task_join_requests(task_id, current_user)
 
 
@@ -88,7 +88,7 @@ async def approve_task_join_request(
     current_user: UserModel = Depends(require_permissions_db("task:update:own")),
     svc: TaskService = Depends(get_task_service),
 ) -> NotificationRead:
-    """Approve join request (group admin only)."""
+    """Approve a join request for a task."""
     return await svc.approve_task_join_request(request_id, current_user)
 
 
@@ -103,7 +103,7 @@ async def reject_task_join_request(
     current_user: UserModel = Depends(require_permissions_db("task:update:own")),
     svc: TaskService = Depends(get_task_service),
 ) -> NotificationRead:
-    """Reject join request (group admin only)."""
+    """Reject a join request for a task."""
     return await svc.reject_task_join_request(request_id, current_user)
 
 
@@ -161,10 +161,10 @@ async def update_my_task(
 @router.delete("/{task_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_my_task(
     task_id: int,
-    current_user: UserModel = Depends(require_permissions_db("task:delete:own")),
+    current_user: UserModel = Depends(require_permissions_db("task:exit:own")),
     svc: TaskService = Depends(get_task_service),
 ) -> None:
-    """Soft-delete own task (GROUP_ADMIN)."""
+    """Remove self from a task assignment."""
     return await svc.delete_my_task(task_id=task_id, current_user=current_user)
 
 

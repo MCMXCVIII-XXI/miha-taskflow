@@ -7,17 +7,16 @@ from app.schemas.enum import GlobalUserRole
 
 
 class UserQueries:
-    """
-    User model repository pattern implementation.
+    """Provides database query builders for user-related operations.
 
-    Details:
-        This class provides static methods for querying users from the database.
+    This class implements the repository pattern for user entities, providing
+    reusable query builders for common user database operations. All methods
+    return SQLAlchemy Select objects that can be executed by services.
 
+    Note:
+        All query methods return Select objects, not actual results.
+        Execution is performed by the calling service layer.
     Methods:
-        all: Returns all users.
-        by_id: Returns a user by their ID.
-        by_email: Returns a user by their email.
-        by_username: Returns a user by their username.
         by_group_membership: Returns users by their group membership.
         get_admin_group: Returns users by their admin group.
         by_role: Returns users by their role.

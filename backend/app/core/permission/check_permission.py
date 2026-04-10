@@ -1,3 +1,10 @@
+"""Permission checking utilities for Role-Based Access Control (RBAC).
+
+This module implements the permission checking system for TaskFlow's RBAC.
+It retrieves user permissions from the database and validates access
+based on required permissions for specific operations.
+"""
+
 from collections.abc import Callable
 from typing import Any
 
@@ -14,19 +21,7 @@ from app.models import UserRole as UserRoleModel
 
 
 async def get_user_permissions_db(user_id: int, db: AsyncSession) -> set[str]:
-    """
-    Get user permissions from database
-
-    Details:
-        This function retrieves the user's permissions from the database.
-
-    Args:
-        user_id (int): The user ID
-        db (AsyncSession): The database session
-
-    Returns:
-        set[str]: The user's permissions
-    """
+    """Get user permissions from database."""
     global_query = (
         select(Permission.name)
         .join(RolePermission, Permission.id == RolePermission.permission_id)
@@ -42,20 +37,34 @@ async def get_user_permissions_db(user_id: int, db: AsyncSession) -> set[str]:
         .where(UserRoleModel.user_id == user_id)
     )
     result = await db.scalars(union(global_query, secondary_query))
-    return set(result.all())
+    perms = set(result.all())
+    return perms
 
 
 def require_permissions_db(*required_permissions: str) -> Callable[..., Any]:
-    """
-    Check if user has required permissions
+    """Dependency factory for permission-based access control.
+
+    Creates a FastAPI dependency that validates if the current user
+    has all the required permissions to access an endpoint or perform
+    an operation. Raises SecurityPermissionDenied if access is denied.
 
     Args:
-        required_permissions (list[str]): List of required permissions
+        *required_permissions (str): Variable number of permission names
+            that are required for access (e.g., "task:create:own")
 
-    Details:
-        This function checks if the user has the required permissions.
-        If the user does not have the required permissions,
-        it raises a SecurityPermissionDenied exception.
+    Returns:
+        Callable[..., Any]: FastAPI dependency function
+
+    Raises:
+        security_exc.SecurityPermissionDenied: When user lacks required permissions
+
+    Example:
+        @router.get("/tasks")
+        async def get_tasks(
+            current_user: UserModel = Depends(require_permissions_db("task:view:any"))
+        ):
+            # Only users with "task:view:any" permission can access this
+            pass
     """
 
     async def dependency(

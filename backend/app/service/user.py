@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import get_logger
 from app.db import db_helper
+from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
 from app.schemas import UserRead, UserSearch, UserUpdate
@@ -14,60 +15,47 @@ from .base import BaseService
 from .exceptions import group_exc, level_exc, user_exc
 from .query_db import GroupQueries, UserQueries
 from .search import user_search
-from .xp import XPService
+from .utils import Indexer
+from .xp import XPService, get_xp_service
 
 logger = get_logger("service.user")
 
 
 class UserService(BaseService):
-    """
-    User lifecycle management service with advanced search and profile operations.
+    """Provides user management functionality for the TaskFlow application.
 
-    Details:
-        Complete user CRUD with FastAPI DI, zero-DB profile
-            retrieval via JWT dependency,
-        advanced search with @user_search Redis caching,
-            conflict-checked partial updates,
-        soft-delete pattern (is_active=False), group admin access validation.
+    This service handles all user-related operations including profile management,
+    search functionality, authentication integration, and XP/leveling system.
+    It implements soft-delete patterns and integrates with Elasticsearch for
+    enhanced search capabilities.
 
     Attributes:
         _db (AsyncSession): SQLAlchemy async database session
         _user_queries (UserQueries): User-specific optimized query builders
         _group_queries (GroupQueries): Group membership query helpers
-
-    Methods:
-        _get_my_group(group_id, user_id) → UserGroupModel
-        _assert_active_current_user(current_user) → UserModel
-        get_my_profile(current_user) → UserRead
-        search_users() → Select[tuple[UserModel]]
-        search_users_in_group(group_id) → Select[tuple[UserModel]]
-        search_users_in_tasks(task_id) → Select[tuple[UserModel]]
-        update_my_profile(current_user, user_in) → UserRead
-        delete_my_profile(current_user) → None
-        get_group_admin(group_id) → UserRead
-        get_owner_task(task_id) → UserRead
-
-    Returns:
-        UserRead, Select[tuple[UserModel]], UserGroupModel, None
+        _xp_service (XPService): XP calculation and management service
+        _indexer (Indexer): Elasticsearch indexer wrapper
 
     Raises:
-        user_exc.UserNotFound
-        user_exc.UserEmailConflict
-        user_exc.UserUsernameConflict
-        group_exc.ForbiddenGroupAccess
-
-    Example Usage:
-        user_svc = UserService(db)
-        profile = await user_svc.get_my_profile(current_user)
-        users = await user_svc.search_users()
-        await user_svc.update_my_profile(current_user, user_update)
+        user_exc.UserNotFound: When user is not found or inactive
+        user_exc.UserEmailConflict: When email already exists
+        user_exc.UserUsernameConflict: When username already exists
+        group_exc.ForbiddenGroupAccess: When user is not authorized
     """
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        indexer: ElasticsearchIndexer,
+        user_queries: UserQueries,
+        group_queries: GroupQueries,
+        xp_service: XPService,
+    ) -> None:
         super().__init__(db)
-        self._user_queries = UserQueries
-        self._group_queries = GroupQueries
-        self._xp_service = XPService(db)
+        self._user_queries = user_queries
+        self._group_queries = group_queries
+        self._xp_service = xp_service
+        self._indexer = Indexer(indexer)
 
     async def _get_my_group(self, group_id: int, user_id: int) -> UserGroupModel:
         """
@@ -108,25 +96,26 @@ class UserService(BaseService):
         """
         Validate that provided user is active and return it.
 
-        Details:
-            Fast validation helper for current_user dependency.
-            Raises UserNotFound if user.is_active == False.
-
-        Arguments:
-            current_user (UserModel): User from JWT dependency.
+        Args:
+            current_user: User from JWT dependency
 
         Returns:
-            UserModel: Active user instance.
+            Active user instance
 
         Raises:
-            user_exc.UserNotFound: If user is inactive.
-
-        Example Usage:
-            user = await self._assert_active_current_user(current_user)
-            return UserRead.model_validate(user)
+            user_exc.UserNotFound: If user is inactive
         """
         if not current_user.is_active:
+            logger.warning(
+                "User access denied: user {user_id} is inactive",
+                user_id=current_user.id,
+            )
             raise user_exc.UserNotFound(message="User not found")
+
+        logger.info(
+            "User accessed: user_id={user_id}",
+            user_id=current_user.id,
+        )
         return current_user
 
     async def get_my_profile(self, current_user: UserModel) -> UserRead:
@@ -313,6 +302,7 @@ class UserService(BaseService):
 
         await self._db.commit()
         await self._db.refresh(user)
+        await self._indexer.index(user)
         await self._invalidate("auth")
 
         logger.info(
@@ -345,6 +335,7 @@ class UserService(BaseService):
         user = await self._assert_active_current_user(current_user)
         user.is_active = False
         await self._db.commit()
+        await self._indexer.delete({"type": "user", "id": current_user.id})
         await self._invalidate("users")
         await self._invalidate("auth")
 
@@ -412,7 +403,11 @@ class UserService(BaseService):
         return UserRead.model_validate(owner)
 
 
-def get_user_service(db: AsyncSession = Depends(db_helper.get_session)) -> UserService:
+def get_user_service(
+    db: AsyncSession = Depends(db_helper.get_session),
+    indexer: ElasticsearchIndexer = Depends(get_es_indexer),
+    xp_service: XPService = Depends(get_xp_service),
+) -> UserService:
     """
     FastAPI dependency factory for UserService injection.
 
@@ -431,9 +426,10 @@ def get_user_service(db: AsyncSession = Depends(db_helper.get_session)) -> UserS
 
     Arguments:
         db (AsyncSession): Database session from db_helper.get_session
+        es (AsyncElasticsearch): Elasticsearch client from es_helper.get_client
 
     Returns:
-        UserService: Fresh UserService instance with injected DB session
+        UserService: Fresh UserService instance with injected DB and ES sessions
 
     Example Usage:
         @app.get("/users/search")
@@ -441,4 +437,10 @@ def get_user_service(db: AsyncSession = Depends(db_helper.get_session)) -> UserS
             user_service: UserService = Depends(get_user_service)
         ):
     """
-    return UserService(db)
+    return UserService(
+        db=db,
+        indexer=indexer,
+        xp_service=xp_service,
+        user_queries=UserQueries(),
+        group_queries=GroupQueries(),
+    )
