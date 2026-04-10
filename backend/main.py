@@ -101,7 +101,37 @@ async def metrics():
 app.include_router(api_router)
 
 
-# Exception handlers ##################################################################
+# Exception handlers for domain-specific errors ###################################
+@app.exception_handler(BaseRatingError)
+def rating_exception_handler(request: Request, exc: BaseRatingError) -> JSONResponse:
+    """Handle rating-related exceptions with appropriate logging and response."""
+    logger.error(
+        "Rating error: {message} | {method} {url}",
+        message=exc.message,
+        method=request.method,
+        url=str(request.url),
+    )
+    return JSONResponse(
+        status_code=exc.code,
+        content={"detail": exc.message},
+    )
+
+
+@app.exception_handler(BaseCommentError)
+def comment_exception_handler(request: Request, exc: BaseCommentError) -> JSONResponse:
+    """Handle comment-related exceptions with appropriate logging and response."""
+    logger.error(
+        "Comment error: {message} | {method} {url}",
+        message=exc.message,
+        method=request.method,
+        url=str(request.url),
+    )
+    return JSONResponse(
+        status_code=exc.code,
+        content={"detail": exc.message},
+    )
+
+
 @app.exception_handler(BaseSearchError)
 def search_exception_handler(request: Request, exc: BaseSearchError) -> JSONResponse:
     logger.error(
