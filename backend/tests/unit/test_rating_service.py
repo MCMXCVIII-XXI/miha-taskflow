@@ -64,7 +64,20 @@ class TestCreateRating:
             )
 
     async def test_create_rating_for_group(self, mock_db: AsyncMock):
-        mock_db.scalar = AsyncMock(return_value=None)
+        mock_group = MagicMock()
+        mock_group.id = 1
+
+        call_count = [0]
+
+        async def mock_scalar(query):
+            call_count[0] += 1
+            # First call: check group existence (should return group)
+            # Second call: check existing rating (should return None)
+            if call_count[0] == 1:
+                return mock_group
+            return None
+
+        mock_db.scalar = AsyncMock(side_effect=mock_scalar)
         mock_db.add = MagicMock()
         mock_db.commit = AsyncMock()
 

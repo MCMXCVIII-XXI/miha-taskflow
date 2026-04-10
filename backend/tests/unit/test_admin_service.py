@@ -8,22 +8,26 @@ from app.service.exceptions import user_exc
 
 
 class TestDeleteUser:
-    async def test_delete_self_raises_error(self, mock_db: AsyncMock):
+    async def test_delete_self_raises_error(self, mock_db: AsyncMock, mock_indexer):
         """Test that admin cannot delete themselves."""
-        svc = AdminService(mock_db)
+        svc = AdminService(mock_db, mock_indexer)
 
         with pytest.raises(user_exc.UserSelfDeleteError):
             await svc.delete_user(user_id=1, admin_id=1)
 
-    async def test_delete_nonexistent_raises_error(self, mock_db: AsyncMock):
+    async def test_delete_nonexistent_raises_error(
+        self, mock_db: AsyncMock, mock_indexer
+    ):
         """Test that deleting nonexistent user raises error."""
         mock_db.get = AsyncMock(return_value=None)
-        svc = AdminService(mock_db)
+        svc = AdminService(mock_db, mock_indexer)
 
         with pytest.raises(user_exc.UserNotFound):
             await svc.delete_user(user_id=999, admin_id=1)
 
-    async def test_delete_last_admin_raises_error(self, mock_db: AsyncMock):
+    async def test_delete_last_admin_raises_error(
+        self, mock_db: AsyncMock, mock_indexer
+    ):
         """Test that cannot delete the last admin."""
         mock_user = MagicMock()
         mock_user.role = GlobalUserRole.ADMIN
@@ -34,12 +38,12 @@ class TestDeleteUser:
         mock_result.scalar.return_value = 1
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        svc = AdminService(mock_db)
+        svc = AdminService(mock_db, mock_indexer)
 
         with pytest.raises(user_exc.CannotDeleteLastAdmin):
             await svc.delete_user(user_id=2, admin_id=1)
 
-    async def test_delete_regular_user_success(self, mock_db: AsyncMock):
+    async def test_delete_regular_user_success(self, mock_db: AsyncMock, mock_indexer):
         """Test successful deletion of regular user."""
         mock_user = MagicMock()
         mock_user.role = GlobalUserRole.USER
@@ -50,7 +54,7 @@ class TestDeleteUser:
         mock_result.scalar.return_value = 0
         mock_db.execute = AsyncMock(return_value=mock_result)
 
-        svc = AdminService(mock_db)
+        svc = AdminService(mock_db, mock_indexer)
 
         await svc.delete_user(user_id=2, admin_id=1)
 
@@ -59,7 +63,9 @@ class TestDeleteUser:
 
 
 class TestGetStats:
-    async def test_get_stats_returns_dict_structure(self, mock_db: AsyncMock):
+    async def test_get_stats_returns_dict_structure(
+        self, mock_db: AsyncMock, mock_indexer
+    ):
         """Test that get_stats returns dict with expected keys."""
 
         async def mock_scalar(query):
@@ -80,7 +86,7 @@ class TestGetStats:
         mock_db.scalar = AsyncMock(side_effect=mock_scalar)
         mock_db.execute = AsyncMock(side_effect=mock_execute)
 
-        svc = AdminService(mock_db)
+        svc = AdminService(mock_db, mock_indexer)
 
         result = await svc.get_stats()
 

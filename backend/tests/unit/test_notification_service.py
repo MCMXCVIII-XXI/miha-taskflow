@@ -5,12 +5,14 @@ from app.service.notification import NotificationService
 
 
 class TestNotifyLevelUp:
-    async def test_notify_group_invite_returns_notification(self, mock_db: AsyncMock):
+    async def test_notify_group_invite_returns_notification(
+        self, mock_db: AsyncMock, mock_indexer
+    ):
         mock_sse = AsyncMock()
         mock_sse.send_notification = AsyncMock()
 
         with patch("app.service.notification.get_sse_service", return_value=mock_sse):
-            svc = NotificationService(mock_db)
+            svc = NotificationService(mock_db, mock_indexer)
             svc._sse_svc = mock_sse
 
             with patch.object(
@@ -31,12 +33,14 @@ class TestNotifyLevelUp:
 
 
 class TestNotifyTaskInvite:
-    async def test_notify_task_invite_returns_notification(self, mock_db: AsyncMock):
+    async def test_notify_task_invite_returns_notification(
+        self, mock_db: AsyncMock, mock_indexer
+    ):
         mock_sse = AsyncMock()
         mock_sse.send_notification = AsyncMock()
 
         with patch("app.service.notification.get_sse_service", return_value=mock_sse):
-            svc = NotificationService(mock_db)
+            svc = NotificationService(mock_db, mock_indexer)
             svc._sse_svc = mock_sse
 
             with patch.object(

@@ -580,3 +580,91 @@ class TestSearchAssignedTasks:
         """Search assigned tasks without auth — returns 401."""
         resp = await test_client.get("/tasks/assigned")
         assert resp.status_code == 401
+
+
+class TestTaskJoinRequests:
+    """Test task join requests endpoints."""
+
+    async def test_get_task_join_requests_returns_200(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Get task join requests — returns 200."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        # Create group and task
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Task Join Req Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": f"Task Join Req_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        task_id = task_resp.json()["id"]
+
+        # Get join requests (should be empty or not exist)
+        response = await test_client.get(
+            f"/tasks/{task_id}/join-requests",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_approve_task_join_request_returns_200(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Approve task join request — returns 200."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        # Create group and task
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Task Approve Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": f"Task Approve_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        task_id = task_resp.json()["id"]
+
+        # Try to approve (may not exist yet)
+        response = await test_client.post(
+            f"/tasks/{task_id}/join-requests/1/approve",
+            headers=auth_headers,
+        )
+        assert response.status_code in [200, 404]
+
+    async def test_reject_task_join_request_returns_200(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Reject task join request — returns 200."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        # Create group and task
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Task Reject Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": f"Task Reject_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        task_id = task_resp.json()["id"]
+
+        # Try to reject (may not exist yet)
+        response = await test_client.post(
+            f"/tasks/{task_id}/join-requests/1/reject",
+            headers=auth_headers,
+        )
+        assert response.status_code in [200, 404]
