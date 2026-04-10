@@ -24,6 +24,7 @@ dependencies = [
     "slowapi>=0.1.9",
     "sentry-sdk[fastapi]>=2.0.0",
     "aiosqlite>=0.22.1",
+    "elasticsearch[async,dsl]>=9.3.0",
 ]
 
 [build-system]
@@ -172,4 +173,8 @@ module = [
     "argon2_cffi.*",
 ]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "app.es.faceted_search"
+disable_error_code = ["misc"]
 ###################################################################################
