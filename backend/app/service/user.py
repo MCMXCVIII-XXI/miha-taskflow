@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import get_logger
 from app.db import db_helper
+from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
 from app.schemas import UserRead, UserSearch, UserUpdate
@@ -14,7 +15,8 @@ from .base import BaseService
 from .exceptions import group_exc, level_exc, user_exc
 from .query_db import GroupQueries, UserQueries
 from .search import user_search
-from .xp import XPService
+from .utils import Indexer
+from .xp import XPService, get_xp_service
 
 logger = get_logger("service.user")
 
@@ -313,6 +315,7 @@ class UserService(BaseService):
 
         await self._db.commit()
         await self._db.refresh(user)
+        await self._indexer.index(user)
         await self._invalidate("auth")
 
         logger.info(
@@ -345,6 +348,7 @@ class UserService(BaseService):
         user = await self._assert_active_current_user(current_user)
         user.is_active = False
         await self._db.commit()
+        await self._indexer.delete({"type": "user", "id": current_user.id})
         await self._invalidate("users")
         await self._invalidate("auth")
 

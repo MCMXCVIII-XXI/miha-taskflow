@@ -8,6 +8,7 @@ from sqlalchemy.orm import joinedload
 
 from app.core.log import get_logger
 from app.db import db_helper
+from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import JoinRequest as JoinRequestModel
 from app.models import Task as TaskModel
 from app.models import TaskAssignee
@@ -239,9 +240,10 @@ class TaskService(GroupTaskBaseService):
             role_id=role_id,
             group_id=group_id,
         )
-        self._db.add(user_role)
-        await self._db.commit()
-        await self._db.refresh(task)
+
+    async def _index_task_and_invalidate_cache(self, task: TaskModel) -> None:
+        """Index task in Elasticsearch and invalidate caches."""
+        await self._indexer.index(task)
         await self._invalidate("tasks")
         await self._invalidate("rbac")
 
@@ -411,6 +413,7 @@ class TaskService(GroupTaskBaseService):
 
         await self._db.commit()
         await self._db.refresh(task)
+        await self._indexer.index(task)
         await self._invalidate("tasks")
 
         logger.info(
@@ -454,6 +457,7 @@ class TaskService(GroupTaskBaseService):
 
         task.is_active = False
         await self._db.commit()
+        await self._indexer.delete({"type": "task", "id": task_id})
         await self._invalidate("tasks")
 
         logger.info(
@@ -941,11 +945,9 @@ class TaskService(GroupTaskBaseService):
         await self._db.commit()
         await self._invalidate("tasks")
 
-        logger.info(
-            "User exited task: user_id={user_id}, task_id={task_id}",
-            user_id=current_user.id,
-            task_id=task_id,
-        )
+    async def bulk_index_tasks(self, tasks: list[TaskModel]) -> dict[str, Any]:
+        """Bulk index multiple tasks to Elasticsearch."""
+        return await self._indexer.bulk_index_tasks(tasks)
 
 
 def get_task_service(db: AsyncSession = Depends(db_helper.get_session)) -> TaskService:

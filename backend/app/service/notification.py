@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import get_logger
 from app.db import db_helper
+from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import Notification as NotificationModel
 from app.models import User as UserModel
 from app.schemas import (
@@ -19,6 +20,7 @@ from app.schemas.enum import (
 from .base import BaseService
 from .exceptions import notifi_exc
 from .sse import get_sse_service
+from .utils import Indexer
 
 logger = get_logger("service.notification")
 
@@ -27,6 +29,7 @@ class NotificationService(BaseService):
     def __init__(self, db: AsyncSession) -> None:
         super().__init__(db)
         self._sse_svc = get_sse_service()
+        self._indexer = Indexer(indexer)
 
     async def _get_notification(
         self, notification_id: int, user_id: int | None = None
@@ -90,6 +93,7 @@ class NotificationService(BaseService):
         )
         self._db.add(notification)
         await self._db.commit()
+        await self._indexer.index(notification)
         await self._db.refresh(notification)
         return notification
 
@@ -449,5 +453,6 @@ class NotificationService(BaseService):
 
 def get_notification_service(
     db: AsyncSession = Depends(db_helper.get_session),
+    indexer: ElasticsearchIndexer = Depends(get_es_indexer),
 ) -> NotificationService:
-    return NotificationService(db)
+    return NotificationService(db, indexer)

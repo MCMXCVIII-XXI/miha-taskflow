@@ -1,0 +1,158 @@
+{
+  "tasks_v1": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "analysis": {
+        "analyzer": {
+          "task_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "russian_stop", "russian_stemmer"]
+          }
+        },
+        "filter": {
+          "russian_stop": { "type": "stop", "stopwords": "_russian_" },
+          "russian_stemmer": { "type": "stemmer", "language": "russian" }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "title": { "type": "text", "analyzer": "task_analyzer", "boost": 3 },
+        "description": {
+          "type": "text",
+          "analyzer": "task_analyzer",
+          "boost": 2
+        },
+        "status": { "type": "keyword" },
+        "priority": { "type": "keyword" },
+        "group_id": { "type": "integer" },
+        "assignee_ids": { "type": "keyword" },
+        "deadline": { "type": "date" },
+        "is_active": { "type": "boolean" },
+        "created_at": { "type": "date" },
+        "updated_at": { "type": "date_optional_time" },
+        "group_name": { "type": "keyword" },
+        "assignee_usernames": { "type": "keyword" },
+        "comment_count": { "type": "integer" }
+      }
+    }
+  },
+  "users_v1": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "analysis": {
+        "analyzer": {
+          "user_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "russian_stop", "russian_stemmer"]
+          }
+        },
+        "filter": {
+          "russian_stop": { "type": "stop", "stopwords": "_russian_" },
+          "russian_stemmer": { "type": "stemmer", "language": "russian" }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "id": { "type": "keyword" },
+        "username": { "type": "keyword" },
+        "first_name": { "type": "text", "analyzer": "user_analyzer" },
+        "last_name": { "type": "text", "analyzer": "user_analyzer" },
+        "patronymic": { "type": "text", "analyzer": "user_analyzer" },
+        "email": { "type": "keyword" },
+        "role": { "type": "keyword" },
+        "created_at": { "type": "date" },
+        "updated_at": { "type": "date_optional_time" },
+        "is_active": { "type": "boolean" },
+        "notification_ids": { "type": "keyword" },
+        "assigned_task_ids": { "type": "keyword" },
+        "comment_ids": { "type": "keyword" },
+        "group_ids": { "type": "keyword" },
+        "admin_group_ids": { "type": "keyword" },
+        "member_group_ids": { "type": "keyword" }
+      }
+    }
+  },
+  "groups_v1": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "analysis": {
+        "analyzer": {
+          "group_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "russian_stop", "russian_stemmer"]
+          }
+        },
+        "filter": {
+          "russian_stop": { "type": "stop", "stopwords": "_russian_" },
+          "russian_stemmer": { "type": "stemmer", "language": "russian" }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "id": { "type": "keyword" },
+        "name": { "type": "text", "analyzer": "group_analyzer", "boost": 3 },
+        "description": {
+          "type": "text",
+          "analyzer": "group_analyzer",
+          "boost": 2
+        },
+        "admin_id": { "type": "integer" },
+        "visibility": { "type": "keyword" },
+        "join_policy": { "type": "keyword" },
+        "created_at": { "type": "date" },
+        "updated_at": { "type": "date_optional_time" },
+        "parent_group_id": { "type": "integer" },
+        "level": { "type": "integer" },
+        "is_active": { "type": "boolean" },
+        "invite_policy": { "type": "keyword" },
+        "admin_username": { "type": "keyword" },
+        "task_count": { "type": "integer" },
+        "member_count": { "type": "integer" },
+        "sub_group_ids": { "type": "keyword" },
+        "task_ids": { "type": "keyword" }
+      }
+    }
+  },
+  "comments_v1": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "analysis": {
+        "analyzer": {
+          "comment_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "russian_stop", "russian_stemmer"]
+          }
+        },
+        "filter": {
+          "russian_stop": { "type": "stop", "stopwords": "_russian_" },
+          "russian_stemmer": { "type": "stemmer", "language": "russian" }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "id": { "type": "keyword" },
+        "content": { "type": "text", "analyzer": "comment_analyzer" },
+        "task_id": { "type": "integer" },
+        "user_id": { "type": "integer" },
+        "parent_id": { "type": "integer" },
+        "created_at": { "type": "date" },
+        "updated_at": { "type": "date_optional_time" },
+        "task_title": { "type": "keyword" },
+        "username": { "type": "keyword" },
+        "task_status": { "type": "keyword" }
+      }
+    }
+  }
+}

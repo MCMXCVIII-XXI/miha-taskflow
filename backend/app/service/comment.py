@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import get_logger
 from app.db import db_helper
+from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import Comment as CommentModel
 from app.models import Task as TaskModel
 from app.models import User as UserModel
@@ -13,13 +14,15 @@ from app.schemas import (
 
 from .base import BaseService
 from .exceptions import comment_exc, task_exc
+from .utils import Indexer
 
 logger = get_logger("service.comment")
 
 
 class CommentService(BaseService):
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: AsyncSession, indexer: ElasticsearchIndexer):
         super().__init__(db)
+        self._indexer = Indexer(indexer)
 
     async def create_comment(
         self,
@@ -58,6 +61,8 @@ class CommentService(BaseService):
         )
         self._db.add(comment)
         await self._db.commit()
+        await self._db.refresh(comment)
+        await self._indexer.index(comment)
         return CommentRead.model_validate(comment)
 
     async def get_task_comments(
@@ -108,6 +113,8 @@ class CommentService(BaseService):
 
         comment.content = content
         await self._db.commit()
+        await self._db.refresh(comment)
+        await self._indexer.index(comment)
         return CommentRead.model_validate(comment)
 
     async def delete_comment(
@@ -129,9 +136,11 @@ class CommentService(BaseService):
             )
         await self._db.delete(comment)
         await self._db.commit()
+        await self._indexer.delete({"type": "comment", "id": comment_id})
 
 
 def get_comment_service(
     db: AsyncSession = Depends(db_helper.get_session),
+    indexer: ElasticsearchIndexer = Depends(get_es_indexer),
 ) -> CommentService:
-    return CommentService(db)
+    return CommentService(db, indexer)
