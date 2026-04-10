@@ -2,6 +2,7 @@
 
 # Import uuid for fixtures
 import uuid
+from unittest.mock import AsyncMock, MagicMock
 
 import jwt
 import pytest
@@ -207,3 +208,37 @@ async def cleanup_test_data(session_factory):
 def mock_db():
     """Mock session for unit tests."""
     return create_mock_db()
+
+
+@pytest.fixture
+def mock_es():
+    """Mock Elasticsearch client for unit tests."""
+
+    client = MagicMock()
+    client.index = AsyncMock()
+    client.delete = AsyncMock()
+    client.search = AsyncMock()
+    client.ping = AsyncMock(return_value=True)
+    client.indices = MagicMock()
+    client.indices.refresh = AsyncMock()
+    client.indices.exists = AsyncMock(return_value=False)
+    client.indices.create = AsyncMock()
+    return client
+
+
+@pytest.fixture
+def mock_indexer(mock_es):
+    """Mock ElasticsearchIndexer for unit tests."""
+
+    mock_indexer_instance = MagicMock()
+    mock_indexer_instance.index_task = AsyncMock()
+    mock_indexer_instance.index_user = AsyncMock()
+    mock_indexer_instance.index_group = AsyncMock()
+    mock_indexer_instance.index_comment = AsyncMock()
+    mock_indexer_instance.index_notification = AsyncMock()
+    mock_indexer_instance.delete_task = AsyncMock(return_value=True)
+    mock_indexer_instance.delete_user = AsyncMock(return_value=True)
+    mock_indexer_instance.delete_group = AsyncMock(return_value=True)
+    mock_indexer_instance.delete_comment = AsyncMock(return_value=True)
+    mock_indexer_instance.delete_notification = AsyncMock(return_value=True)
+    return mock_indexer_instance

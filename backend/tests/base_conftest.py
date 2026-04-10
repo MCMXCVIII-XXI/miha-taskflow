@@ -14,7 +14,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import app.cache as cache_module
 from app.core.permission import PERMISSIONS
+from app.core.permission.role_permissions import (
+    ADMIN_PERMISSIONS,
+    ASSIGNEE_PERMISSIONS,
+    GROUP_ADMIN_PERMISSIONS,
+    MEMBER_PERMISSIONS,
+    USER_PERMISSIONS,
+)
 from app.db import db_helper
+from app.es import get_es_indexer
 from app.models import Permission, Role, RolePermission, User
 from app.schemas.enum import GlobalUserRole
 from main import app
@@ -46,44 +54,18 @@ async def seed_rbac(session: AsyncSession) -> None:
         p.name: p for p in (await session.execute(select(Permission))).scalars().all()
     }
 
-    user_perms = {
-        "user:view:any",
-        "user:view:own",
-        "user:update:own",
-        "user:delete:own",
-        "group:create:own",
-        "group:view:any",
-        "group:join:any",
-        "task:view:any",
-        "task:join:any",
-        "task:exit:assignee",
-        "notification:view:own",
-        "notification:respond:own",
-    }
-    member_perms = {"group:view:group", "group:exit:member", "task:view:group"}
-    assignee_perms = {"task:update:status"}
-    group_admin_perms = {
-        "group:view:own",
-        "group:update:own",
-        "group:delete:own",
-        "group:add:own",
-        "group:remove:own",
-        "task:create:own",
-        "task:view:own",
-        "task:add:own",
-        "task:remove:own",
-        "task:update:own",
-        "task:delete:own",
-        "task:update:status",
-    }
-    all_perm_names = {p.name for p in PERMISSIONS}
+    user_perms = USER_PERMISSIONS
+    member_perms = MEMBER_PERMISSIONS
+    assignee_perms = ASSIGNEE_PERMISSIONS
+    group_admin_perms = GROUP_ADMIN_PERMISSIONS
+    admin_perms = ADMIN_PERMISSIONS
 
     role_perms = {
         "USER": user_perms,
         "MEMBER": user_perms | member_perms,
         "ASSIGNEE": user_perms | assignee_perms,
         "GROUP_ADMIN": user_perms | member_perms | group_admin_perms,
-        "ADMIN": all_perm_names,
+        "ADMIN": admin_perms,
     }
 
     for role_name, perm_names in role_perms.items():
@@ -109,6 +91,7 @@ async def create_test_client(session_factory) -> AsyncClient:
         session_factory
     )
 
+    from app.es import ElasticsearchIndexer, es_helper, get_es_search
     from app.service.notification import (
         NotificationService,
         get_notification_service,
@@ -116,12 +99,101 @@ async def create_test_client(session_factory) -> AsyncClient:
 
     def override_get_notification_service(
         db: AsyncSession = Depends(db_helper.get_session),
+        indexer: ElasticsearchIndexer = Depends(get_es_indexer),
     ) -> NotificationService:
-        return NotificationService(db)
+        return NotificationService(db, indexer)
+
+    def override_get_es_indexer() -> ElasticsearchIndexer:
+        from unittest.mock import AsyncMock, MagicMock
+
+        mock_indexer = MagicMock()
+        mock_indexer.index_task = AsyncMock()
+        mock_indexer.index_user = AsyncMock()
+        mock_indexer.index_group = AsyncMock()
+        mock_indexer.index_comment = AsyncMock()
+        mock_indexer.index_notification = AsyncMock()
+        mock_indexer.delete_task = AsyncMock(return_value=True)
+        mock_indexer.delete_user = AsyncMock(return_value=True)
+        mock_indexer.delete_group = AsyncMock(return_value=True)
+        mock_indexer.delete_comment = AsyncMock(return_value=True)
+        mock_indexer.delete_notification = AsyncMock(return_value=True)
+        return mock_indexer
+
+    def override_es_helper_get_client():
+        from unittest.mock import AsyncMock, MagicMock
+
+        mock_client = MagicMock()
+        mock_client.ping = AsyncMock(return_value=True)
+        mock_client.search = AsyncMock(return_value={"hits": {"hits": []}})
+        mock_client.close = AsyncMock()
+        mock_client.indices = MagicMock()
+        mock_client.indices.refresh = AsyncMock()
+        mock_client.indices.exists = AsyncMock(return_value=False)
+        mock_client.indices.create = AsyncMock()
+        return mock_client
+
+    def override_get_es_search():
+        from unittest.mock import AsyncMock, MagicMock
+
+        mock_search = MagicMock()
+        mock_search.search_tasks = AsyncMock(return_value=[])
+        mock_search.search_tasks_faceted = AsyncMock(
+            return_value={
+                "results": [],
+                "aggregations": {},
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_users = AsyncMock(return_value=[])
+        mock_search.search_users_faceted = AsyncMock(
+            return_value={
+                "results": [],
+                "aggregations": {},
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_groups = AsyncMock(return_value=[])
+        mock_search.search_groups_faceted = AsyncMock(
+            return_value={
+                "results": [],
+                "aggregations": {},
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_comments = AsyncMock(return_value=[])
+        mock_search.search_comments_faceted = AsyncMock(
+            return_value={
+                "results": [],
+                "aggregations": {},
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_notifications = AsyncMock(return_value=[])
+        mock_search.search_notifications_faceted = AsyncMock(
+            return_value={
+                "results": [],
+                "aggregations": {},
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        return mock_search
 
     app.dependency_overrides[get_notification_service] = (
         override_get_notification_service
     )
+    app.dependency_overrides[get_es_indexer] = override_get_es_indexer
+    app.dependency_overrides[es_helper.get_client] = override_es_helper_get_client
+    app.dependency_overrides[get_es_search] = override_get_es_search
 
     async def _noop_init_cache() -> None:
         pass
@@ -283,6 +355,8 @@ async def cleanup_db(session_factory) -> None:
     """Clean up all test data between tests."""
     async with session_factory() as session:
         try:
+            await session.execute(text("DELETE FROM ratings"))
+            await session.execute(text("DELETE FROM comments"))
             await session.execute(text("DELETE FROM task_assignees"))
             await session.execute(text("DELETE FROM tasks"))
             await session.execute(text("DELETE FROM user_group_memberships"))
