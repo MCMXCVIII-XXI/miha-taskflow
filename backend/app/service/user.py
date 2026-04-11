@@ -12,7 +12,7 @@ from app.models import UserGroup as UserGroupModel
 from app.schemas import UserRead, UserSearch, UserUpdate
 
 from .base import BaseService
-from .exceptions import group_exc, level_exc, user_exc
+from .exceptions import group_exc, user_exc
 from .search import user_search
 from .utils import Indexer
 from .xp import XPService, get_xp_service
@@ -144,7 +144,7 @@ class UserService(BaseService):
             raise user_exc.UserNotFound(message=f"User with id {user_id} not found")
 
         top_skills = await self._xp_service.get_top_skills(user_id, 3)
-        top_skills = top_skills if top_skills else []
+        top_skills = top_skills or []
 
         return {**UserRead.model_validate(user).model_dump(), "top_skills": top_skills}
 
