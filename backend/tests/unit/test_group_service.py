@@ -4,7 +4,6 @@ import pytest
 
 from app.service import GroupService
 from app.service.exceptions import group_exc
-from app.service.query_db import GroupQueries
 
 
 class TestCreateMyGroup:
@@ -31,7 +30,6 @@ class TestCreateMyGroup:
         group_in.invite_policy = "admin_only"
         group_in.join_policy = "request"
 
-        mock_group_queries = MagicMock(spec=GroupQueries)
         mock_notification = MagicMock()
         mock_task_service = MagicMock()
 
@@ -40,7 +38,6 @@ class TestCreateMyGroup:
                 mock_db,
                 mock_indexer,
                 mock_notification,
-                mock_group_queries,
                 mock_task_service,
             )
             await svc.create_my_group(mock_user, group_in)
@@ -60,7 +57,6 @@ class TestCreateMyGroup:
         group_in.visibility = "public"
         group_in.parent_group_id = None
 
-        mock_group_queries = MagicMock(spec=GroupQueries)
         mock_notification = MagicMock()
         mock_task_service = MagicMock()
 
@@ -68,7 +64,6 @@ class TestCreateMyGroup:
             mock_db,
             mock_indexer,
             mock_notification,
-            mock_group_queries,
             mock_task_service,
         )
         with pytest.raises(group_exc.GroupNameConflict):
@@ -93,7 +88,6 @@ class TestJoinGroup:
         mock_db.add = MagicMock()
         mock_db.commit = AsyncMock()
 
-        mock_group_queries = MagicMock(spec=GroupQueries)
         mock_notification = MagicMock()
         mock_task_service = MagicMock()
 
@@ -102,7 +96,6 @@ class TestJoinGroup:
                 mock_db,
                 mock_indexer,
                 mock_notification,
-                mock_group_queries,
                 mock_task_service,
             )
             svc._notification = None  # Disable notification
@@ -125,7 +118,6 @@ class TestJoinGroup:
         mock_db.add = MagicMock()
         mock_db.commit = AsyncMock()
 
-        mock_group_queries = MagicMock(spec=GroupQueries)
         mock_notification = MagicMock()
         mock_task_service = MagicMock()
 
@@ -134,7 +126,6 @@ class TestJoinGroup:
                 mock_db,
                 mock_indexer,
                 mock_notification,
-                mock_group_queries,
                 mock_task_service,
             )
             with pytest.raises(group_exc.MemberAlreadyExists):
@@ -164,7 +155,6 @@ class TestRoleAssignment:
         mock_db.flush = AsyncMock()
         mock_db.refresh = AsyncMock()
 
-        mock_group_queries = MagicMock(spec=GroupQueries)
         mock_notification = MagicMock()
         mock_task_service = MagicMock()
 
@@ -173,7 +163,6 @@ class TestRoleAssignment:
                 mock_db,
                 mock_indexer,
                 mock_notification,
-                mock_group_queries,
                 mock_task_service,
             )
             group_in = MagicMock()
@@ -211,7 +200,6 @@ class TestRoleAssignment:
         mock_db.add = MagicMock()
         mock_db.commit = AsyncMock()
 
-        mock_group_queries = MagicMock(spec=GroupQueries)
         mock_notification = MagicMock()
         mock_task_service = MagicMock()
 
@@ -220,7 +208,6 @@ class TestRoleAssignment:
                 mock_db,
                 mock_indexer,
                 mock_notification,
-                mock_group_queries,
                 mock_task_service,
             )
             svc._notification = None  # Disable notification

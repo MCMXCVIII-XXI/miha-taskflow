@@ -1,13 +1,10 @@
 from fastapi import Depends
-from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import get_logger
 from app.db import db_helper
 from app.models import Rating as RatingModel
-from app.models import Task as TaskModel
 from app.models import User as UserModel
-from app.models import UserGroup as UserGroupModel
 from app.schemas import RatingRead, RatingStats
 from app.schemas.enum import RatingTarget, TaskStatus
 
@@ -27,6 +24,7 @@ class RatingService(BaseService):
 
     Attributes:
         _db (AsyncSession): SQLAlchemy async database session
+        _task_queries (TaskQueries): Task query service for verifying task status
 
     Raises:
         rating_exc.RatingAlreadyExists: When user tries to rate the same target twice
@@ -35,11 +33,17 @@ class RatingService(BaseService):
         task_exc.TaskNotFound: When attempting to rate non-existent or incomplete task
     """
 
-    def __init__(self, db: AsyncSession):
+    def __init__(
+        self,
+        db: AsyncSession,
+    ):
         """Initialize RatingService with database session.
 
         Args:
             db: SQLAlchemy async database session
+            task_queries: Task query service for verifying task status
+            group_queries: Group query service for verifying group status
+            rating_queries: Rating query service for creating/retrieving ratings
         """
         super().__init__(db)
 
@@ -71,10 +75,8 @@ class RatingService(BaseService):
         """
         if target_type == RatingTarget.TASK:
             task = await self._db.scalar(
-                select(TaskModel).where(
-                    TaskModel.id == target_id,
-                    TaskModel.is_active == True,  # noqa: E712
-                    TaskModel.status == TaskStatus.DONE,
+                self._task_queries.get_task(
+                    id=target_id, status=TaskStatus.DONE, is_active=True
                 )
             )
             if not task:
@@ -83,19 +85,17 @@ class RatingService(BaseService):
                 )
         elif target_type == RatingTarget.GROUP:
             group = await self._db.scalar(
-                select(UserGroupModel).where(
-                    UserGroupModel.id == target_id,
-                    UserGroupModel.is_active == True,  # noqa: E712
+                self._group_queries.get_group(
+                    id=target_id,
+                    is_active=True,
                 )
             )
             if not group:
                 raise group_exc.GroupNotFound(message=f"Group {target_id} not found")
 
         existing = await self._db.scalar(
-            select(RatingModel).where(
-                RatingModel.user_id == current_user.id,
-                RatingModel.target_id == target_id,
-                RatingModel.target_type == target_type,
+            self._rating_queries.get_rating(
+                target_id=target_id, target_type=target_type, user_id=current_user.id
             )
         )
         if existing:
@@ -131,16 +131,9 @@ class RatingService(BaseService):
             RatingStats: Rating statistics including average score and count
         """
         result = await self._db.execute(
-            select(
-                RatingModel.target_id,
-                func.avg(RatingModel.score).label("avg_score"),
-                func.count(RatingModel.id).label("count"),
+            self._rating_queries.aggregate_stats_by_target(
+                target_id=target_id, target_type=target_type
             )
-            .where(
-                RatingModel.target_id == target_id,
-                RatingModel.target_type == target_type,
-            )
-            .group_by(RatingModel.target_id)
         )
         row = result.one_or_none()
 
@@ -200,9 +193,7 @@ class RatingService(BaseService):
             rating_exc.RatingNotFound: If rating doesn't exist
             rating_exc.RatingForbiddenError: If user doesn't own the rating
         """
-        rating = await self._db.scalar(
-            select(RatingModel).where(RatingModel.id == rating_id)
-        )
+        rating = await self._db.scalar(self._rating_queries.get_rating(id=rating_id))
         if not rating:
             raise rating_exc.RatingNotFound(message=f"Rating {rating_id} not found")
 
@@ -226,4 +217,6 @@ def get_rating_service(
     Returns:
         RatingService: Initialized rating service instance
     """
-    return RatingService(db)
+    return RatingService(
+        db=db,
+    )

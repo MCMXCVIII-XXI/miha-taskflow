@@ -2,9 +2,8 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Depends
-from sqlalchemy import Select, select
+from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import joinedload
 
 from app.core.log import get_logger
 from app.db import db_helper
@@ -34,7 +33,6 @@ from app.schemas.enum import (
 from .base import GroupTaskBaseService
 from .exceptions import group_exc, task_exc
 from .notification import NotificationService, get_notification_service
-from .query_db import TaskQueries
 from .search import task_search
 from .utils import Indexer
 from .xp import XPService, get_xp_service
@@ -76,18 +74,16 @@ class TaskService(GroupTaskBaseService):
         db: AsyncSession,
         indexer: ElasticsearchIndexer,
         notification_service: NotificationService,
-        task_queries: TaskQueries,
         xp_service: XPService,
     ) -> None:
         super().__init__(db)
-        self._task_queries = task_queries
         self._notification = notification_service
         self._xp_service = xp_service
         self._indexer = Indexer(indexer)
 
     async def _get_task_assignees(self, task_id: int) -> list[TaskAssignee]:
         result = await self._db.scalars(
-            select(TaskAssignee).where(TaskAssignee.task_id == task_id)
+            self._task_assignee_queries.get_task_assignee(task_id=task_id)
         )
         return list(result.all())
 
@@ -106,9 +102,9 @@ class TaskService(GroupTaskBaseService):
             list[int]: Group IDs where user is admin
         """
         group_ids = await self._db.scalars(
-            select(UserGroupModel.id)
-            .join(UserRoleModel, UserRoleModel.group_id == UserGroupModel.id)
-            .where(UserRoleModel.user_id == current_user.id)
+            self._group_queries.by_admin_groups_get_id(
+                user_id=current_user.id, is_active=True
+            )
         )
         return list(group_ids.all())
 
@@ -133,7 +129,7 @@ class TaskService(GroupTaskBaseService):
         group_ids = await self._get_id_admin_groups(current_user)
 
         task_in_user_group = await self._db.scalar(
-            self._task_queries.by_id(task_id, is_active=True).where(
+            self._task_queries.get_task(id=task_id, is_active=True).where(
                 TaskModel.group_id.in_(group_ids)
             )
         )
@@ -211,9 +207,7 @@ class TaskService(GroupTaskBaseService):
     ) -> None:
         """Validate that task title is unique within the group."""
         result = await self._db.scalars(
-            self._task_queries.by_group(group_id).where(
-                TaskModel.title == title,
-            )
+            self._task_queries.get_task(group_id=group_id, title=title, is_active=True)
         )
         if result.first():
             logger.warning(
@@ -230,9 +224,7 @@ class TaskService(GroupTaskBaseService):
     async def _get_active_group(self, group_id: int) -> UserGroupModel:
         """Get active group by ID."""
         group = await self._db.scalar(
-            select(UserGroupModel).where(
-                UserGroupModel.id == group_id, UserGroupModel.is_active
-            )
+            self._group_queries.get_group(id=group_id, is_active=True)
         )
         if not group:
             raise group_exc.GroupNotFound(message="Group not found or inactive")
@@ -296,7 +288,7 @@ class TaskService(GroupTaskBaseService):
                 return await task_svc.search_tasks(search=search)
             ```
         """
-        return self._task_queries.all(is_active=True)
+        return self._task_queries.get_task(is_active=True)
 
     @task_search
     async def search_my_tasks(
@@ -353,7 +345,7 @@ class TaskService(GroupTaskBaseService):
             group_tasks = await task_svc.search_group_tasks(123, current_user)
         """
         await self._check_group_access(group_id, current_user)
-        return self._task_queries.by_group(group_id, is_active=True)
+        return self._task_queries.get_task(group_id=group_id, is_active=True)
 
     @task_search
     async def search_assigned_tasks(
@@ -412,7 +404,9 @@ class TaskService(GroupTaskBaseService):
         """
         await self._check_task_access(task_id, current_user)
 
-        task = await self._db.scalar(self._task_queries.by_id(task_id, is_active=True))
+        task = await self._db.scalar(
+            self._task_queries.get_task(id=task_id, is_active=True)
+        )
 
         if not task:
             raise task_exc.TaskNotFound(message="Task not found or inactive")
@@ -459,7 +453,9 @@ class TaskService(GroupTaskBaseService):
         """
         await self._check_task_access(task_id, current_user)
 
-        task = await self._db.scalar(self._task_queries.by_id(task_id, is_active=True))
+        task = await self._db.scalar(
+            self._task_queries.get_task(id=task_id, is_active=True)
+        )
 
         if not task:
             raise task_exc.TaskNotFound(message="Task not found")
@@ -538,7 +534,9 @@ class TaskService(GroupTaskBaseService):
             task_exc.TaskNotFound: Task not found or inactive
             task_exc.TaskStatusAlreadySet: Status is already set to this value
         """
-        task = await self._db.scalar(self._task_queries.by_id(task_id, is_active=True))
+        task = await self._db.scalar(
+            self._task_queries.get_task(id=task_id, is_active=True)
+        )
 
         if not task:
             raise task_exc.TaskNotFound(message="Task not found or inactive")
@@ -639,9 +637,9 @@ class TaskService(GroupTaskBaseService):
             assignee = await self._get_active_task_assignee(123, 456)
         """
         assignee = await self._db.scalar(
-            select(TaskAssignee)
-            .options(joinedload(TaskAssignee.task), joinedload(TaskAssignee.user))
-            .where(TaskAssignee.task_id == task_id, TaskAssignee.user_id == user_id)
+            self._task_assignee_queries.get_task_assignee(
+                user_id=user_id, task_id=task_id, with_relations=True
+            )
         )
 
         if not assignee:
@@ -654,19 +652,14 @@ class TaskService(GroupTaskBaseService):
 
     async def _cleanup_assignee_role_if_no_tasks(self, user_id: int) -> None:
         remaining = await self._db.scalar(
-            select(TaskAssignee)
-            .where(
-                TaskAssignee.user_id == user_id,
-            )
-            .limit(1)
+            self._task_assignee_queries.get_task_assignee(user_id=user_id).limit(1)
         )
         if not remaining:
             role_id = await self._get_role_id(self._role.ASSIGNEE.value)
             if role_id:
                 user_role = await self._db.scalar(
-                    select(UserRoleModel).where(
-                        UserRoleModel.user_id == user_id,
-                        UserRoleModel.role_id == role_id,
+                    self._user_role_queries.get_user_role(
+                        user_id=user_id, role_id=role_id
                     )
                 )
                 if user_role:
@@ -699,9 +692,9 @@ class TaskService(GroupTaskBaseService):
         await self._check_task_access(task_id, current_user)
 
         task_assignee = await self._db.scalar(
-            select(TaskAssignee)
-            .options(joinedload(TaskAssignee.task), joinedload(TaskAssignee.user))
-            .where(TaskAssignee.task_id == task_id, TaskAssignee.user_id == user_id)
+            self._task_assignee_queries.get_task_assignee(
+                user_id=user_id, task_id=task_id
+            )
         )
 
         if task_assignee:
@@ -719,7 +712,7 @@ class TaskService(GroupTaskBaseService):
 
         if self._notification:
             task = await self._db.scalar(
-                select(TaskModel).where(TaskModel.id == task_id)
+                self._task_queries.get_task(id=task_id, is_active=True)
             )
             if task:
                 await self._notification.notify_task_invite(
@@ -740,9 +733,8 @@ class TaskService(GroupTaskBaseService):
     async def _add_member_directly(self, task_id: int, user_id: int) -> None:
         """Add user directly to task without admin checks (for free join)."""
         existing = await self._db.scalar(
-            select(TaskAssignee).where(
-                TaskAssignee.task_id == task_id,
-                TaskAssignee.user_id == user_id,
+            self._task_assignee_queries.get_task_assignee(
+                user_id=user_id, task_id=task_id
             )
         )
         if existing:
@@ -804,20 +796,23 @@ class TaskService(GroupTaskBaseService):
     async def get_task_join_requests(
         self, task_id: int, current_user: UserModel
     ) -> list[JoinRequestRead]:
-        task = await self._db.get(TaskModel, task_id)
+        task = await self._db.scalar(
+            self._task_queries.get_task(id=task_id, is_active=True)
+        )
         if not task:
             raise task_exc.TaskNotFound(message="Task not found")
 
-        group = await self._db.get(UserGroupModel, task.group_id)
+        group = await self._db.scalar(
+            self._group_queries.get_group(id=task.group_id, is_active=True)
+        )
         if group and group.admin_id != current_user.id:
             raise task_exc.TaskAccessDenied(
                 message="Only group admin can view join requests"
             )
 
         result = await self._db.scalars(
-            select(JoinRequestModel).where(
-                JoinRequestModel.task_id == task_id,
-                JoinRequestModel.status == JoinRequestStatus.PENDING,
+            self._join_queries.get_join_request(
+                task_id=task_id, status=JoinRequestStatus.PENDING
             )
         )
         return [JoinRequestRead.model_validate(request) for request in result.all()]
@@ -858,9 +853,7 @@ class TaskService(GroupTaskBaseService):
     async def _get_join_request(self, request_id: int) -> JoinRequestModel:
         """Get join request by ID."""
         request = await self._db.scalar(
-            select(JoinRequestModel).where(
-                JoinRequestModel.id == request_id,
-            )
+            self._join_queries.get_join_request(id=request_id)
         )
         if not request:
             raise task_exc.JoinRequestNotFound(message="Join request not found")
@@ -869,9 +862,7 @@ class TaskService(GroupTaskBaseService):
     async def _get_task_for_request(self, request: JoinRequestModel) -> TaskModel:
         """Get task associated with join request."""
         task = await self._db.scalar(
-            select(TaskModel).where(
-                TaskModel.id == request.task_id,
-            )
+            self._task_queries.get_task(id=request.task_id, is_active=True)
         )
         if not task or not task.group_id:
             raise task_exc.TaskNotFound(message=f"Task {request.task_id} not found")
@@ -880,9 +871,7 @@ class TaskService(GroupTaskBaseService):
     async def _get_group_for_task(self, task: TaskModel) -> UserGroupModel:
         """Get group associated with task."""
         group = await self._db.scalar(
-            select(UserGroupModel).where(
-                UserGroupModel.id == task.group_id,
-            )
+            self._group_queries.get_group(id=task.group_id, is_active=True)
         )
         if not group:
             raise group_exc.GroupNotFound(message=f"Group {task.group_id} not found")
@@ -911,9 +900,8 @@ class TaskService(GroupTaskBaseService):
     ) -> None:
         """Handle group membership for approved request."""
         is_member = await self._db.scalar(
-            select(UserGroupMembershipModel).where(
-                UserGroupMembershipModel.user_id == request.user_id,
-                UserGroupMembershipModel.group_id == task.group_id,
+            self._group_membership_queries.get_group_membership(
+                user_id=request.user_id, group_id=task.group_id
             )
         )
 
@@ -951,16 +939,22 @@ class TaskService(GroupTaskBaseService):
         Returns:
             Notification for the rejection
         """
-        request = await self._db.get(JoinRequestModel, request_id)
+        request = await self._db.scalar(
+            self._join_queries.get_join_request(id=request_id)
+        )
         if not request:
             raise task_exc.JoinRequestNotFound(message="Join request not found")
 
-        task = await self._db.get(TaskModel, request.task_id)
+        task = await self._db.scalar(
+            self._task_queries.get_task(id=request.task_id, is_active=True)
+        )
 
         if task is None:
             raise task_exc.TaskNotFound(message=f"Task {request.task_id} not found")
 
-        group = await self._db.get(UserGroupModel, task.group_id)
+        group = await self._db.scalar(
+            self._group_queries.get_group(id=task.group_id, is_active=True)
+        )
 
         if group is None:
             raise group_exc.GroupNotFound(message=f"Group {task.group_id} not found")
@@ -990,27 +984,30 @@ class TaskService(GroupTaskBaseService):
             current_user: User joining the task
         """
         existing = await self._db.scalar(
-            select(TaskAssignee).where(
-                TaskAssignee.user_id == current_user.id,
-                TaskAssignee.task_id == task_id,
+            self._task_assignee_queries.get_task_assignee(
+                task_id=task_id, user_id=current_user.id
             )
         )
         if existing:
             raise task_exc.UserAlreadyInTask(
                 message="User is already assigned to this task"
             )
-        task = await self._db.get(TaskModel, task_id)
+        task = await self._db.scalar(
+            self._task_queries.get_task(id=task_id, is_active=True)
+        )
         if not task:
             raise task_exc.TaskNotFound(message="Task not found")
-        group = await self._db.get(UserGroupModel, task.group_id)
+        group = await self._db.scalar(
+            self._group_queries.get_group(id=task.group_id, is_active=True)
+        )
         if not group:
             raise task_exc.TaskNotInGroup(message="Task is not in a group")
         existing_request = await self._db.scalar(
-            select(JoinRequestModel).where(
-                JoinRequestModel.user_id == current_user.id,
-                JoinRequestModel.task_id == task_id,
-                JoinRequestModel.status == JoinRequestStatus.PENDING,
-            )
+            self._join_queries.get_join_request(
+                user_id=current_user.id,
+                task_id=task_id,
+                status=JoinRequestStatus.PENDING,
+            ),
         )
         if existing_request:
             raise task_exc.JoinRequestAlreadyExists(
@@ -1086,5 +1083,4 @@ def get_task_service(
         indexer=indexer,
         notification_service=notification_service,
         xp_service=xp_service,
-        task_queries=TaskQueries(),
     )
