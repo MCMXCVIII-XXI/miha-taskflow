@@ -177,13 +177,29 @@ class XPService(XPBaseService):
 
         return skill
 
-    async def _check_daily_cap(self, skill: UserSkill) -> bool:
-        """Check if user can receive XP today."""
+    async def _check_daily_cap(self, skill: UserSkill, xp_to_add: int) -> int:
+        """Check and enforce daily XP cap.
+
+        Args:
+            skill: User skill to check.
+            xp_to_add: Amount of XP trying to add.
+
+        Returns:
+            Actual XP that can be added (may be less than requested due to cap).
+        """
         today = datetime.now(UTC).date()
         if skill.last_xp_date and skill.last_xp_date.date() == today:
-            # TODO: implement daily XP limit logic
-            pass
-        return True
+            remaining = self._max_daily_xp - skill.xp_today
+            if remaining <= 0:
+                return 0
+            return min(xp_to_add, remaining)
+        return xp_to_add
+
+    def _reset_daily_xp(self, skill: UserSkill) -> None:
+        """Reset daily XP counter if new day."""
+        today = datetime.now(UTC).date()
+        if not skill.last_xp_date or skill.last_xp_date.date() != today:
+            skill.xp_today = 0
 
     def _update_xp(self, skill: UserSkill, xp: int) -> None:
         """Update XP total with daily cap."""
@@ -215,10 +231,12 @@ class XPService(XPBaseService):
         if skill.is_frozen:
             return False, skill.level
 
-        if not await self._check_daily_cap(skill):
+        self._reset_daily_xp(skill)
+        xp_allowed = await self._check_daily_cap(skill, xp)
+        if xp_allowed == 0:
             return False, skill.level
 
-        self._update_xp(skill, xp)
+        self._update_xp(skill, xp_allowed)
         self._update_level(skill)
         self._update_streak(skill)
 
