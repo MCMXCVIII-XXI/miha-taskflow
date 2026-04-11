@@ -40,6 +40,9 @@ class UserGroupCreate(BaseModel):
     invite_policy: InvitePolicy = Field(
         default=InvitePolicy.ADMIN_ONLY, description="Invite policy"
     )
+    join_policy: JoinPolicy = Field(
+        default=JoinPolicy.REQUEST, description="Join policy"
+    )
 
     @field_validator("parent_group_id", mode="before")
     @classmethod
