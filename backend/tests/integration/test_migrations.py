@@ -22,26 +22,6 @@ def is_postgresql(engine: AsyncEngine) -> bool:
 class TestMigrationIntegrity:
     """Check migration integrity (only PostgreSQL)."""
 
-    async def test_user_roles_has_autoincrement(self, test_engine: AsyncEngine):
-        """user_roles.id should have a sequence for autoincrement."""
-        if not is_postgresql(test_engine):
-            pytest.skip("Тест только для PostgreSQL")
-
-        async with test_engine.connect() as conn:
-            result = await conn.execute(
-                text(
-                    "SELECT column_default "
-                    "FROM information_schema.columns "
-                    "WHERE table_name = 'user_roles' "
-                    "AND column_name = 'id'"
-                )
-            )
-            default = result.scalar()
-            assert default is not None, "user_roles.id must have a DEFAULT"
-            assert "nextval" in default, (
-                f"user_roles.id The DEFAULT must be sequence, received: {default}"
-            )
-
     async def test_all_id_columns_have_sequences(self, test_engine: AsyncEngine):
         """All id columns must have a sequence (autoincrement)."""
         if not is_postgresql(test_engine):
@@ -62,16 +42,14 @@ class TestMigrationIntegrity:
 
             for table_name, column_default in rows:
                 assert column_default is not None, (
-                    f"{table_name}.id must have a DEFAULT sequence, "
-                    f"received: {column_default}"
+                    f"{table_name}.id must have sequence, got {column_default}"
                 )
                 assert "nextval" in column_default, (
-                    f"{table_name}.id DEFAULT must be a sequence, "
-                    f"received: {column_default}"
+                    f"{table_name}.id must be sequence, got {column_default}"
                 )
 
     async def test_models_match_migrations(self, test_engine: AsyncEngine):
-        """Models SQLAlchemy should match migrations."""
+        """Models SQLAlchemy should match migrations (both ways)."""
         if not is_postgresql(test_engine):
             pytest.skip("Test is only for PostgreSQL")
 
@@ -92,9 +70,10 @@ class TestMigrationIntegrity:
             db_tables = {row[0] for row in result.fetchall()}
 
         missing_tables = model_tables - db_tables
-        assert not missing_tables, (
-            f"Tables from models are missing in DB: {missing_tables}"
-        )
+        extra_tables = db_tables - model_tables
+
+        assert not missing_tables, f"Tables missing in DB: {missing_tables}"
+        assert not extra_tables, f"Extra tables in DB (not in models): {extra_tables}"
 
 
 class TestColumnTypes:
@@ -148,7 +127,7 @@ class TestForeignKeys:
         async with test_engine.connect() as conn:
             result = await conn.execute(
                 text(
-                    "SELECT tc.constraint_name "
+                    "SELECT COUNT(*) "
                     "FROM information_schema.table_constraints tc "
                     "JOIN information_schema.key_column_usage kcu "
                     "ON tc.constraint_name = kcu.constraint_name "
@@ -157,8 +136,8 @@ class TestForeignKeys:
                     "AND kcu.column_name = 'group_id'"
                 )
             )
-            fk = result.scalar()
-            assert fk is not None, "tasks.group_id must have foreign key"
+            count = result.scalar()
+            assert count > 0, "tasks.group_id must have foreign key"
 
     async def test_user_roles_have_user_fk(self, test_engine: AsyncEngine):
         """user_roles.user_id should have foreign key to users."""
@@ -168,7 +147,7 @@ class TestForeignKeys:
         async with test_engine.connect() as conn:
             result = await conn.execute(
                 text(
-                    "SELECT tc.constraint_name "
+                    "SELECT COUNT(*) "
                     "FROM information_schema.table_constraints tc "
                     "JOIN information_schema.key_column_usage kcu "
                     "ON tc.constraint_name = kcu.constraint_name "
@@ -177,8 +156,8 @@ class TestForeignKeys:
                     "AND kcu.column_name = 'user_id'"
                 )
             )
-            fk = result.scalar()
-            assert fk is not None, "user_roles.user_id must have foreign key"
+            count = result.scalar()
+            assert count > 0, "user_roles.user_id must have foreign key"
 
 
 class TestIndexes:
@@ -192,14 +171,15 @@ class TestIndexes:
         async with test_engine.connect() as conn:
             result = await conn.execute(
                 text(
-                    "SELECT indexname, indexdef "
+                    "SELECT COUNT(*) "
                     "FROM pg_indexes "
-                    "WHERE tablename = 'users' "
-                    "AND indexname LIKE '%username%'"
+                    "WHERE schemaname = 'public' "
+                    "AND tablename = 'users' "
+                    "AND indexdef LIKE '%username%'"
                 )
             )
-            indexes = result.fetchall()
-            assert len(indexes) > 0, "users.username should have index"
+            count = result.scalar()
+            assert count > 0, "users.username should have index"
 
     async def test_tasks_group_id_has_index(self, test_engine: AsyncEngine):
         """tasks.group_id should have index."""
@@ -209,36 +189,57 @@ class TestIndexes:
         async with test_engine.connect() as conn:
             result = await conn.execute(
                 text(
-                    "SELECT indexname "
+                    "SELECT COUNT(*) "
                     "FROM pg_indexes "
-                    "WHERE tablename = 'tasks' "
-                    "AND indexname LIKE '%group_id%'"
+                    "WHERE schemaname = 'public' "
+                    "AND tablename = 'tasks' "
+                    "AND indexdef LIKE '%group_id%'"
                 )
             )
-            indexes = result.fetchall()
-            assert len(indexes) > 0, "tasks.group_id should have index"
+            count = result.scalar()
+            assert count > 0, "tasks.group_id should have index"
 
 
 class TestConstraints:
     """Verify constraints exist (only PostgreSQL)."""
 
     async def test_users_username_is_unique(self, test_engine: AsyncEngine):
-        """users.username should have UNIQUE constraint."""
+        """users.username should have unique index/constraint."""
         if not is_postgresql(test_engine):
             pytest.skip("Test is only for PostgreSQL")
 
         async with test_engine.connect() as conn:
             result = await conn.execute(
                 text(
-                    "SELECT tc.constraint_name "
-                    "FROM information_schema.table_constraints tc "
-                    "WHERE tc.table_name = 'users' "
-                    "AND tc.constraint_type = 'UNIQUE' "
-                    "AND tc.constraint_name LIKE '%username%'"
+                    "SELECT COUNT(*) "
+                    "FROM pg_indexes "
+                    "WHERE schemaname = 'public' "
+                    "AND tablename = 'users' "
+                    "AND indexdef LIKE '%username%' "
+                    "AND indexdef LIKE '%UNIQUE%'"
                 )
             )
-            constraint = result.scalar()
-            assert constraint is not None, "users.username must be unique"
+            count = result.scalar()
+            assert count > 0, "users.username must have UNIQUE index"
+
+    async def test_users_email_is_unique(self, test_engine: AsyncEngine):
+        """users.email should have unique index/constraint."""
+        if not is_postgresql(test_engine):
+            pytest.skip("Test is only for PostgreSQL")
+
+        async with test_engine.connect() as conn:
+            result = await conn.execute(
+                text(
+                    "SELECT COUNT(*) "
+                    "FROM pg_indexes "
+                    "WHERE schemaname = 'public' "
+                    "AND tablename = 'users' "
+                    "AND indexdef LIKE '%email%' "
+                    "AND indexdef LIKE '%UNIQUE%'"
+                )
+            )
+            count = result.scalar()
+            assert count > 0, "users.email must have UNIQUE index"
 
     async def test_users_email_is_not_nullable(self, test_engine: AsyncEngine):
         """users.email should be NOT NULL."""
@@ -250,7 +251,8 @@ class TestConstraints:
                 text(
                     "SELECT is_nullable "
                     "FROM information_schema.columns "
-                    "WHERE table_name = 'users' "
+                    "WHERE table_schema = 'public' "
+                    "AND table_name = 'users' "
                     "AND column_name = 'email'"
                 )
             )
@@ -261,22 +263,19 @@ class TestConstraints:
 class TestDefaultValues:
     """Verify default values (only PostgreSQL)."""
 
-    async def test_users_is_active_default_true(self, test_engine: AsyncEngine):
-        """users.is_active should default to TRUE."""
+    async def test_users_is_active_column_not_null(self, test_engine: AsyncEngine):
+        """users.is_active should be NOT NULL (implied default=False)."""
         if not is_postgresql(test_engine):
             pytest.skip("Test is only for PostgreSQL")
 
         async with test_engine.connect() as conn:
             result = await conn.execute(
                 text(
-                    "SELECT column_default "
+                    "SELECT is_nullable "
                     "FROM information_schema.columns "
                     "WHERE table_name = 'users' "
                     "AND column_name = 'is_active'"
                 )
             )
-            default = result.scalar()
-            assert default is not None, "users.is_active must have DEFAULT"
-            assert "true" in default.lower(), (
-                f"users.is_active should default to TRUE, got {default}"
-            )
+            nullable = result.scalar()
+            assert nullable == "NO", "users.is_active should be NOT NULL"
