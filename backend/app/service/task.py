@@ -927,12 +927,13 @@ class TaskService(GroupTaskBaseService):
         await self._db.commit()
 
     async def reject_task_join_request(
-        self, request_id: int, current_user: UserModel
+        self, task_id: int, request_id: int, current_user: UserModel
     ) -> NotificationRead:
         """
         Reject a join request for a task.
 
         Args:
+            task_id: ID of the task (from path parameter)
             request_id: ID of the join request to reject
             current_user: Group admin rejecting the request
 
@@ -944,6 +945,11 @@ class TaskService(GroupTaskBaseService):
         )
         if not request:
             raise task_exc.JoinRequestNotFound(message="Join request not found")
+
+        if request.task_id != task_id:
+            raise task_exc.JoinRequestNotFound(
+                message="Join request does not belong to this task"
+            )
 
         task = await self._db.scalar(
             self._task_queries.get_task(id=request.task_id, is_active=True)

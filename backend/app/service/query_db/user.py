@@ -53,6 +53,7 @@ class UserQueries:
     def _build_user_query(
         base: Select[tuple[User]],
         id: int | None = None,
+        id__in: list[int] | None = None,
         username: str | None = None,
         first_name: str | None = None,
         last_name: str | None = None,
@@ -70,6 +71,7 @@ class UserQueries:
         Args:
             base: Base query (usually `select(User)`).
             id: Filter by user ID.
+            id__in: Filter by list of user IDs.
             username: Filter by username.
             first_name: Filter by first name.
             last_name: Filter by last name.
@@ -83,6 +85,8 @@ class UserQueries:
         """
         if id is not None:
             base = base.where(User.id == id)
+        if id__in is not None:
+            base = base.where(User.id.in_(id__in))
         if username is not None:
             base = base.where(User.username == username)
         if first_name is not None:
@@ -153,6 +157,7 @@ class UserQueries:
     @staticmethod
     def get_user(
         id: int | None = None,
+        id__in: list[int] | None = None,
         username: str | None = None,
         first_name: str | None = None,
         last_name: str | None = None,
@@ -169,6 +174,7 @@ class UserQueries:
 
         Args:
             id: User ID to filter by.
+            id__in: Filter by list of user IDs.
             username: Username to filter by.
             first_name: First name to filter by.
             last_name: Last name to filter by.
@@ -184,6 +190,7 @@ class UserQueries:
         return UserQueries._build_user_query(
             base=base,
             id=id,
+            id__in=id__in,
             username=username,
             first_name=first_name,
             last_name=last_name,
