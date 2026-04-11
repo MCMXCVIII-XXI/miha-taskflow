@@ -268,6 +268,12 @@ class GroupService(GroupTaskBaseService):
         )
         self._db.add(group)
         await self._db.flush()
+
+        membership = UserGroupMembershipModel(
+            user_id=current_user.id, group_id=group.id
+        )
+        self._db.add(membership)
+
         await self._grant_role_if_not_exists(
             user_id=current_user.id,
             group_id=group.id,
