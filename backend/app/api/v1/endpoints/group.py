@@ -158,7 +158,7 @@ async def approve_join_request(
     current_user: UserModel = Depends(require_permissions_db("group:update:own")),
     svc: GroupService = Depends(get_group_service),
 ) -> NotificationRead:
-    return await svc.approve_join_request(request_id, current_user)
+    return await svc.approve_join_request(group_id, request_id, current_user)
 
 
 @router.post(
