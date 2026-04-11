@@ -102,9 +102,19 @@ class XPService(XPBaseService):
     async def _get_leaderboard(
         self, skills: list[UserSkill], limit: int
     ) -> list[dict[str, Any]]:
+        if not skills:
+            return []
+
+        user_ids = [skill.user_id for skill in skills]
+
+        users_result = await self._db.scalars(
+            self._user_queries.get_user(id__in=user_ids, is_active=True)
+        )
+        users_map = {user.id: user for user in users_result}
+
         leaderboard = []
         for skill in skills:
-            user = await self._db.scalar(self._user_queries.get_user(id=skill.user_id))
+            user = users_map.get(skill.user_id)
             title = self.get_title(skill.sphere, skill.level)
             leaderboard.append(
                 {
