@@ -13,7 +13,6 @@ from app.schemas import UserRead, UserSearch, UserUpdate
 
 from .base import BaseService
 from .exceptions import group_exc, level_exc, user_exc
-from .query_db import GroupQueries, UserQueries
 from .search import user_search
 from .utils import Indexer
 from .xp import XPService, get_xp_service
@@ -47,13 +46,9 @@ class UserService(BaseService):
         self,
         db: AsyncSession,
         indexer: ElasticsearchIndexer,
-        user_queries: UserQueries,
-        group_queries: GroupQueries,
         xp_service: XPService,
     ) -> None:
         super().__init__(db)
-        self._user_queries = user_queries
-        self._group_queries = group_queries
         self._xp_service = xp_service
         self._indexer = Indexer(indexer)
 
@@ -82,7 +77,7 @@ class UserService(BaseService):
             group.name = "New Name"
         """
         group = await self._db.scalar(
-            self._group_queries.by_admin_group(user_id, group_id, is_active=True)
+            self._group_queries.get_group(admin_id=user_id, id=group_id, is_active=True)
         )
 
         if not group:
@@ -142,7 +137,7 @@ class UserService(BaseService):
         return UserRead.model_validate(user)
 
     async def get_user(self, user_id: int) -> dict[str, Any]:
-        user = self._user_queries.by_id(user_id, is_active=True)
+        user = self._user_queries.get_user(id=user_id, is_active=True)
         top_skills = await self._xp_service.get_top_skills(user_id, 3)
         if not user:
             raise user_exc.UserNotFound(message=f"User with id {user_id} not found")
@@ -176,7 +171,7 @@ class UserService(BaseService):
             users = await user_svc.search_users()
             results = await user_svc._db.execute(users)
         """
-        return self._user_queries.all(is_active=True)
+        return self._user_queries.get_user(is_active=True)
 
     @user_search
     async def search_users_in_group(
@@ -266,7 +261,7 @@ class UserService(BaseService):
 
         if email:
             email_conflict = await self._db.scalar(
-                self._user_queries.by_email(email, is_active=True).where(
+                self._user_queries.get_user(email=email, is_active=True).where(
                     UserModel.id != user.id
                 )
             )
@@ -282,7 +277,7 @@ class UserService(BaseService):
 
         if username:
             username_conflict = await self._db.scalar(
-                self._user_queries.by_username(username, is_active=True).where(
+                self._user_queries.get_user(username=username, is_active=True).where(
                     UserModel.id != user.id,
                 )
             )
@@ -367,7 +362,7 @@ class UserService(BaseService):
             admin = await user_svc.get_group_admin(group_id=123, current_user)
         """
         admin = await self._db.scalar(
-            self._user_queries.get_admin_group(group_id, is_active=True)
+            self._user_queries.get_admin_group(group_id=group_id, is_active=True)
         )
         if not admin:
             raise user_exc.UserNotFound(message="Not found admin")
@@ -396,7 +391,7 @@ class UserService(BaseService):
         """
 
         owner = await self._db.scalar(
-            self._user_queries.by_owner_task(task_id, is_active=True)
+            self._user_queries.by_owner_task(task_id=task_id, is_active=True)
         )
         if not owner:
             raise user_exc.UserNotFound(message="Task owner not found")
@@ -441,6 +436,4 @@ def get_user_service(
         db=db,
         indexer=indexer,
         xp_service=xp_service,
-        user_queries=UserQueries(),
-        group_queries=GroupQueries(),
     )

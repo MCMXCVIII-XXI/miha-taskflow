@@ -3,11 +3,11 @@ from datetime import datetime
 import jwt
 from fastapi import Depends
 from fastapi.security import OAuth2PasswordRequestForm
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import security_exc
 from app.core.log import get_logger
+from app.core.log.mask import _mask_email
 from app.core.security import (
     create_access_token,
     create_refresh_token,
@@ -24,14 +24,6 @@ from .base import BaseService
 from .exceptions import user_exc
 
 logger = get_logger("service.auth")
-
-
-def _mask_email(email: str) -> str:
-    """Mask email for logging: user@example.com -> u***@example.com"""
-    if not email or "@" not in email:
-        return "***"
-    local, domain = email.split("@", 1)
-    return f"{local[0]}***@{domain}" if len(local) > 1 else "***@{domain}"
 
 
 class AuthenticationService(BaseService):
@@ -133,9 +125,8 @@ class AuthenticationService(BaseService):
             tokens = await auth_svc.register(UserCreate(username="john", ...))
         """
         result = await self._db.scalars(
-            select(UserModel).where(
-                (UserModel.email == user_in.email)
-                | (UserModel.username == user_in.username),
+            self._user_queries.get_by_email_or_username(
+                email=user_in.email, username=user_in.username, is_active=None
             )
         )
         user = result.first()
@@ -195,11 +186,10 @@ class AuthenticationService(BaseService):
         Example Usage:
             tokens = await auth_svc.login(OAuth2PasswordRequestForm(...))
         """
+
         result = await self._db.scalars(
-            select(UserModel).where(
-                (UserModel.email == form_data.username)
-                | (UserModel.username == form_data.username),
-                UserModel.is_active,
+            self._user_queries.get_by_email_or_username(
+                username=form_data.username, email=form_data.username, is_active=True
             )
         )
         user = result.first()
@@ -281,7 +271,7 @@ class AuthenticationService(BaseService):
             ) from e
 
         result = await self._db.scalars(
-            select(UserModel).where(UserModel.id == user_id, UserModel.is_active)
+            self._user_queries.get_user(id=user_id, is_active=True)
         )
         user = result.first()
 

@@ -8,7 +8,7 @@ that require elevated privileges.
 from typing import Any
 
 from fastapi import Depends
-from sqlalchemy import func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import get_logger
@@ -24,7 +24,6 @@ from app.service.utils.get_stats import StatsGroups, StatsTasks, StatsUsers
 
 from .base import BaseService
 from .exceptions import user_exc
-from .query_db import GroupQueries, UserQueries
 from .utils import Indexer
 
 logger = get_logger("service.admin")
@@ -51,8 +50,6 @@ class AdminService(BaseService):
             es (ElasticsearchIndexer): Elasticsearch client for indexing operations
         """
         super().__init__(db)
-        self.user_queries = UserQueries
-        self.group_queries = GroupQueries
         self._indexer = Indexer(es)
 
     async def get_all_users(
@@ -114,18 +111,19 @@ class AdminService(BaseService):
             )
             raise user_exc.UserSelfDeleteError(message="Cannot delete yourself")
 
-        user = await self._db.get(UserModel, user_id)
+        user = await self._db.scalar(
+            self._user_queries.get_user(id=user_id, is_active=True)
+        )
         if not user:
             raise user_exc.UserNotFound(message=f"User with id {user_id} not found")
 
         if user.role == GlobalUserRole.ADMIN:
-            admin_count_result = await self._db.execute(
-                select(func.count(UserModel.id)).where(
-                    UserModel.role == GlobalUserRole.ADMIN,
-                    UserModel.is_active,
+            admin_count = await self._db.scalar(
+                self._user_queries.get_count_user(
+                    role=GlobalUserRole.ADMIN,
+                    is_active=True,
                 )
             )
-            admin_count = admin_count_result.scalar()
 
             if admin_count and admin_count <= 1:
                 logger.warning(

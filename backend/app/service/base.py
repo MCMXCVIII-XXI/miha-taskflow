@@ -32,17 +32,30 @@ Example:
 from typing import Any, Literal
 
 from fastapi_cache import FastAPICache
-from sqlalchemy import Select, select
+from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import rbac_exc
-from app.models import Role as RoleModel
 from app.models import UserRole as UserRoleModel
 from app.schemas.enum import BaseRank, TaskDifficulty, TaskSphere, XPThreshold
 from app.schemas.enum import SecondaryUserRole as SecondaryUserRoleEnum
 from app.service.utils import StatsGroups, StatsTasks, StatsUsers
 
 from .exceptions import group_exc
+from .query_db import (
+    CommentQueries,
+    GroupMembershipQueries,
+    GroupQueries,
+    JoinQueries,
+    NotificationQueries,
+    RatingQueries,
+    RoleQueries,
+    TaskAssigneeQueries,
+    TaskQueries,
+    UserQueries,
+    UserRoleQueries,
+    UserSkillQueries,
+)
 
 
 class BaseService:
@@ -63,6 +76,18 @@ class BaseService:
             db: SQLAlchemy async session for database operations
         """
         self._db = db
+        self._comment_queries = CommentQueries()
+        self._group_queries = GroupQueries()
+        self._group_membership_queries = GroupMembershipQueries()
+        self._join_queries = JoinQueries()
+        self._notification_queries = NotificationQueries()
+        self._rating_queries = RatingQueries()
+        self._task_queries = TaskQueries()
+        self._task_assignee_queries = TaskAssigneeQueries()
+        self._user_queries = UserQueries()
+        self._user_role_queries = UserRoleQueries()
+        self._user_skill_queries = UserSkillQueries()
+        self._role_queries = RoleQueries()
 
     async def _invalidate(self, namespace: str, tags: list[str] | None = None) -> None:
         """Invalidate all cached entries under the given namespace and/or tags.
@@ -113,17 +138,15 @@ class GroupTaskBaseService(BaseService):
         """
         if role_name == self._role.MEMBER.value:
             return await self._db.scalar(
-                select(RoleModel.id).where(RoleModel.name == self._role.MEMBER.value)
+                self._role_queries.get_role_id(name=self._role.MEMBER.value)
             )
         elif role_name == self._role.GROUP_ADMIN.value:
             return await self._db.scalar(
-                select(RoleModel.id).where(
-                    RoleModel.name == self._role.GROUP_ADMIN.value
-                )
+                self._role_queries.get_role_id(name=self._role.GROUP_ADMIN.value)
             )
         elif role_name == self._role.ASSIGNEE.value:
             return await self._db.scalar(
-                select(RoleModel.id).where(RoleModel.name == self._role.ASSIGNEE.value)
+                self._role_queries.get_role_id(name=self._role.ASSIGNEE.value)
             )
 
     async def _build_query_for_user_role(
@@ -144,18 +167,17 @@ class GroupTaskBaseService(BaseService):
             group_exc.GroupMissingContextIdError:
                 If neither group_id nor task_id provided
         """
-        query = select(UserRoleModel).where(
-            UserRoleModel.user_id == user_id,
-            UserRoleModel.role_id == role_id,
-        )
-        if group_id is not None:
-            return query.where(UserRoleModel.group_id == group_id)
-        elif task_id is not None:
-            return query.where(UserRoleModel.task_id == task_id)
-        else:
+        if not group_id and not task_id:
             raise group_exc.GroupMissingContextIdError(
                 message="You must pass the group_id or task_id."
             )
+        query = self._user_role_queries.get_user_role(
+            user_id=user_id,
+            role_id=role_id,
+            group_id=group_id,
+            task_id=task_id,
+        )
+        return query
 
     async def _grant_role_if_not_exists(
         self,

@@ -1,5 +1,4 @@
 from fastapi import Depends
-from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import get_logger
@@ -60,7 +59,11 @@ class NotificationService(BaseService):
         ```
     """
 
-    def __init__(self, db: AsyncSession, indexer: ElasticsearchIndexer) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        indexer: ElasticsearchIndexer,
+    ) -> None:
         """Initialize NotificationService
             with database session and Elasticsearch indexer.
 
@@ -75,12 +78,11 @@ class NotificationService(BaseService):
     async def _get_notification(
         self, notification_id: int, user_id: int | None = None
     ) -> NotificationModel:
-        query = select(NotificationModel).where(
-            NotificationModel.id == notification_id,
+        result = await self._db.scalar(
+            self._notification_queries.get_notification(
+                id=notification_id, recipient_id=user_id
+            )
         )
-        if user_id:
-            query = query.where(NotificationModel.recipient_id == user_id)
-        result = await self._db.scalar(query)
         if result is None:
             raise notifi_exc.NotificationNotFoundError(message="Notification not found")
         return result
@@ -88,20 +90,19 @@ class NotificationService(BaseService):
     async def _get_notification_by_id_and_recipient(
         self, notification_id: int, user_id: int
     ) -> NotificationModel:
-        query = select(NotificationModel).where(
-            NotificationModel.id == notification_id,
-            NotificationModel.recipient_id == user_id,
+        result = await self._db.scalar(
+            self._notification_queries.get_notification(
+                id=notification_id, recipient_id=user_id
+            )
         )
-        result = await self._db.scalar(query)
         if result is None:
             raise notifi_exc.NotificationNotFoundError(message="Notification not found")
         return result
 
     async def _get_notifications(self, user_id: int) -> list[NotificationModel]:
-        query = select(NotificationModel).where(
-            NotificationModel.recipient_id == user_id
+        result = await self._db.scalars(
+            self._notification_queries.get_notification(recipient_id=user_id)
         )
-        result = await self._db.scalars(query)
         return list(result.all())
 
     async def _add_data_to_notification(
@@ -225,13 +226,9 @@ class NotificationService(BaseService):
         limit: int = 50,
         offset: int = 0,
     ) -> list[NotificationRead]:
-        query = select(NotificationModel).where(
-            NotificationModel.recipient_id == user_id
+        query = self._notification_queries.get_notification(
+            recipient_id=user_id, status=status, type=type
         )
-        if status:
-            query = query.where(NotificationModel.status == status)
-        if type:
-            query = query.where(NotificationModel.type == type)
         query = query.order_by(NotificationModel.created_at.desc())
         query = query.limit(limit).offset(offset)
         result = await self._db.scalars(query)
@@ -249,12 +246,9 @@ class NotificationService(BaseService):
 
     async def mark_all_as_read(self, user_id: int) -> int:
         result = await self._db.execute(
-            update(NotificationModel)
-            .where(
-                NotificationModel.recipient_id == user_id,
-                NotificationModel.status == NotificationStatus.UNREAD,
+            self._notification_queries.mark_all_unread_as_read_query(
+                recipient_id=user_id
             )
-            .values(status=NotificationStatus.READ)
         )
         await self._db.commit()
         return result.rowcount  # type: ignore[attr-defined]
@@ -496,4 +490,7 @@ def get_notification_service(
     db: AsyncSession = Depends(db_helper.get_session),
     indexer: ElasticsearchIndexer = Depends(get_es_indexer),
 ) -> NotificationService:
-    return NotificationService(db, indexer)
+    return NotificationService(
+        db=db,
+        indexer=indexer,
+    )

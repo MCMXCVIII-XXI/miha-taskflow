@@ -6,7 +6,6 @@ from app.core.log import get_logger
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import Comment as CommentModel
-from app.models import Task as TaskModel
 from app.models import User as UserModel
 from app.schemas import (
     CommentRead,
@@ -20,7 +19,11 @@ logger = get_logger("service.comment")
 
 
 class CommentService(BaseService):
-    def __init__(self, db: AsyncSession, indexer: ElasticsearchIndexer):
+    def __init__(
+        self,
+        db: AsyncSession,
+        indexer: ElasticsearchIndexer,
+    ):
         super().__init__(db)
         self._indexer = Indexer(indexer)
 
@@ -32,7 +35,7 @@ class CommentService(BaseService):
         parent_id: int | None = None,
     ) -> CommentRead:
         task = await self._db.scalar(
-            select(TaskModel).where(TaskModel.id == task_id, TaskModel.is_active)
+            self._task_queries.get_task(id=task_id, is_active=True)
         )
 
         if not task:
@@ -40,7 +43,7 @@ class CommentService(BaseService):
 
         if parent_id is not None:
             parent_comment = await self._db.scalar(
-                select(CommentModel).where(CommentModel.id == parent_id)
+                self._comment_queries.get_comment(id=parent_id)
             )
             if not parent_comment:
                 raise comment_exc.NotFoundParentError(
@@ -72,8 +75,7 @@ class CommentService(BaseService):
         offset: int = 0,
     ) -> list[CommentRead]:
         comments = await self._db.scalars(
-            select(CommentModel)
-            .where(CommentModel.task_id == task_id)
+            self._comment_queries.get_comment(task_id=task_id)
             .limit(limit)
             .offset(offset)
         )
@@ -84,7 +86,7 @@ class CommentService(BaseService):
         comment_id: int,
     ) -> CommentRead:
         comment = await self._db.scalar(
-            select(CommentModel).where(CommentModel.id == comment_id)
+            self._comment_queries.get_comment(id=comment_id)
         )
         if not comment:
             raise comment_exc.CommentNotFoundError(
@@ -123,7 +125,7 @@ class CommentService(BaseService):
         current_user: UserModel,
     ) -> None:
         comment = await self._db.scalar(
-            select(CommentModel).where(CommentModel.id == comment_id)
+            self._comment_queries.get_comment(id=comment_id)
         )
         if not comment:
             raise comment_exc.CommentNotFoundError(

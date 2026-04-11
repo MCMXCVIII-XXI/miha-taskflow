@@ -1,7 +1,7 @@
 from typing import Any, Literal
 
 from fastapi import Depends
-from sqlalchemy import Select, select
+from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import get_logger
@@ -10,16 +10,10 @@ from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import (
     JoinRequest as JoinRequestModel,
 )
-from app.models import (
-    Task as TaskModel,
-)
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
 from app.models import (
     UserGroupMembership as UserGroupMembershipModel,
-)
-from app.models import (
-    UserRole as UserRoleModel,
 )
 from app.schemas import (
     JoinRequestRead,
@@ -37,7 +31,6 @@ from app.schemas.enum import (
 from .base import GroupTaskBaseService
 from .exceptions import group_exc, join_request_exc
 from .notification import NotificationService, get_notification_service
-from .query_db import GroupQueries
 from .search import group_search
 from .task import TaskService, get_task_service
 from .utils import Indexer
@@ -80,11 +73,9 @@ class GroupService(GroupTaskBaseService):
         db: AsyncSession,
         indexer: ElasticsearchIndexer,
         notification_service: NotificationService,
-        group_queries: GroupQueries,
         task_service: TaskService,
     ) -> None:
         super().__init__(db)
-        self._group_queries = group_queries
         self._task_service = task_service
         self._notification = notification_service
         self._indexer = Indexer(indexer)
@@ -104,7 +95,7 @@ class GroupService(GroupTaskBaseService):
             group_exc.ForbiddenGroupAccess: Not owner or inactive group
         """
         group = await self._db.scalar(
-            self._group_queries.by_admin_group(user_id, group_id, is_active=True)
+            self._group_queries.get_group(admin_id=user_id, id=group_id, is_active=True)
         )
 
         if not group:
@@ -179,7 +170,7 @@ class GroupService(GroupTaskBaseService):
                 return await group_svc.search_groups(search=search)
             ```
         """
-        return self._group_queries.all(is_active=True)
+        return self._group_queries.get_group(is_active=True)
 
     @group_search
     async def search_my_groups(
@@ -206,7 +197,7 @@ class GroupService(GroupTaskBaseService):
         Example Usage:
             my_groups = await group_svc.search_my_groups(current_user)
         """
-        return self._group_queries.by_admin_groups(current_user.id, is_active=True)
+        return self._group_queries.get_group(admin_id=current_user.id, is_active=True)
 
     @group_search
     async def search_member_groups(
@@ -253,8 +244,8 @@ class GroupService(GroupTaskBaseService):
         """
         if group_in.name:
             name_conflict = await self._db.scalar(
-                self._group_queries.by_name(group_in.name, is_active=True).where(
-                    UserGroupModel.admin_id == current_user.id
+                self._group_queries.get_group(
+                    name=group_in.name, admin_id=current_user.id, is_active=True
                 )
             )
             if name_conflict:
@@ -312,7 +303,9 @@ class GroupService(GroupTaskBaseService):
             group_exc.MemberNotFound: No active membership
         """
         membership = await self._db.scalar(
-            self._group_queries.by_user_member(user_id, group_id, is_active=True)
+            self._group_membership_queries.get_group_membership(
+                user_id=user_id, group_id=group_id
+            )
         )
 
         if not membership:
@@ -335,20 +328,13 @@ class GroupService(GroupTaskBaseService):
     ) -> UserGroupModel | UserGroupMembershipModel:
         if role == "MEMBER":
             return await self._db.scalar(
-                select(UserGroupMembershipModel)
-                .where(
-                    UserGroupMembershipModel.user_id == user_id,
-                )
-                .limit(1)
+                self._group_membership_queries.get_group_membership(
+                    user_id=user_id
+                ).limit(1)
             )
         elif role == "GROUP_ADMIN":
             return await self._db.scalar(
-                select(UserGroupModel)
-                .where(
-                    UserGroupModel.admin_id == user_id,
-                    UserGroupModel.is_active,
-                )
-                .limit(1)
+                self._group_queries.get_group(admin_id=user_id, is_active=True).limit(1)
             )
 
     async def _cleanup_role_if_no_groups(
@@ -359,9 +345,8 @@ class GroupService(GroupTaskBaseService):
             role_id = await self._get_role_id(role)
             if role_id:
                 user_role = await self._db.scalar(
-                    select(UserRoleModel).where(
-                        UserRoleModel.user_id == user_id,
-                        UserRoleModel.role_id == role_id,
+                    self._user_role_queries.get_user_role(
+                        user_id=user_id, role_id=role_id
                     )
                 )
                 if user_role:
@@ -392,7 +377,9 @@ class GroupService(GroupTaskBaseService):
         await self._get_my_group(group_id, current_user.id)
 
         membership = await self._db.scalar(
-            self._group_queries.by_user_member(user_id, group_id, is_active=True)
+            self._group_membership_queries.get_group_membership(
+                user_id=user_id, group_id=group_id
+            )
         )
         if membership:
             logger.warning(
@@ -459,10 +446,7 @@ class GroupService(GroupTaskBaseService):
 
     async def create_join_request(self, group_id: int, user_id: int) -> None:
         join_request = await self._db.scalar(
-            select(JoinRequestModel).where(
-                JoinRequestModel.group_id == group_id,
-                JoinRequestModel.user_id == user_id,
-            )
+            self._join_queries.get_join_request(group_id=group_id, user_id=user_id)
         )
         if join_request:
             raise join_request_exc.JoinRequestAlreadyExists(
@@ -512,7 +496,7 @@ class GroupService(GroupTaskBaseService):
 
         if name:
             name_conflict = await self._db.scalar(
-                self._group_queries.by_name(name, is_active=True).where(
+                self._group_queries.get_group(name=name, is_active=True).where(
                     UserGroupModel.id != group_id
                 )
             )
@@ -562,10 +546,8 @@ class GroupService(GroupTaskBaseService):
         group = await self._get_my_group(group_id, current_user.id)
         role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
         user_role = await self._db.scalar(
-            select(UserRoleModel).where(
-                UserRoleModel.user_id == current_user.id,
-                UserRoleModel.role_id == role_id,
-                UserRoleModel.group_id == group_id,
+            self._user_role_queries.get_user_role(
+                user_id=current_user.id, role_id=role_id, group_id=group_id
             )
         )
 
@@ -590,14 +572,15 @@ class GroupService(GroupTaskBaseService):
     async def _handle_task_join_after_approval(
         self, request: JoinRequestModel, current_user: UserModel
     ) -> None:
-        task = await self._db.get(TaskModel, request.task_id)
+        task = await self._db.scalar(
+            self._task_queries.get_task(id=request.task_id, is_active=True)
+        )
         if not task:
             return
 
         is_member = await self._db.scalar(
-            select(UserGroupMembershipModel).where(
-                UserGroupMembershipModel.user_id == request.user_id,
-                UserGroupMembershipModel.group_id == task.group_id,
+            self._group_membership_queries.get_group_membership(
+                user_id=request.user_id, group_id=task.group_id
             )
         )
 
@@ -609,7 +592,9 @@ class GroupService(GroupTaskBaseService):
             await self._db.commit()
 
             if self._notification:
-                group = await self._db.get(UserGroupModel, task.group_id)
+                group = await self._db.scalar(
+                    self._group_queries.get_group(id=task.group_id, is_active=True)
+                )
                 if group:
                     await self._notification.notify_group_join(
                         requester_id=request.user_id,
@@ -628,11 +613,15 @@ class GroupService(GroupTaskBaseService):
     async def reject_join_request(
         self, request_id: int, current_user: UserModel
     ) -> None:
-        request = await self._db.get(JoinRequestModel, request_id)
+        request = await self._db.scalar(
+            self._join_queries.get_join_request(id=request_id)
+        )
         if not request:
             raise group_exc.JoinRequestNotFound(message="Join request not found")
 
-        group = await self._db.get(UserGroupModel, request.group_id)
+        group = await self._db.scalar(
+            self._group_queries.get_group(id=request.group_id, is_active=True)
+        )
 
         if not group:
             raise group_exc.GroupNotFound(message=f"Group {request.group_id} not found")
@@ -656,11 +645,15 @@ class GroupService(GroupTaskBaseService):
     async def approve_join_request(
         self, request_id: int, current_user: UserModel
     ) -> NotificationRead:
-        request = await self._db.get(JoinRequestModel, request_id)
+        request = await self._db.scalar(
+            self._join_queries.get_join_request(id=request_id)
+        )
         if not request:
             raise group_exc.JoinRequestNotFound(message="Join request not found")
 
-        group = await self._db.get(UserGroupModel, request.group_id)
+        group = await self._db.scalar(
+            self._group_queries.get_group(id=request.group_id, is_active=True)
+        )
 
         if not group:
             raise group_exc.GroupNotFound("Group not found")
@@ -706,7 +699,7 @@ class GroupService(GroupTaskBaseService):
         self, group_id: int, current_user: UserModel
     ) -> list[JoinRequestRead]:
         group = await self._db.scalar(
-            self._group_queries.by_id(group_id, is_active=True)
+            self._group_queries.get_group(id=group_id, is_active=True)
         )
         if not group:
             raise group_exc.GroupNotFound(message="Group not found")
@@ -717,19 +710,17 @@ class GroupService(GroupTaskBaseService):
             )
 
         result = await self._db.scalars(
-            select(JoinRequestModel).where(
-                JoinRequestModel.group_id == group_id,
-                JoinRequestModel.task_id.is_(None),
-                JoinRequestModel.status == JoinRequestStatus.PENDING,
+            self._join_queries.get_join_request(
+                group_id=group_id,
+                status=JoinRequestStatus.PENDING,
             )
         )
         return [JoinRequestRead.model_validate(req) for req in result.all()]
 
     async def join_group(self, group_id: int, current_user: UserModel) -> None:
         user_group_membership = await self._db.scalar(
-            select(UserGroupMembershipModel).where(
-                UserGroupMembershipModel.user_id == current_user.id,
-                UserGroupMembershipModel.group_id == group_id,
+            self._group_membership_queries.get_group_membership(
+                group_id=group_id, user_id=current_user.id
             )
         )
         if user_group_membership:
@@ -737,17 +728,16 @@ class GroupService(GroupTaskBaseService):
                 message="User is already a member of this group"
             )
         group = await self._db.scalar(
-            select(UserGroupModel).where(UserGroupModel.id == group_id)
+            self._group_queries.get_group(id=group_id, is_active=True)
         )
         if not group:
             raise group_exc.GroupNotFound(message="Group not found")
 
         existing_request = await self._db.scalar(
-            select(JoinRequestModel).where(
-                JoinRequestModel.user_id == current_user.id,
-                JoinRequestModel.group_id == group_id,
-                JoinRequestModel.task_id.is_(None),
-                JoinRequestModel.status == JoinRequestStatus.PENDING,
+            self._join_queries.get_join_request(
+                group_id=group_id,
+                user_id=current_user.id,
+                status=JoinRequestStatus.PENDING,
             )
         )
         if existing_request:
@@ -863,6 +853,5 @@ def get_group_service(
         db=db,
         indexer=indexer,
         notification_service=notification_service,
-        group_queries=GroupQueries(),
         task_service=task_service,
     )

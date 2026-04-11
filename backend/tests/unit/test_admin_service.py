@@ -19,7 +19,7 @@ class TestDeleteUser:
         self, mock_db: AsyncMock, mock_indexer
     ):
         """Test that deleting nonexistent user raises error."""
-        mock_db.get = AsyncMock(return_value=None)
+        mock_db.scalar = AsyncMock(return_value=None)
         svc = AdminService(mock_db, mock_indexer)
 
         with pytest.raises(user_exc.UserNotFound):
@@ -32,11 +32,12 @@ class TestDeleteUser:
         mock_user = MagicMock()
         mock_user.role = GlobalUserRole.ADMIN
 
-        mock_db.get = AsyncMock(return_value=mock_user)
-
-        mock_result = MagicMock()
-        mock_result.scalar.return_value = 1
-        mock_db.execute = AsyncMock(return_value=mock_result)
+        mock_db.scalar = AsyncMock(
+            side_effect=[
+                mock_user,  # First call: get_user
+                1,  # Second call: get_count_user
+            ]
+        )
 
         svc = AdminService(mock_db, mock_indexer)
 
@@ -48,17 +49,13 @@ class TestDeleteUser:
         mock_user = MagicMock()
         mock_user.role = GlobalUserRole.USER
 
-        mock_db.get = AsyncMock(return_value=mock_user)
-
-        mock_result = MagicMock()
-        mock_result.scalar.return_value = 0
-        mock_db.execute = AsyncMock(return_value=mock_result)
+        mock_db.scalar = AsyncMock(return_value=mock_user)
 
         svc = AdminService(mock_db, mock_indexer)
 
         await svc.delete_user(user_id=2, admin_id=1)
 
-        assert mock_user.is_active == False  # noqa: E712
+        assert mock_user.is_active is False
         mock_db.commit.assert_awaited_once()
 
 

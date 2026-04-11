@@ -3,12 +3,11 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Depends
-from sqlalchemy import ScalarResult, Select, select
+from sqlalchemy import ScalarResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import db_helper
 from app.models import UserSkill
-from app.models.user import User
 from app.schemas import UserSkillWithTitle
 from app.schemas.enum import TaskSphere
 
@@ -37,7 +36,10 @@ class XPService(XPBaseService):
         _frozen_days (int): Number of days skills remain frozen (60)
     """
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+    ) -> None:
         super().__init__(db)
 
     def _calculate_base_xp(self, story_points: int) -> int:
@@ -97,18 +99,12 @@ class XPService(XPBaseService):
                 break
         return level
 
-    def _build_query_leaderboard(self, sphere: str | None = None) -> Select:  # type: ignore[type-arg]
-        query = select(UserSkill).order_by(UserSkill.xp_total.desc())
-        if sphere:
-            query = query.where(UserSkill.sphere == TaskSphere(sphere))
-        return query
-
     async def _get_leaderboard(
         self, skills: list[UserSkill], limit: int
     ) -> list[dict[str, Any]]:
         leaderboard = []
         for skill in skills:
-            user = await self._db.scalar(select(User).where(User.id == skill.user_id))
+            user = await self._db.scalar(self._user_queries.get_user(id=skill.user_id))
             title = self.get_title(skill.sphere, skill.level)
             leaderboard.append(
                 {
@@ -123,13 +119,17 @@ class XPService(XPBaseService):
         return leaderboard
 
     async def get_leaderboard(
-        self, sphere: str | None = None, limit: int = 10
+        self, sphere: str | None, limit: int = 10
     ) -> list[dict[str, Any]]:
-        query = self._build_query_leaderboard(sphere).limit(limit)
-        result: ScalarResult[UserSkill] = await self._db.scalars(query)
-        skills: list[UserSkill] = list(result)
-        leaderboard = await self._get_leaderboard(skills, limit)
-        return leaderboard
+        if sphere:
+            task_sphere = TaskSphere(sphere)
+            result: ScalarResult[UserSkill] = await self._db.scalars(
+                self._user_skill_queries.get_user_skill(sphere=task_sphere).limit(limit)
+            )
+            skills: list[UserSkill] = list(result)
+            leaderboard = await self._get_leaderboard(skills, limit)
+            return leaderboard
+        return []
 
     def get_title(self, sphere: TaskSphere, level: int) -> str:
         """Dynamic title from _get_sphere_titles()"""
@@ -156,9 +156,7 @@ class XPService(XPBaseService):
     async def get_or_create_skill(self, user_id: int, sphere: TaskSphere) -> UserSkill:
         """Get or create user skill."""
         skill = await self._db.scalar(
-            select(UserSkill).where(
-                UserSkill.user_id == user_id, UserSkill.sphere == sphere
-            )
+            self._user_skill_queries.get_user_skill(sphere=sphere, user_id=user_id)
         )
 
         if not skill:
@@ -222,7 +220,7 @@ class XPService(XPBaseService):
     async def _get_user_skills_raw(self, user_id: int) -> Sequence[UserSkill]:
         """Fetch raw UserSkill records from DB."""
         result = await self._db.scalars(
-            select(UserSkill).where(UserSkill.user_id == user_id)
+            self._user_skill_queries.get_user_skill(user_id=user_id)
         )
         return result.all()
 
@@ -259,4 +257,6 @@ class XPService(XPBaseService):
 
 
 def get_xp_service(db: AsyncSession = Depends(db_helper.get_session)) -> XPService:
-    return XPService(db)
+    return XPService(
+        db=db,
+    )
