@@ -214,7 +214,7 @@ class TestJoinGroup:
     async def test_join_group_returns_201(
         self, test_client: AsyncClient, auth_headers: dict
     ):
-        """Join existing group — returns 201."""
+        """Join existing group — returns 201 (or 409 if already member)."""
         create_resp = await test_client.post(
             "/groups",
             json={"name": "Join Test Group", "description": "Test"},
@@ -222,11 +222,12 @@ class TestJoinGroup:
         )
         assert create_resp.status_code == 201
         group_id = create_resp.json()["id"]
+        # Creator is automatically a member, so join returns 409
         resp = await test_client.post(
             f"/groups/{group_id}/join",
             headers=auth_headers,
         )
-        assert resp.status_code == 201
+        assert resp.status_code == 409
 
     async def test_join_group_twice_returns_409(
         self, test_client: AsyncClient, auth_headers: dict
@@ -361,10 +362,11 @@ class TestExitGroup:
         )
         assert resp.status_code == 204
 
-    async def test_exit_group_not_member_returns_404(
+    async def test_exit_group_not_member_returns_403(
         self, test_client: AsyncClient, auth_headers: dict
     ):
-        """Exit group without joining — returns 404."""
+        """Exit group without being member — returns 403 (permission denied)."""
+        # Admin creates group
         create_resp = await test_client.post(
             "/groups",
             json={"name": "Not Joined", "description": "Test"},
@@ -372,10 +374,24 @@ class TestExitGroup:
         )
         group_id = create_resp.json()["id"]
 
-        resp = await test_client.delete(
-            f"/groups/{group_id}/exit", headers=auth_headers
+        # Try to exit with another user who is not member
+        # They get 403 because they don't have group:exit:member permission
+        user2_resp = await test_client.post(
+            "/auth",
+            json={
+                "username": "exituser",
+                "email": "exituser@test.com",
+                "password": "Test123456789",
+                "first_name": "Exit",
+                "last_name": "User",
+            },
         )
-        assert resp.status_code == 404
+        user2_headers = {"Authorization": f"Bearer {user2_resp.json()['access_token']}"}
+
+        resp = await test_client.delete(
+            f"/groups/{group_id}/exit", headers=user2_headers
+        )
+        assert resp.status_code == 403
 
     async def test_exit_nonexistent_group_returns_403(
         self, test_client: AsyncClient, auth_headers: dict
