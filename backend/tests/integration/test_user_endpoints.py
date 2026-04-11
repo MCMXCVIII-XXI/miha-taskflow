@@ -7,35 +7,49 @@ from tests.conftest import register_user
 
 
 class TestGetUser:
-    """Test GET /users/{user_id} endpoint.
+    """Test GET /users/{user_id} endpoint."""
 
-    Note: This endpoint requires 'user:view:any' permission which is not
-    seeded for basic USER role in tests. Skipping for now.
-    """
-
-    @pytest.mark.skip(reason="Requires user:view:any permission not seeded in tests")
     async def test_get_user_returns_200(
-        self, test_client: AsyncClient, auth_headers: dict
+        self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Get specific user profile — returns 200."""
-        pass
+        """Get specific user profile — returns 200 (admin only)."""
+        # Admin can view any user profile
+        # First create a target user
+        target_resp = await test_client.post(
+            "/auth",
+            json={
+                "username": "targetuser",
+                "email": "target@test.com",
+                "password": "Test123456789",
+                "first_name": "Target",
+                "last_name": "User",
+            },
+        )
+        target_token = target_resp.json()["access_token"]
+        target_headers = {"Authorization": f"Bearer {target_token}"}
 
-    @pytest.mark.skip(reason="Requires user:view:any permission not seeded in tests")
+        # Get target user ID via /users/me
+        me_resp = await test_client.get("/users/me", headers=target_headers)
+        target_id = me_resp.json()["id"]
+
+        # Admin gets target user profile
+        resp = await test_client.get(f"/users/{target_id}", headers=admin_auth_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "username" in data
+        assert "id" in data
+
     async def test_get_user_not_found_returns_404(
-        self, test_client: AsyncClient, auth_headers: dict
+        self, test_client: AsyncClient, admin_auth_headers: dict
     ):
         """Get non-existent user — returns 404."""
-        pass
-
-    async def test_get_user_without_auth_returns_404(self, test_client: AsyncClient):
-        """Get user without auth — returns 404 (route conflict with /users endpoint)."""
-        resp = await test_client.get("/users/1")
+        resp = await test_client.get("/users/999999", headers=admin_auth_headers)
         assert resp.status_code == 404
 
-    async def test_get_user_without_auth_returns_404(self, test_client: AsyncClient):
-        """Get user without auth — returns 404 (route conflict with /users endpoint)."""
+    async def test_get_user_without_auth_returns_401(self, test_client: AsyncClient):
+        """Get user without auth — returns 401."""
         resp = await test_client.get("/users/1")
-        assert resp.status_code == 404
+        assert resp.status_code == 401
 
 
 class TestGetMyProfile:
