@@ -68,6 +68,7 @@ class UserSkill(Base, IdPkMixin):
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
     sphere: Mapped[TaskSphere] = mapped_column(Enum(TaskSphere), index=True)
     xp_total: Mapped[int] = mapped_column(Integer, default=0)
+    xp_today: Mapped[int] = mapped_column(Integer, default=0)
     level: Mapped[int] = mapped_column(Integer, default=1)
     streak: Mapped[int] = mapped_column(Integer, default=0)
     last_xp_date: Mapped[datetime | None] = mapped_column(
