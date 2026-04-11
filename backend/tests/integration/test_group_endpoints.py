@@ -485,3 +485,180 @@ class TestGroupJoinRequests:
             headers=auth_headers,
         )
         assert response.status_code in [200, 404]
+
+
+class TestApproveJoinRequest:
+    """Test group approve join request endpoint."""
+
+    async def test_approve_join_request_returns_200(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Approve join request — returns 200 with notification."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        # Admin creates group with REQUEST join policy
+        group_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Approve Group_{unique_id}",
+                "description": "Test",
+                "join_policy": "request",
+            },
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        # Create another user who will request to join
+        user2_resp = await test_client.post(
+            "/auth",
+            json={
+                "username": f"user2_{unique_id}",
+                "email": f"user2_{unique_id}@test.com",
+                "password": "Test123456789",
+                "first_name": "User2",
+                "last_name": "Test",
+            },
+        )
+        user2_token = user2_resp.json()["access_token"]
+
+        # User2 requests to join (should create join request since policy is REQUEST)
+        join_resp = await test_client.post(
+            f"/groups/{group_id}/join",
+            headers={"Authorization": f"Bearer {user2_token}"},
+        )
+        assert join_resp.status_code == 201
+
+        # Get join requests to find request_id
+        requests_resp = await test_client.get(
+            f"/groups/{group_id}/join-requests",
+            headers=auth_headers,
+        )
+        requests = requests_resp.json()
+        assert len(requests) > 0, "No join requests found"
+        request_id = requests[0]["id"]
+
+        # Admin approves join request
+        response = await test_client.post(
+            f"/groups/{group_id}/join-requests/{request_id}/approve",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "id" in data
+
+    async def test_approve_join_request_not_found_returns_403(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Approve non-existent join request without group ownership — returns 403."""
+        response = await test_client.post(
+            "/groups/1/join-requests/999999/approve",
+            headers=auth_headers,
+        )
+        assert response.status_code == 403
+
+    async def test_approve_join_request_wrong_group_returns_404(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Approve request from different group — returns 404."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        # Admin creates two groups with REQUEST policy
+        group1_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Group1_{unique_id}",
+                "description": "Test",
+                "join_policy": "request",
+            },
+            headers=auth_headers,
+        )
+        group1_id = group1_resp.json()["id"]
+
+        group2_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Group2_{unique_id}",
+                "description": "Test",
+                "join_policy": "request",
+            },
+            headers=auth_headers,
+        )
+        group2_id = group2_resp.json()["id"]
+
+        # Create user who joins group1
+        user2_resp = await test_client.post(
+            "/auth",
+            json={
+                "username": f"user2_{unique_id}",
+                "email": f"user2_{unique_id}@test.com",
+                "password": "Test123456789",
+                "first_name": "User2",
+                "last_name": "Test",
+            },
+        )
+        user2_token = user2_resp.json()["access_token"]
+
+        # User joins group1 (creates join request)
+        await test_client.post(
+            f"/groups/{group1_id}/join",
+            headers={"Authorization": f"Bearer {user2_token}"},
+        )
+
+        # Get request_id from group1
+        requests_resp = await test_client.get(
+            f"/groups/{group1_id}/join-requests",
+            headers=auth_headers,
+        )
+        request_id = requests_resp.json()[0]["id"]
+
+        # Try to approve with group2 — should fail
+        response = await test_client.post(
+            f"/groups/{group2_id}/join-requests/{request_id}/approve",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
+
+    async def test_approve_join_request_without_auth_returns_401(
+        self, test_client: AsyncClient
+    ):
+        """Approve join request without auth — returns 401."""
+        response = await test_client.post("/groups/1/join-requests/1/approve")
+        assert response.status_code == 401
+
+    async def test_approve_join_request_not_admin_returns_403(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Non-admin approves join request — returns 403."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        # Admin creates group with REQUEST policy
+        group_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Group_{unique_id}",
+                "description": "Test",
+                "join_policy": "request",
+            },
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        # Create regular user
+        user2_resp = await test_client.post(
+            "/auth",
+            json={
+                "username": f"user2_{unique_id}",
+                "email": f"user2_{unique_id}@test.com",
+                "password": "Test123456789",
+                "first_name": "User2",
+                "last_name": "Test",
+            },
+        )
+        user2_headers = {"Authorization": f"Bearer {user2_resp.json()['access_token']}"}
+
+        # Try to approve as non-admin
+        response = await test_client.post(
+            f"/groups/{group_id}/join-requests/1/approve",
+            headers=user2_headers,
+        )
+        assert response.status_code == 403
