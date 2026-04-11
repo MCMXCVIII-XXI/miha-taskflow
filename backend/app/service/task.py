@@ -186,6 +186,10 @@ class TaskService(GroupTaskBaseService):
         self._db.add(task)
         self._db.add(user_role)
         await self._db.flush()
+
+        assignee = TaskAssignee(user_id=current_user.id, task_id=task.id)
+        self._db.add(assignee)
+
         await self._db.commit()
         await self._db.refresh(task)
 
