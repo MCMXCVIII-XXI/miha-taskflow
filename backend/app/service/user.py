@@ -137,14 +137,15 @@ class UserService(BaseService):
         return UserRead.model_validate(user)
 
     async def get_user(self, user_id: int) -> dict[str, Any]:
-        user = self._user_queries.get_user(id=user_id, is_active=True)
-        top_skills = await self._xp_service.get_top_skills(user_id, 3)
+        user = await self._db.scalar(
+            self._user_queries.get_user(id=user_id, is_active=True)
+        )
         if not user:
             raise user_exc.UserNotFound(message=f"User with id {user_id} not found")
-        if not top_skills:
-            raise level_exc.LevelNotFoundError(
-                message=f"Top skills not found for user with id {user_id}"
-            )
+
+        top_skills = await self._xp_service.get_top_skills(user_id, 3)
+        top_skills = top_skills if top_skills else []
+
         return {**UserRead.model_validate(user).model_dump(), "top_skills": top_skills}
 
     @user_search
