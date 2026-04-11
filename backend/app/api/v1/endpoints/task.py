@@ -104,7 +104,7 @@ async def reject_task_join_request(
     svc: TaskService = Depends(get_task_service),
 ) -> NotificationRead:
     """Reject a join request for a task."""
-    return await svc.reject_task_join_request(request_id, current_user)
+    return await svc.reject_task_join_request(task_id, request_id, current_user)
 
 
 @router.get(
