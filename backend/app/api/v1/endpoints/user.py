@@ -19,9 +19,7 @@ async def get_my_profile(
     return await svc.get_my_profile(current_user=current_user)
 
 
-@router.get(
-    "/users/{user_id}", response_model=dict[str, Any], status_code=status.HTTP_200_OK
-)
+@router.get("/{user_id}", response_model=dict[str, Any], status_code=status.HTTP_200_OK)
 async def get_user(
     user_id: int,
     current_user: UserModel = Depends(require_permissions_db("user:view:any")),
