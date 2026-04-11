@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.core.exceptions import security_exc
-from app.core.permission import require_permissions_db
+from app.core.permission import check_permission, require_permissions_db
 
 
 class TestRequirePermissionsDb:
@@ -16,8 +16,6 @@ class TestRequirePermissionsDb:
 
         async def mock_get_permissions(user_id: int, db: AsyncMock):
             return {"group:create:own", "task:view:any"}
-
-        from app.core.permission import check_permission
 
         original_get = check_permission.get_user_permissions_db
         check_permission.get_user_permissions_db = mock_get_permissions
@@ -39,8 +37,6 @@ class TestRequirePermissionsDb:
         async def mock_get_permissions(user_id: int, db: AsyncMock):
             return {"task:view:any"}
 
-        from app.core.permission import check_permission
-
         original_get = check_permission.get_user_permissions_db
         check_permission.get_user_permissions_db = mock_get_permissions
 
@@ -61,8 +57,6 @@ class TestRequirePermissionsDb:
         async def mock_get_permissions(user_id: int, db: AsyncMock):
             return set()
 
-        from app.core.permission import check_permission
-
         original_get = check_permission.get_user_permissions_db
         check_permission.get_user_permissions_db = mock_get_permissions
 
@@ -82,8 +76,6 @@ class TestRequirePermissionsDb:
 
         async def mock_get_permissions(user_id: int, db: AsyncMock):
             return {"group:create:own", "group:view:own", "task:create:own"}
-
-        from app.core.permission import check_permission
 
         original_get = check_permission.get_user_permissions_db
         check_permission.get_user_permissions_db = mock_get_permissions
