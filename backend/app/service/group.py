@@ -263,6 +263,8 @@ class GroupService(GroupTaskBaseService):
             visibility=group_in.visibility,
             parent_group_id=group_in.parent_group_id,
             level=1 if group_in.parent_group_id is None else 2,
+            invite_policy=group_in.invite_policy,
+            join_policy=group_in.join_policy,
         )
         self._db.add(group)
         await self._db.flush()
@@ -643,13 +645,18 @@ class GroupService(GroupTaskBaseService):
             )
 
     async def approve_join_request(
-        self, request_id: int, current_user: UserModel
+        self, group_id: int, request_id: int, current_user: UserModel
     ) -> NotificationRead:
         request = await self._db.scalar(
             self._join_queries.get_join_request(id=request_id)
         )
         if not request:
             raise group_exc.JoinRequestNotFound(message="Join request not found")
+
+        if request.group_id != group_id:
+            raise group_exc.JoinRequestNotFound(
+                message="Join request does not belong to this group"
+            )
 
         group = await self._db.scalar(
             self._group_queries.get_group(id=request.group_id, is_active=True)
