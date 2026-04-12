@@ -7,7 +7,6 @@ from unittest.mock import AsyncMock
 import jwt
 from fastapi import Depends
 from fastapi_cache import FastAPICache
-from fastapi_cache.backends.inmemory import InMemoryBackend
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -199,7 +198,9 @@ async def create_test_client(session_factory) -> AsyncClient:
         pass
 
     cache_module.init_cache = _noop_init_cache  # type: ignore[assignment]
-    FastAPICache.init(InMemoryBackend(), prefix="test")
+    from tests.mock_cache import MockRedisBackend
+
+    FastAPICache.init(MockRedisBackend(), prefix="fastapi-cache")
 
     transport = ASGITransport(app=app)
     return AsyncClient(transport=transport, base_url="http://test")
