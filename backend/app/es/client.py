@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 from elasticsearch import AsyncElasticsearch
+from elasticsearch.dsl import async_connections
 
 from app.core.config import ElasticsearchSettings, elasticsearch_settings
 
@@ -31,6 +32,7 @@ class ElasticsearchHelper:
     def __init__(self, settings: ElasticsearchSettings):
         self._settings = settings
         self._client: AsyncElasticsearch | None = None
+        self._auto_setup_dsl = True
 
     async def _health_check(self) -> None:
         """Validates Elasticsearch connection health.
@@ -50,6 +52,17 @@ class ElasticsearchHelper:
             raise es_exc.ElasticsearchConnectionError(
                 message="Elasticsearch connection error"
             )
+
+    async def _setup_dsl_connection(self) -> None:
+        """Auto-setup elasticsearch-dsl connection."""
+
+        async_connections.create_connection(
+            alias="default",
+            hosts=[str(url) for url in self._settings.URL],
+            request_timeout=self._settings.REQUEST_TIMEOUT,
+            max_retries=self._settings.MAX_RETRIES,
+            retry_on_timeout=self._settings.RETRY_ON_TIMEOUT,
+        )
 
     async def dispose(self) -> None:
         """Closes Elasticsearch client connection and frees resources.
@@ -76,6 +89,9 @@ class ElasticsearchHelper:
         if self._client is None:
             self._client = self._create_client()
             await self._health_check()
+
+            if self._auto_setup_dsl:
+                await self._setup_dsl_connection()
         elif not await self._client.ping():
             self._client = self._create_client()
             await self._health_check()
