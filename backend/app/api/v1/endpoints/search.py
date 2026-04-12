@@ -1,7 +1,9 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query
+from fastapi_cache.decorator import cache
 
+from app.cache import search_key
 from app.core.permission import require_permissions_db
 from app.models import User as UserModel
 from app.service.search import ESSearchService, get_es_search_service
@@ -10,6 +12,7 @@ router = APIRouter()
 
 
 @router.get("/tasks/search")
+@cache(expire=300, key_builder=search_key)
 async def search_tasks(
     q: str = Query(default=""),
     status: str | None = Query(default=None),
@@ -35,6 +38,7 @@ async def search_tasks(
 
 
 @router.get("/users/search")
+@cache(expire=300, key_builder=search_key)
 async def search_users(
     q: str = Query(default=""),
     role: str | None = Query(default=None),
@@ -58,6 +62,7 @@ async def search_users(
 
 
 @router.get("/groups/search")
+@cache(expire=300, key_builder=search_key)
 async def search_groups(
     q: str = Query(default=""),
     visibility: str | None = Query(default=None),
@@ -81,6 +86,7 @@ async def search_groups(
 
 
 @router.get("/comments/search")
+@cache(expire=300, key_builder=search_key)
 async def search_comments(
     q: str = Query(default=""),
     task_id: int | None = Query(default=None),
@@ -104,6 +110,7 @@ async def search_comments(
 
 
 @router.get("/notifications/search")
+@cache(expire=300, key_builder=search_key)
 async def search_notifications(
     q: str = Query(default=""),
     user_id: int | None = Query(default=None),

@@ -1,4 +1,13 @@
 from .cache import init_cache
-from .name_key import item_key, rbac_key
+from .key_builder import KeyBuilder, item_key, kb, rbac_key, search_key
 
-__all__ = ["init_cache", "item_key", "rbac_key"]
+__all__ = [
+    "CacheConnectionError",
+    "CacheNotFoundError",
+    "KeyBuilder",
+    "init_cache",
+    "item_key",
+    "kb",
+    "rbac_key",
+    "search_key",
+]

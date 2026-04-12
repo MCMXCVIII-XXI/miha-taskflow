@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, Query, status
+from fastapi_cache.decorator import cache
 
+from app.cache import kb
 from app.core.permission import require_permissions_db
 from app.models import User as UserModel
 from app.schemas import (
@@ -16,6 +18,7 @@ router = APIRouter()
 
 
 @router.get("", response_model=list[UserGroupRead], status_code=status.HTTP_200_OK)
+@cache(expire=600, key_builder=kb.search_key_builder)
 async def search_groups(
     search: UserGroupSearch = Depends(),
     sort: UserGroupSearch = Depends(),
@@ -29,6 +32,7 @@ async def search_groups(
 
 
 @router.get("/me", response_model=list[UserGroupRead], status_code=status.HTTP_200_OK)
+@cache(expire=600, key_builder=kb.search_key_builder)
 async def search_my_groups(
     search: UserGroupSearch = Depends(),
     sort: UserGroupSearch = Depends(),
@@ -46,6 +50,7 @@ async def search_my_groups(
 @router.get(
     "/members", response_model=list[UserGroupRead], status_code=status.HTTP_200_OK
 )
+@cache(expire=600, key_builder=kb.search_key_builder)
 async def search_member_groups(
     search: UserGroupSearch = Depends(),
     sort: UserGroupSearch = Depends(),
@@ -71,6 +76,7 @@ async def create_my_group(
 
 
 @router.get("/{group_id}", response_model=UserGroupRead, status_code=status.HTTP_200_OK)
+@cache(expire=1800, key_builder=kb.id_key_builder("group_id"))
 async def get_my_group(
     group_id: int,
     current_user: UserModel = Depends(require_permissions_db("group:view:own")),
