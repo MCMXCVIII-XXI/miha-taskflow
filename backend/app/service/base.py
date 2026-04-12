@@ -35,6 +35,7 @@ from fastapi_cache import FastAPICache
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.cache import KeyBuilder
 from app.core.exceptions import rbac_exc
 from app.models import UserRole as UserRoleModel
 from app.schemas.enum import BaseRank, TaskDifficulty, TaskSphere, XPThreshold
@@ -89,20 +90,10 @@ class BaseService:
         self._user_skill_queries = UserSkillQueries()
         self._role_queries = RoleQueries()
 
-    async def _invalidate(self, namespace: str, tags: list[str] | None = None) -> None:
-        """Invalidate all cached entries under the given namespace and/or tags.
-
-        Args:
-            namespace: Cache namespace to clear
-            tags: Optional list of tags to invalidate
-        """
-        await FastAPICache.clear(namespace=namespace)
-        # TODO: Implement tag-based invalidation when FastAPI-Cache supports it
-        # For now, we only support namespace invalidation
-        if tags:
-            # In a real implementation, we would invalidate by tags
-            # This is a placeholder for future enhancement
-            pass
+    async def _invalidate(self, namespace: str) -> None:
+        """Invalidate cache with automatic namespace normalization."""
+        normalized_ns = KeyBuilder._normalize_namespace(namespace)
+        await FastAPICache.clear(namespace=normalized_ns)
 
 
 class GroupTaskBaseService(BaseService):
