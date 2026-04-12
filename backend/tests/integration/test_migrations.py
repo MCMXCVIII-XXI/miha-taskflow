@@ -89,7 +89,8 @@ class TestColumnTypes:
                 text(
                     "SELECT data_type, character_maximum_length "
                     "FROM information_schema.columns "
-                    "WHERE table_name = 'users' "
+                    "WHERE table_schema = 'public' "
+                    "AND table_name = 'users' "
                     "AND column_name = 'username'"
                 )
             )
@@ -108,7 +109,8 @@ class TestColumnTypes:
                 text(
                     "SELECT data_type "
                     "FROM information_schema.columns "
-                    "WHERE table_name = 'tasks' "
+                    "WHERE table_schema = 'public' "
+                    "AND table_name = 'tasks' "
                     "AND column_name = 'is_active'"
                 )
             )
@@ -131,7 +133,8 @@ class TestForeignKeys:
                     "FROM information_schema.table_constraints tc "
                     "JOIN information_schema.key_column_usage kcu "
                     "ON tc.constraint_name = kcu.constraint_name "
-                    "WHERE tc.table_name = 'tasks' "
+                    "WHERE tc.table_schema = 'public' "
+                    "AND tc.table_name = 'tasks' "
                     "AND tc.constraint_type = 'FOREIGN KEY' "
                     "AND kcu.column_name = 'group_id'"
                 )
@@ -151,7 +154,8 @@ class TestForeignKeys:
                     "FROM information_schema.table_constraints tc "
                     "JOIN information_schema.key_column_usage kcu "
                     "ON tc.constraint_name = kcu.constraint_name "
-                    "WHERE tc.table_name = 'user_roles' "
+                    "WHERE tc.table_schema = 'public' "
+                    "AND tc.table_name = 'user_roles' "
                     "AND tc.constraint_type = 'FOREIGN KEY' "
                     "AND kcu.column_name = 'user_id'"
                 )
@@ -182,29 +186,32 @@ class TestIndexes:
             assert count > 0, "users.username should have index"
 
     async def test_tasks_group_id_has_index(self, test_engine: AsyncEngine):
-        """tasks.group_id should have index."""
+        """tasks.group_id should have an index on the column."""
         if not is_postgresql(test_engine):
             pytest.skip("Test is only for PostgreSQL")
 
         async with test_engine.connect() as conn:
             result = await conn.execute(
                 text(
-                    "SELECT COUNT(*) "
+                    "SELECT indexdef "
                     "FROM pg_indexes "
                     "WHERE schemaname = 'public' "
                     "AND tablename = 'tasks' "
                     "AND indexdef LIKE '%group_id%'"
                 )
             )
-            count = result.scalar()
-            assert count > 0, "tasks.group_id should have index"
+            indexdef = result.scalar()
+            assert indexdef is not None, "tasks.group_id must have index"
+            assert "group_id" in indexdef, (
+                f"Index must be on group_id column, got: {indexdef}"
+            )
 
 
 class TestConstraints:
     """Verify constraints exist (only PostgreSQL)."""
 
     async def test_users_username_is_unique(self, test_engine: AsyncEngine):
-        """users.username should have unique index/constraint."""
+        """users.username should have unique index (via pg_indexes)."""
         if not is_postgresql(test_engine):
             pytest.skip("Test is only for PostgreSQL")
 
@@ -223,7 +230,7 @@ class TestConstraints:
             assert count > 0, "users.username must have UNIQUE index"
 
     async def test_users_email_is_unique(self, test_engine: AsyncEngine):
-        """users.email should have unique index/constraint."""
+        """users.email should have unique index (via pg_indexes)."""
         if not is_postgresql(test_engine):
             pytest.skip("Test is only for PostgreSQL")
 
@@ -263,8 +270,8 @@ class TestConstraints:
 class TestDefaultValues:
     """Verify default values (only PostgreSQL)."""
 
-    async def test_users_is_active_column_not_null(self, test_engine: AsyncEngine):
-        """users.is_active should be NOT NULL (implied default=False)."""
+    async def test_users_is_active_not_null(self, test_engine: AsyncEngine):
+        """users.is_active should be NOT NULL."""
         if not is_postgresql(test_engine):
             pytest.skip("Test is only for PostgreSQL")
 
@@ -273,7 +280,8 @@ class TestDefaultValues:
                 text(
                     "SELECT is_nullable "
                     "FROM information_schema.columns "
-                    "WHERE table_name = 'users' "
+                    "WHERE table_schema = 'public' "
+                    "AND table_name = 'users' "
                     "AND column_name = 'is_active'"
                 )
             )
