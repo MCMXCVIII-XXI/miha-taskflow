@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, Query, status
+from fastapi_cache.decorator import cache
 
+from app.cache import kb
 from app.core.permission import require_permissions_db
 from app.models import User as UserModel
 from app.schemas import (
@@ -36,6 +38,7 @@ async def create_task_for_group(
 
 
 @router.get("", response_model=list[TaskRead], status_code=status.HTTP_200_OK)
+@cache(expire=600, key_builder=kb.search_key_builder)
 async def search_tasks(
     search: TaskSearch = Depends(),
     sort: TaskSearch = Depends(),
@@ -49,6 +52,7 @@ async def search_tasks(
 
 
 @router.get("/me", response_model=list[TaskRead], status_code=status.HTTP_200_OK)
+@cache(expire=600, key_builder=kb.search_key_builder)
 async def search_my_tasks(
     search: TaskSearch = Depends(),
     sort: TaskSearch = Depends(),
@@ -110,6 +114,7 @@ async def reject_task_join_request(
 @router.get(
     "/groups/{group_id}", response_model=list[TaskRead], status_code=status.HTTP_200_OK
 )
+@cache(expire=600, key_builder=kb.search_key_builder)
 async def search_group_tasks(
     group_id: int,
     search: TaskSearch = Depends(),
@@ -131,6 +136,7 @@ async def search_group_tasks(
 
 
 @router.get("/assigned", response_model=list[TaskRead], status_code=status.HTTP_200_OK)
+@cache(expire=600, key_builder=kb.search_key_builder)
 async def search_assigned_tasks(
     search: TaskSearch = Depends(),
     sort: TaskSearch = Depends(),

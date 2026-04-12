@@ -1,7 +1,9 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, status
+from fastapi_cache.decorator import cache
 
+from app.cache import kb
 from app.core.permission import require_permissions_db
 from app.models import User as UserModel
 from app.schemas import UserRead, UserSearch, UserUpdate
@@ -11,6 +13,7 @@ router = APIRouter()
 
 
 @router.get("/me", response_model=UserRead, status_code=status.HTTP_200_OK)
+@cache(expire=1800, key_builder=kb.search_key_builder)
 async def get_my_profile(
     current_user: UserModel = Depends(require_permissions_db("user:view:own")),
     svc: UserService = Depends(get_user_service),
@@ -20,6 +23,7 @@ async def get_my_profile(
 
 
 @router.get("/{user_id}", response_model=dict[str, Any], status_code=status.HTTP_200_OK)
+@cache(expire=1800, key_builder=kb.id_key_builder("user_id"))
 async def get_user(
     user_id: int,
     current_user: UserModel = Depends(require_permissions_db("user:view:any")),
@@ -30,6 +34,7 @@ async def get_user(
 
 
 @router.get("", response_model=list[UserRead], status_code=status.HTTP_200_OK)
+@cache(expire=600, key_builder=kb.search_key_builder)
 async def search_users(
     search: UserSearch = Depends(),
     sort: UserSearch = Depends(),
