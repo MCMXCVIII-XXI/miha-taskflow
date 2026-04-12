@@ -107,7 +107,7 @@ services:
     stdin_open: true
 
   elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.1
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.3.3
     environment:
       - node.name=es01
       - discovery.type=single-node

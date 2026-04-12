@@ -65,30 +65,11 @@ class UserDoc(AsyncDocument):
             created_at=user.created_at,
             updated_at=user.updated_at,
             is_active=getattr(user, "is_active", True),
-            notification_ids=[
-                str(n.id)
-                for n in (
-                    getattr(user, "notifications_sent", [])
-                    + getattr(user, "notifications_received", [])
-                )
-                if n and n.id
-            ],
-            assigned_task_ids=[
-                str(ta.task_id)
-                for ta in getattr(user, "assigned_tasks", [])
-                if ta and ta.task_id
-            ],
-            comment_ids=[
-                str(c.id) for c in getattr(user, "comments", []) if c and c.id
-            ],
-            group_ids=[
-                str(gm.group_id)
-                for gm in getattr(user, "group_memberships", [])
-                if gm and gm.group_id
-            ],
-            admin_group_ids=[
-                str(g.id) for g in getattr(user, "admin_groups", []) if g and g.id
-            ],
+            notification_ids=[],
+            assigned_task_ids=[],
+            comment_ids=[],
+            group_ids=[],
+            admin_group_ids=[],
             member_group_ids=cls._get_member_groups(user),
         )
 

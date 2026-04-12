@@ -423,10 +423,10 @@ class TestTaskMemberManagement:
 
 
 class TestJoinTask:
-    async def test_join_task_returns_201(
+    async def test_join_task_returns_201_or_409(
         self, test_client: AsyncClient, auth_headers: dict
     ):
-        """Join task — returns 201."""
+        """Join task — returns 201 (or 409 if already assignee)."""
         unique_id = str(uuid.uuid4())[:8]
         group_resp = await test_client.post(
             "/groups",
@@ -447,8 +447,9 @@ class TestJoinTask:
         )
         task_id = task_resp.json()["id"]
 
+        # Creator is automatically an assignee, so join returns 409
         resp = await test_client.post(f"/tasks/{task_id}/join", headers=auth_headers)
-        assert resp.status_code == 201
+        assert resp.status_code == 409
 
     async def test_join_task_twice_returns_409(
         self, test_client: AsyncClient, auth_headers: dict
@@ -511,7 +512,7 @@ class TestExitTask:
     async def test_exit_task_not_member_returns_403(
         self, test_client: AsyncClient, auth_headers: dict
     ):
-        """Exit task without joining — returns 403."""
+        """Exit task without being assignee — returns 403."""
         unique_id = str(uuid.uuid4())[:8]
         group_resp = await test_client.post(
             "/groups",
@@ -531,7 +532,20 @@ class TestExitTask:
         )
         task_id = task_resp.json()["id"]
 
-        resp = await test_client.delete(f"/tasks/{task_id}/exit", headers=auth_headers)
+        # Try to exit with a different user who is not an assignee
+        user2_resp = await test_client.post(
+            "/auth",
+            json={
+                "username": f"exituser_{unique_id}",
+                "email": f"exituser_{unique_id}@test.com",
+                "password": "Test123456789",
+                "first_name": "Exit",
+                "last_name": "User",
+            },
+        )
+        user2_headers = {"Authorization": f"Bearer {user2_resp.json()['access_token']}"}
+
+        resp = await test_client.delete(f"/tasks/{task_id}/exit", headers=user2_headers)
         assert resp.status_code == 403
 
 

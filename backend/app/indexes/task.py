@@ -63,18 +63,12 @@ class TaskDoc(AsyncDocument):
         group_info = getattr(task, "group", None)
         group_name = group_info.name if group_info else ""
 
-        assignees = getattr(task, "assignees", [])
-        assignee_ids = [a.user_id for a in assignees] if assignees else []
-
-        comments = getattr(task, "comments", [])
-        comment_count = len(comments) if comments else 0
-
         spheres_data = task.spheres or []
         spheres = []
         for s in spheres_data:
             if isinstance(s, dict) and "sphere" in s:
                 spheres.append(s["sphere"])
-            elif hasattr(s, "sphere"):  # Если это объект модели
+            elif hasattr(s, "sphere"):
                 spheres.append(s.sphere)
 
         return cls(
@@ -86,11 +80,11 @@ class TaskDoc(AsyncDocument):
             difficulty=str(task.difficulty.value) if task.difficulty else None,
             visibility=task.visibility.value,
             group_id=int(task.group_id) if task.group_id else None,
-            assignee_ids=assignee_ids,
+            assignee_ids=[],
             created_at=task.created_at,
             updated_at=task.updated_at,
             group_name=group_name,
-            comment_count=comment_count,
+            comment_count=0,
             group_admin_username=getattr(group_info, "admin_username", "")
             if group_info
             else "",

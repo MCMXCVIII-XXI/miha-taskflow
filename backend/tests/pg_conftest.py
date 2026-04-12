@@ -11,16 +11,21 @@ import jwt
 import pytest
 from fastapi import Depends
 from fastapi_cache import FastAPICache
-from fastapi_cache.backends.inmemory import InMemoryBackend
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
+from testcontainers.elasticsearch import ElasticSearchContainer
 from testcontainers.postgres import PostgresContainer
 
 import app.cache as cache_module
 from app.db import db_helper
-from app.es import ElasticsearchIndexer, es_helper, get_es_indexer, get_es_search
+from app.es import (
+    ElasticsearchIndexer,
+    es_helper,
+    get_es_indexer,
+    get_es_search,
+)
 from app.models import User
 from app.schemas.enum import GlobalUserRole
 from app.service.notification import NotificationService, get_notification_service
@@ -39,6 +44,21 @@ from tests.base_conftest import (
 def postgres_container():
     """Start PostgreSQL container for test session."""
     container = PostgresContainer("postgres:16-alpine")
+    container.start()
+    yield container
+    container.stop()
+
+
+@pytest.fixture(scope="session")
+def es_container():
+    """Start Elasticsearch container for test session (available for manual testing)."""
+    container = ElasticSearchContainer(
+        "docker.elastic.co/elasticsearch/elasticsearch:9.3.3",
+        port=9200,
+    )
+    container.with_env("discovery.type", "single-node")
+    container.with_env("xpack.security.enabled", "false")
+    container.with_env("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
     container.start()
     yield container
     container.stop()
@@ -108,7 +128,9 @@ async def test_client(session_factory):
 
     original_init_cache = cache_module.init_cache
 
-    FastAPICache.init(InMemoryBackend(), prefix="test")
+    from tests.mock_cache import MockRedisBackend
+
+    FastAPICache.init(MockRedisBackend(), prefix="fastapi-cache")
 
     def override_get_notification_service(
         db: AsyncSession = Depends(db_helper.get_session),

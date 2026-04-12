@@ -1,4 +1,4 @@
-.PHONY: dev-up backend-up logs logs-backend test-backend clean down status lint test dev help cache-up db-up infra-up format lint-all test-pg test-coverage test-pg-coverage
+.PHONY: dev-up backend-up logs logs-backend test-backend clean down status lint test dev help cache-up db-up es-up infra-up format lint-all test-pg test-coverage test-pg-coverage
 
 dev-up: ## Start full Docker project (down + up --build)
 	docker-compose down -v
@@ -13,9 +13,13 @@ cache-up: ## Start cache only
 db-up: ## Start database only
 	docker-compose up db -d --build
 
-infra-up: ## Start infrastructure (cache + db)
+es-up: ## Start elasticsearch only
+	docker-compose up elasticsearch -d --build
+
+infra-up: ## Start infrastructure (cache + db + es)
 	make cache-up
 	make db-up
+	make es-up
 
 logs: ## Show all services logs (follow)
 	docker-compose logs -f
