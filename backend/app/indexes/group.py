@@ -68,12 +68,10 @@ class UserGroupDoc(AsyncDocument):
             updated_at=group.updated_at,
             invite_policy=group.invite_policy.value,
             admin_username=getattr(admin, "username", "") if admin else "",
-            task_count=len(getattr(group, "tasks", [])),
-            member_count=len(getattr(group, "users", [])),
-            sub_group_ids=[
-                sg.id for sg in getattr(group, "subgroups", []) if sg and sg.id
-            ],
-            task_ids=[t.id for t in getattr(group, "tasks", []) if t and t.id],
+            task_count=0,
+            member_count=0,
+            sub_group_ids=[],
+            task_ids=[],
         )
 
     def to_read_schema(self) -> UserGroupRead:
