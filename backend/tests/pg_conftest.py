@@ -178,8 +178,8 @@ class MockESClient:
         target_index = index or next(iter(self._documents.keys()))
         if "*" in target_index:
             docs = {}
-            for idx, doc in self._documents.items():
-                docs.update(doc)
+            for idx in self._documents.items():
+                docs.update(idx.value)
         else:
             docs = self._documents.get(target_index, {})
 
