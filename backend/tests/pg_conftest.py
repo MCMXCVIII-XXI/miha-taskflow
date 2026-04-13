@@ -175,7 +175,7 @@ class MockESClient:
             },
         }
 
-        target_index = index or list(self._documents.keys())[0]
+        target_index = index or next(iter(self._documents.keys()))
         if "*" in target_index:
             docs = {}
             for idx, doc in self._documents.items():
