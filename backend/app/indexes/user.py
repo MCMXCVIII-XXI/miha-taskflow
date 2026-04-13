@@ -70,17 +70,8 @@ class UserDoc(AsyncDocument):
             comment_ids=[],
             group_ids=[],
             admin_group_ids=[],
-            member_group_ids=cls._get_member_groups(user),
+            member_group_ids=[],
         )
-
-    @classmethod
-    def _get_member_groups(cls, user: User) -> list[str]:
-        """Helper: member groups из memberships."""
-        return [
-            str(gm.group_id)
-            for gm in getattr(user, "group_memberships", [])
-            if gm and gm.group_id and not getattr(gm, "is_admin", False)
-        ]
 
     def to_read_schema(self) -> UserRead:
         """ES → Pydantic UserRead."""

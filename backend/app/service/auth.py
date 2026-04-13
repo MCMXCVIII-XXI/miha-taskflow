@@ -16,12 +16,14 @@ from app.core.security import (
     verify_password,
 )
 from app.db import db_helper
+from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import User as UserModel
 from app.schemas import RefreshTokenRequest, TokenResponse, UserCreate
 from app.schemas.enum import TokenType
 
 from .base import BaseService
 from .exceptions import user_exc
+from .utils import Indexer
 
 logger = get_logger("service.auth")
 
@@ -55,8 +57,13 @@ class AuthenticationService(BaseService):
     ACCESS_TOKEN_TYPE = TokenType.ACCESS.value
     BOTH_TOKEN_TYPE = TokenType.BOTH.value
 
-    def __init__(self, db: AsyncSession) -> None:
+    def __init__(
+        self,
+        db: AsyncSession,
+        indexer: ElasticsearchIndexer,
+    ) -> None:
         super().__init__(db)
+        self._indexer = Indexer(indexer)
 
     def _create_token_response(
         self,
@@ -149,9 +156,11 @@ class AuthenticationService(BaseService):
                 user_in.hashed_password.get_secret_value()
             ),
         )
+
         self._db.add(user)
         await self._db.commit()
         await self._db.refresh(user)
+        await self._indexer.index(user)
 
         logger.info(
             "User registered: user_id={user_id}, username={username}, email={email}",
@@ -332,6 +341,7 @@ class AuthenticationService(BaseService):
 
 def get_authentication_service(
     db: AsyncSession = Depends(db_helper.get_session),
+    indexer: ElasticsearchIndexer = Depends(get_es_indexer),
 ) -> AuthenticationService:
     """
     FastAPI dependency factory for AuthenticationService.
@@ -353,4 +363,4 @@ def get_authentication_service(
         ):
             return await auth_svc.register(user_in)
     """
-    return AuthenticationService(db)
+    return AuthenticationService(db=db, indexer=indexer)

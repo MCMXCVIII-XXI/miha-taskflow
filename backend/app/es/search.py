@@ -1,6 +1,6 @@
 from typing import Any
 
-from elasticsearch import AsyncElasticsearch
+from elasticsearch import AsyncElasticsearch, exceptions
 from elasticsearch.dsl import AsyncSearch
 from fastapi import Depends
 
@@ -300,26 +300,26 @@ class ElasticsearchSearch:
             dict[str, Any]: Dictionary containing results, facets, total count,
                 and pagination information
         """
-        fs = faceted_class()
-        if query:
-            fs = fs.query(query)
-        if filters:
-            fs = fs.filter(filters)
+        fs = faceted_class(
+            query=query or None,
+            filters=filters or {},
+        )
         fs = fs[offset : offset + limit]
+        try:
+            response = await fs.execute()
+            results = [hit.to_dict() for hit in response]
+            facets = self._extract_facets(response, facets_config, filters)
+            total = self._get_total(response)
 
-        response = await fs.execute()
-
-        results = [hit.to_read_schema() for hit in response]
-        facets = self._extract_facets(response, facets_config, filters)
-        total = self._get_total(response)
-
-        return {
-            "results": results,
-            "facets": facets,
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-        }
+            return {
+                "results": results,
+                "facets": facets,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+        except exceptions.NotFoundError:
+            return {}
 
     async def search_tasks_faceted(
         self,

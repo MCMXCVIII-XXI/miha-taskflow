@@ -2,14 +2,14 @@
 
 from typing import TYPE_CHECKING
 
-from app.es.reindex_service import ReindexService
-
 from app.cli.manage import app
 from app.core.log import get_logger
 from app.db import Base, db_helper
 from app.es import get_es_indexer
 from app.indexes import CommentDoc, NotificationDoc, TaskDoc, UserDoc, UserGroupDoc
 from app.models import Comment, Notification, Task, User, UserGroup
+
+from .reindex import ReindexService
 
 if TYPE_CHECKING:
     from typing import TypeVar
@@ -29,11 +29,11 @@ async def reindex_all(batch_size: int = 100) -> None:
         indexer = get_es_indexer()
         service = ReindexService(session, indexer)
 
-        await service.reindex_model(session, User, UserDoc, batch_size)
-        await service.reindex_model(session, UserGroup, UserGroupDoc, batch_size)
-        await service.reindex_model(session, Task, TaskDoc, batch_size)
-        await service.reindex_model(session, Comment, CommentDoc, batch_size)
-        await service.reindex_model(session, Notification, NotificationDoc, batch_size)
+        await service.reindex_model(User, UserDoc, batch_size)
+        await service.reindex_model(UserGroup, UserGroupDoc, batch_size)
+        await service.reindex_model(Task, TaskDoc, batch_size)
+        await service.reindex_model(Comment, CommentDoc, batch_size)
+        await service.reindex_model(Notification, NotificationDoc, batch_size)
 
     logger.info("Full reindex process completed")
 

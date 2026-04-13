@@ -18,7 +18,9 @@ class TestRegister:
         user_in.last_name = "Test"
         user_in.patronymic = None
         user_in.hashed_password.get_secret_value.return_value = "Password123"
-        svc = AuthenticationService(mock_db)
+        mock_indexer = MagicMock()
+        mock_indexer.index_user = AsyncMock()
+        svc = AuthenticationService(mock_db, mock_indexer)
         result = await svc.register(user_in)
         assert hasattr(result, "access_token")
         assert hasattr(result, "refresh_token")
@@ -32,6 +34,7 @@ class TestRegister:
         user_in = MagicMock()
         user_in.email = "dup@test.com"
         user_in.username = "dup"
-        svc = AuthenticationService(mock_db)
+        mock_indexer = MagicMock()
+        svc = AuthenticationService(mock_db, mock_indexer)
         with pytest.raises(user_exc.UserAlreadyExists):
             await svc.register(user_in)

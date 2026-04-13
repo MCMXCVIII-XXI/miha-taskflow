@@ -22,15 +22,16 @@ class TaskFacetedSearch(AsyncFacetedSearch):
         facets (ClassVar[dict[str, Facet]]): Available facets for filtering
     """
 
+    index = "tasks_v1"
     doc_types: ClassVar[list[Any]] = [TaskDoc]
     fields: ClassVar[list[str]] = ["title^3", "description^2", "group_name"]
     facets: ClassVar[dict[str, Facet]] = {
-        "status": TermsFacet(field="status"),
-        "priority": TermsFacet(field="priority"),
-        "difficulty": TermsFacet(field="difficulty"),
-        "spheres": TermsFacet(field="spheres"),
+        "status": TermsFacet(field="status.keyword"),
+        "priority": TermsFacet(field="priority.keyword"),
+        "difficulty": TermsFacet(field="difficulty.keyword"),
+        "spheres": TermsFacet(field="spheres.keyword"),
         "group_id": TermsFacet(field="group_id"),
-        "assignee_ids": TermsFacet(field="assignee_ids"),
+        "assignee_ids": TermsFacet(field="assignee_ids.keyword"),
     }
 
 
@@ -47,12 +48,13 @@ class UserFacetedSearch(AsyncFacetedSearch):
         facets (ClassVar[dict[str, Facet]]): Available facets for filtering
     """
 
+    index = "users_v1"
     doc_types: ClassVar[list[Any]] = [UserDoc]
     fields: ClassVar[list[str]] = ["username^3", "first_name^2", "last_name^2", "email"]
     facets: ClassVar[dict[str, Facet]] = {
-        "role": TermsFacet(field="role"),
+        "role": TermsFacet(field="role.keyword"),
         "is_active": TermsFacet(field="is_active"),
-        "group_ids": TermsFacet(field="group_ids"),
+        "group_ids": TermsFacet(field="group_ids.keyword"),
     }
 
 
@@ -69,12 +71,13 @@ class GroupFacetedSearch(AsyncFacetedSearch):
         facets (ClassVar[dict[str, Facet]]): Available facets for filtering
     """
 
+    index = "groups_v1"
     doc_types: ClassVar[list[Any]] = [UserGroupDoc]
     fields: ClassVar[list[str]] = ["name^3", "description^2", "admin_username"]
     facets: ClassVar[dict[str, Facet]] = {
-        "visibility": TermsFacet(field="visibility"),
-        "join_policy": TermsFacet(field="join_policy"),
-        "invite_policy": TermsFacet(field="invite_policy"),
+        "visibility": TermsFacet(field="visibility.keyword"),
+        "join_policy": TermsFacet(field="join_policy.keyword"),
+        "invite_policy": TermsFacet(field="invite_policy.keyword"),
     }
 
 
@@ -91,6 +94,7 @@ class CommentFacetedSearch(AsyncFacetedSearch):
         facets (ClassVar[dict[str, Facet]]): Available facets for filtering
     """
 
+    index = "comments_v1"
     doc_types: ClassVar[list[Any]] = [CommentDoc]
     fields: ClassVar[list[str]] = ["content^2", "task_title", "username"]
     facets: ClassVar[dict[str, Facet]] = {
@@ -112,6 +116,7 @@ class NotificationFacetedSearch(AsyncFacetedSearch):
         facets (ClassVar[dict[str, Facet]]): Available facets for filtering
     """
 
+    index = "notifications_v1"
     doc_types: ClassVar[list[Any]] = [NotificationDoc]
     fields: ClassVar[list[str]] = [
         "title^3",

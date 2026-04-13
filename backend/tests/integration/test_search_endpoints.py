@@ -2,48 +2,61 @@ from httpx import AsyncClient
 
 
 class TestSearchTasks:
-    async def test_search_tasks_returns_200(
+    """Comprehensive tests for /search/tasks/search endpoint."""
+
+    async def test_search_tasks_no_params(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search tasks — returns 200 with empty results (ES mocked)."""
+        """Default search - no parameters."""
         response = await test_client.get(
             "/search/tasks/search", headers=admin_auth_headers
         )
         assert response.status_code == 200
         data = response.json()
-        assert "results" in data or "aggregations" in data
+        assert "results" in data
+        assert "aggregations" in data
+        assert "total" in data
 
-    async def test_search_tasks_with_query(
+    async def test_search_tasks_with_q(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search tasks with query — returns 200."""
+        """Search with query string."""
         response = await test_client.get(
-            "/search/tasks/search?q=test", headers=admin_auth_headers
+            "/search/tasks/search?q=bug", headers=admin_auth_headers
         )
         assert response.status_code == 200
 
-    async def test_search_tasks_with_filters(
+    async def test_search_tasks_with_status(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search tasks with status filter — returns 200."""
+        """Filter by status."""
         response = await test_client.get(
             "/search/tasks/search?status=pending", headers=admin_auth_headers
         )
         assert response.status_code == 200
 
-    async def test_search_tasks_with_priority_filter(
+    async def test_search_tasks_with_priority(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search tasks with priority filter — returns 200."""
+        """Filter by priority."""
         response = await test_client.get(
             "/search/tasks/search?priority=high", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_with_group_id(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Filter by group_id."""
+        response = await test_client.get(
+            "/search/tasks/search?group_id=1", headers=admin_auth_headers
         )
         assert response.status_code == 200
 
     async def test_search_tasks_with_facets_false(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search tasks without facets — returns 200."""
+        """Without facets."""
         response = await test_client.get(
             "/search/tasks/search?facets=false", headers=admin_auth_headers
         )
@@ -55,7 +68,7 @@ class TestSearchTasks:
     async def test_search_tasks_with_limit(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search tasks with custom limit — returns 200."""
+        """Custom limit."""
         response = await test_client.get(
             "/search/tasks/search?limit=5", headers=admin_auth_headers
         )
@@ -64,113 +77,263 @@ class TestSearchTasks:
     async def test_search_tasks_with_offset(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search tasks with offset — returns 200."""
+        """Custom offset."""
         response = await test_client.get(
             "/search/tasks/search?offset=10", headers=admin_auth_headers
         )
         assert response.status_code == 200
 
-    async def test_search_tasks_without_auth_returns_401(
-        self, test_client: AsyncClient
+    async def test_search_tasks_max_limit(
+        self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search tasks without auth — returns 401."""
+        """Max allowed limit."""
+        response = await test_client.get(
+            "/search/tasks/search?limit=100", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_combined_q_and_status(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + status filter."""
+        response = await test_client.get(
+            "/search/tasks/search?q=fix&status=pending", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_combined_q_and_priority(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + priority filter."""
+        response = await test_client.get(
+            "/search/tasks/search?q=fix&priority=high", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_combined_status_and_priority(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Status + priority filter."""
+        response = await test_client.get(
+            "/search/tasks/search?status=pending&priority=high",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_combined_all_filters(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + all filters."""
+        response = await test_client.get(
+            "/search/tasks/search?q=bug&status=pending&priority=high&group_id=1",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_combined_filters_with_pagination(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Filters + pagination."""
+        response = await test_client.get(
+            "/search/tasks/search?status=pending&limit=5&offset=10",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_combined_q_with_facets(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + facets toggle."""
+        response = await test_client.get(
+            "/search/tasks/search?q=bug&facets=false", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_without_auth(self, test_client: AsyncClient):
+        """Without auth returns 401."""
         response = await test_client.get("/search/tasks/search")
         assert response.status_code == 401
 
 
 class TestSearchUsers:
-    async def test_search_users_returns_200(
+    """Comprehensive tests for /search/users/search endpoint."""
+
+    async def test_search_users_no_params(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search users — returns 200 with empty results (ES mocked)."""
+        """Default search - no parameters."""
         response = await test_client.get(
             "/search/users/search", headers=admin_auth_headers
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert "results" in data or "aggregations" in data
-
-    async def test_search_users_with_query(
-        self, test_client: AsyncClient, admin_auth_headers: dict
-    ):
-        """Search users with query — returns 200."""
-        response = await test_client.get(
-            "/search/users/search?q=john", headers=admin_auth_headers
-        )
-        assert response.status_code == 200
-
-    async def test_search_users_with_role_filter(
-        self, test_client: AsyncClient, admin_auth_headers: dict
-    ):
-        """Search users with role filter — returns 200."""
-        response = await test_client.get(
-            "/search/users/search?role=user", headers=admin_auth_headers
-        )
-        assert response.status_code == 200
-
-    async def test_search_users_with_is_active_filter(
-        self, test_client: AsyncClient, admin_auth_headers: dict
-    ):
-        """Search users with is_active filter — returns 200."""
-        response = await test_client.get(
-            "/search/users/search?is_active=true", headers=admin_auth_headers
-        )
-        assert response.status_code == 200
-
-    async def test_search_users_with_facets_false(
-        self, test_client: AsyncClient, admin_auth_headers: dict
-    ):
-        """Search users without facets — returns 200."""
-        response = await test_client.get(
-            "/search/users/search?facets=false", headers=admin_auth_headers
         )
         assert response.status_code == 200
         data = response.json()
         assert "results" in data
         assert "total" in data
 
-    async def test_search_users_without_auth_returns_401(
-        self, test_client: AsyncClient
+    async def test_search_users_with_q(
+        self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search users without auth — returns 401."""
+        """Search with query string."""
+        response = await test_client.get(
+            "/search/users/search?q=john", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_with_role(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Filter by role."""
+        response = await test_client.get(
+            "/search/users/search?role=user", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_with_is_active_true(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Filter by is_active=true."""
+        response = await test_client.get(
+            "/search/users/search?is_active=true", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_with_is_active_false(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Filter by is_active=false."""
+        response = await test_client.get(
+            "/search/users/search?is_active=false", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_with_facets_false(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Without facets."""
+        response = await test_client.get(
+            "/search/users/search?facets=false", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "results" in data
+
+    async def test_search_users_with_limit(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Custom limit."""
+        response = await test_client.get(
+            "/search/users/search?limit=5", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_with_offset(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Custom offset."""
+        response = await test_client.get(
+            "/search/users/search?offset=10", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_max_limit(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Max allowed limit."""
+        response = await test_client.get(
+            "/search/users/search?limit=100", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_combined_q_and_role(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + role filter."""
+        response = await test_client.get(
+            "/search/users/search?q=john&role=admin", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_combined_q_and_is_active(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + is_active filter."""
+        response = await test_client.get(
+            "/search/users/search?q=john&is_active=true", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_combined_role_and_is_active(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Role + is_active filter."""
+        response = await test_client.get(
+            "/search/users/search?role=admin&is_active=true", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_combined_all_filters(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + all filters."""
+        response = await test_client.get(
+            "/search/users/search?q=john&role=admin&is_active=true",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_combined_filters_with_pagination(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Filters + pagination."""
+        response = await test_client.get(
+            "/search/users/search?role=user&limit=5&offset=10",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_without_auth(self, test_client: AsyncClient):
+        """Without auth returns 401."""
         response = await test_client.get("/search/users/search")
         assert response.status_code == 401
 
 
 class TestSearchGroups:
-    async def test_search_groups_returns_200(
+    """Comprehensive tests for /search/groups/search endpoint."""
+
+    async def test_search_groups_no_params(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search groups — returns 200 with empty results (ES mocked)."""
+        """Default search - no parameters."""
         response = await test_client.get(
             "/search/groups/search", headers=admin_auth_headers
         )
         assert response.status_code == 200
         data = response.json()
-        assert "results" in data or "aggregations" in data
+        assert "results" in data
+        assert "total" in data
 
-    async def test_search_groups_with_query(
+    async def test_search_groups_with_q(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search groups with query — returns 200."""
+        """Search with query string."""
         response = await test_client.get(
             "/search/groups/search?q=developers", headers=admin_auth_headers
         )
         assert response.status_code == 200
 
-    async def test_search_groups_with_visibility_filter(
+    async def test_search_groups_with_visibility(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search groups with visibility filter — returns 200."""
+        """Filter by visibility."""
         response = await test_client.get(
             "/search/groups/search?visibility=public", headers=admin_auth_headers
         )
         assert response.status_code == 200
 
-    async def test_search_groups_with_join_policy_filter(
+    async def test_search_groups_with_join_policy(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search groups with join_policy filter — returns 200."""
+        """Filter by join_policy."""
         response = await test_client.get(
             "/search/groups/search?join_policy=open", headers=admin_auth_headers
         )
@@ -179,57 +342,132 @@ class TestSearchGroups:
     async def test_search_groups_with_facets_false(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search groups without facets — returns 200."""
+        """Without facets."""
         response = await test_client.get(
             "/search/groups/search?facets=false", headers=admin_auth_headers
         )
         assert response.status_code == 200
         data = response.json()
         assert "results" in data
-        assert "total" in data
 
-    async def test_search_groups_without_auth_returns_401(
-        self, test_client: AsyncClient
+    async def test_search_groups_with_limit(
+        self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search groups without auth — returns 401."""
+        """Custom limit."""
+        response = await test_client.get(
+            "/search/groups/search?limit=5", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_groups_with_offset(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Custom offset."""
+        response = await test_client.get(
+            "/search/groups/search?offset=10", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_groups_max_limit(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Max allowed limit."""
+        response = await test_client.get(
+            "/search/groups/search?limit=100", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_groups_combined_q_and_visibility(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + visibility filter."""
+        response = await test_client.get(
+            "/search/groups/search?q=dev&visibility=public", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_groups_combined_q_and_join_policy(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + join_policy filter."""
+        response = await test_client.get(
+            "/search/groups/search?q=dev&join_policy=open", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_groups_combined_visibility_and_join_policy(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Visibility + join_policy filter."""
+        response = await test_client.get(
+            "/search/groups/search?visibility=public&join_policy=open",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_groups_combined_all_filters(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + all filters."""
+        response = await test_client.get(
+            "/search/groups/search?q=dev&visibility=public&join_policy=open",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_groups_combined_filters_with_pagination(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Filters + pagination."""
+        response = await test_client.get(
+            "/search/groups/search?visibility=public&limit=5&offset=10",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_groups_without_auth(self, test_client: AsyncClient):
+        """Without auth returns 401."""
         response = await test_client.get("/search/groups/search")
         assert response.status_code == 401
 
 
 class TestSearchComments:
-    async def test_search_comments_returns_200(
+    """Comprehensive tests for /search/comments/search endpoint."""
+
+    async def test_search_comments_no_params(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search comments — returns 200 with empty results (ES mocked)."""
+        """Default search - no parameters."""
         response = await test_client.get(
             "/search/comments/search", headers=admin_auth_headers
         )
         assert response.status_code == 200
         data = response.json()
-        assert "results" in data or "aggregations" in data
+        assert "results" in data
+        assert "total" in data
 
-    async def test_search_comments_with_query(
+    async def test_search_comments_with_q(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search comments with query — returns 200."""
+        """Search with query string."""
         response = await test_client.get(
             "/search/comments/search?q=bug", headers=admin_auth_headers
         )
         assert response.status_code == 200
 
-    async def test_search_comments_with_task_id_filter(
+    async def test_search_comments_with_task_id(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search comments with task_id filter — returns 200."""
+        """Filter by task_id."""
         response = await test_client.get(
             "/search/comments/search?task_id=1", headers=admin_auth_headers
         )
         assert response.status_code == 200
 
-    async def test_search_comments_with_user_id_filter(
+    async def test_search_comments_with_user_id(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search comments with user_id filter — returns 200."""
+        """Filter by user_id."""
         response = await test_client.get(
             "/search/comments/search?user_id=1", headers=admin_auth_headers
         )
@@ -238,48 +476,122 @@ class TestSearchComments:
     async def test_search_comments_with_facets_false(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search comments without facets — returns 200."""
+        """Without facets."""
         response = await test_client.get(
             "/search/comments/search?facets=false", headers=admin_auth_headers
         )
         assert response.status_code == 200
         data = response.json()
         assert "results" in data
-        assert "total" in data
 
-    async def test_search_comments_without_auth_returns_401(
-        self, test_client: AsyncClient
+    async def test_search_comments_with_limit(
+        self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search comments without auth — returns 401."""
+        """Custom limit."""
+        response = await test_client.get(
+            "/search/comments/search?limit=5", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_comments_with_offset(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Custom offset."""
+        response = await test_client.get(
+            "/search/comments/search?offset=10", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_comments_max_limit(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Max allowed limit."""
+        response = await test_client.get(
+            "/search/comments/search?limit=100", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_comments_combined_q_and_task_id(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + task_id filter."""
+        response = await test_client.get(
+            "/search/comments/search?q=fix&task_id=1", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_comments_combined_q_and_user_id(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + user_id filter."""
+        response = await test_client.get(
+            "/search/comments/search?q=fix&user_id=1", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_comments_combined_task_id_and_user_id(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """task_id + user_id filter."""
+        response = await test_client.get(
+            "/search/comments/search?task_id=1&user_id=1", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_comments_combined_all_filters(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + all filters."""
+        response = await test_client.get(
+            "/search/comments/search?q=fix&task_id=1&user_id=1",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_comments_combined_filters_with_pagination(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Filters + pagination."""
+        response = await test_client.get(
+            "/search/comments/search?task_id=1&limit=5&offset=10",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_comments_without_auth(self, test_client: AsyncClient):
+        """Without auth returns 401."""
         response = await test_client.get("/search/comments/search")
         assert response.status_code == 401
 
 
 class TestSearchNotifications:
-    async def test_search_notifications_returns_200(
+    """Comprehensive tests for /search/notifications/search endpoint."""
+
+    async def test_search_notifications_no_params(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search notifications — returns 200 with empty results (ES mocked)."""
+        """Default search - no parameters."""
         response = await test_client.get(
             "/search/notifications/search", headers=admin_auth_headers
         )
         assert response.status_code == 200
         data = response.json()
-        assert "results" in data or "aggregations" in data
+        assert "results" in data
+        assert "total" in data
 
-    async def test_search_notifications_with_query(
+    async def test_search_notifications_with_q(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search notifications with query — returns 200."""
+        """Search with query string."""
         response = await test_client.get(
             "/search/notifications/search?q=invite", headers=admin_auth_headers
         )
         assert response.status_code == 200
 
-    async def test_search_notifications_with_user_id_filter(
+    async def test_search_notifications_with_user_id(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search notifications with user_id filter — returns 200."""
+        """Filter by user_id."""
         response = await test_client.get(
             "/search/notifications/search?user_id=1", headers=admin_auth_headers
         )
@@ -288,38 +600,129 @@ class TestSearchNotifications:
     async def test_search_notifications_with_facets_false(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search notifications without facets — returns 200."""
+        """Without facets."""
         response = await test_client.get(
             "/search/notifications/search?facets=false", headers=admin_auth_headers
         )
         assert response.status_code == 200
         data = response.json()
         assert "results" in data
-        assert "total" in data
 
-    async def test_search_notifications_without_auth_returns_401(
-        self, test_client: AsyncClient
+    async def test_search_notifications_with_limit(
+        self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search notifications without auth — returns 401."""
+        """Custom limit."""
+        response = await test_client.get(
+            "/search/notifications/search?limit=5", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_notifications_with_offset(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Custom offset."""
+        response = await test_client.get(
+            "/search/notifications/search?offset=10", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_notifications_max_limit(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Max allowed limit."""
+        response = await test_client.get(
+            "/search/notifications/search?limit=100", headers=admin_auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_notifications_combined_q_and_user_id(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Query + user_id filter."""
+        response = await test_client.get(
+            "/search/notifications/search?q=invite&user_id=1",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_notifications_combined_filters_with_pagination(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Filters + pagination."""
+        response = await test_client.get(
+            "/search/notifications/search?user_id=1&limit=5&offset=10",
+            headers=admin_auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_notifications_without_auth(self, test_client: AsyncClient):
+        """Without auth returns 401."""
         response = await test_client.get("/search/notifications/search")
         assert response.status_code == 401
 
 
 class TestSearchEdgeCases:
-    async def test_search_tasks_invalid_limit(
+    """Edge case tests for search endpoints."""
+
+    async def test_search_tasks_invalid_limit_zero(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search tasks with invalid limit — returns 422."""
+        """Limit=0 returns 422."""
         response = await test_client.get(
             "/search/tasks/search?limit=0", headers=admin_auth_headers
         )
         assert response.status_code == 422
 
-    async def test_search_groups_invalid_limit(
+    async def test_search_tasks_invalid_limit_exceed(
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
-        """Search groups with invalid limit — returns 422."""
+        """Limit>100 returns 422."""
+        response = await test_client.get(
+            "/search/tasks/search?limit=101", headers=admin_auth_headers
+        )
+        assert response.status_code == 422
+
+    async def test_search_tasks_invalid_offset_negative(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Negative offset returns 422."""
+        response = await test_client.get(
+            "/search/tasks/search?offset=-1", headers=admin_auth_headers
+        )
+        assert response.status_code == 422
+
+    async def test_search_users_invalid_limit_exceed(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Limit>100 returns 422."""
+        response = await test_client.get(
+            "/search/users/search?limit=101", headers=admin_auth_headers
+        )
+        assert response.status_code == 422
+
+    async def test_search_groups_invalid_limit_exceed(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Limit>100 returns 422."""
         response = await test_client.get(
             "/search/groups/search?limit=101", headers=admin_auth_headers
+        )
+        assert response.status_code == 422
+
+    async def test_search_comments_invalid_limit_exceed(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Limit>100 returns 422."""
+        response = await test_client.get(
+            "/search/comments/search?limit=101", headers=admin_auth_headers
+        )
+        assert response.status_code == 422
+
+    async def test_search_notifications_invalid_limit_exceed(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Limit>100 returns 422."""
+        response = await test_client.get(
+            "/search/notifications/search?limit=101", headers=admin_auth_headers
         )
         assert response.status_code == 422
