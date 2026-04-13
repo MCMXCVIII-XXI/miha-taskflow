@@ -1,6 +1,6 @@
 from typing import Any
 
-from elasticsearch import AsyncElasticsearch
+from elasticsearch import AsyncElasticsearch, exceptions
 from elasticsearch.dsl import AsyncSearch
 from fastapi import Depends
 
