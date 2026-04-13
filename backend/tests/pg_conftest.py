@@ -156,7 +156,9 @@ class MockESClient:
             del self._documents[index][str(id)]
         return {"result": "deleted"}
 
-    async def search(self, index: str = None, body: dict = None, **kwargs):
+    async def search(
+        self, index: str | None = None, body: dict | None = None, **kwargs
+    ):
         hits = []
         facets = {
             "status": {
