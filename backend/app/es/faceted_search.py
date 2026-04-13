@@ -124,9 +124,9 @@ class NotificationFacetedSearch(AsyncFacetedSearch):
         "type",
     ]
     facets: ClassVar[dict[str, Facet]] = {
-        "type": TermsFacet(field="type"),
-        "status": TermsFacet(field="status"),
+        "type": TermsFacet(field="type.keyword"),
+        "status": TermsFacet(field="status.keyword"),
         "sender_id": TermsFacet(field="sender_id"),
         "recipient_id": TermsFacet(field="recipient_id"),
-        "target_type": TermsFacet(field="target_type"),
+        "target_type": TermsFacet(field="target_type.keyword"),
     }
