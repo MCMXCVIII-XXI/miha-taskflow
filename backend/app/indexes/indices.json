@@ -19,11 +19,10 @@
     },
     "mappings": {
       "properties": {
-        "title": { "type": "text", "analyzer": "task_analyzer", "boost": 3 },
+        "title": { "type": "text", "analyzer": "task_analyzer" },
         "description": {
           "type": "text",
-          "analyzer": "task_analyzer",
-          "boost": 2
+          "analyzer": "task_analyzer"
         },
         "status": { "type": "keyword" },
         "priority": { "type": "keyword" },
@@ -32,7 +31,7 @@
         "deadline": { "type": "date" },
         "is_active": { "type": "boolean" },
         "created_at": { "type": "date" },
-        "updated_at": { "type": "date_optional_time" },
+        "updated_at": { "type": "date" },
         "group_name": { "type": "keyword" },
         "assignee_usernames": { "type": "keyword" },
         "comment_count": { "type": "integer" }
@@ -67,7 +66,7 @@
         "email": { "type": "keyword" },
         "role": { "type": "keyword" },
         "created_at": { "type": "date" },
-        "updated_at": { "type": "date_optional_time" },
+        "updated_at": { "type": "date" },
         "is_active": { "type": "boolean" },
         "notification_ids": { "type": "keyword" },
         "assigned_task_ids": { "type": "keyword" },
@@ -99,17 +98,16 @@
     "mappings": {
       "properties": {
         "id": { "type": "keyword" },
-        "name": { "type": "text", "analyzer": "group_analyzer", "boost": 3 },
+        "name": { "type": "text", "analyzer": "group_analyzer" },
         "description": {
           "type": "text",
-          "analyzer": "group_analyzer",
-          "boost": 2
+          "analyzer": "group_analyzer"
         },
         "admin_id": { "type": "integer" },
         "visibility": { "type": "keyword" },
         "join_policy": { "type": "keyword" },
         "created_at": { "type": "date" },
-        "updated_at": { "type": "date_optional_time" },
+        "updated_at": { "type": "date" },
         "parent_group_id": { "type": "integer" },
         "level": { "type": "integer" },
         "is_active": { "type": "boolean" },
@@ -148,10 +146,44 @@
         "user_id": { "type": "integer" },
         "parent_id": { "type": "integer" },
         "created_at": { "type": "date" },
-        "updated_at": { "type": "date_optional_time" },
+        "updated_at": { "type": "date" },
         "task_title": { "type": "keyword" },
         "username": { "type": "keyword" },
         "task_status": { "type": "keyword" }
+      }
+    }
+  },
+  "notifications_v1": {
+    "settings": {
+      "number_of_shards": 1,
+      "number_of_replicas": 0,
+      "analysis": {
+        "analyzer": {
+          "notification_analyzer": {
+            "type": "custom",
+            "tokenizer": "standard",
+            "filter": ["lowercase", "russian_stop", "russian_stemmer"]
+          }
+        },
+        "filter": {
+          "russian_stop": { "type": "stop", "stopwords": "_russian_" },
+          "russian_stemmer": { "type": "stemmer", "language": "russian" }
+        }
+      }
+    },
+    "mappings": {
+      "properties": {
+        "id": { "type": "keyword" },
+        "title": { "type": "text", "analyzer": "notification_analyzer" },
+        "message": { "type": "text", "analyzer": "notification_analyzer" },
+        "user_id": { "type": "integer" },
+        "type": { "type": "keyword" },
+        "status": { "type": "keyword" },
+        "response": { "type": "keyword" },
+        "target_type": { "type": "keyword" },
+        "target_id": { "type": "integer" },
+        "created_at": { "type": "date" },
+        "read_at": { "type": "date" }
       }
     }
   }
