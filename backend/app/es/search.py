@@ -305,20 +305,21 @@ class ElasticsearchSearch:
             filters=filters or {},
         )
         fs = fs[offset : offset + limit]
+        try:
+            response = await fs.execute()
+            results = [hit.to_dict() for hit in response]
+            facets = self._extract_facets(response, facets_config, filters)
+            total = self._get_total(response)
 
-        response = await fs.execute()
-
-        results = [hit.to_read_schema() for hit in response]
-        facets = self._extract_facets(response, facets_config, filters)
-        total = self._get_total(response)
-
-        return {
-            "results": results,
-            "facets": facets,
-            "total": total,
-            "limit": limit,
-            "offset": offset,
-        }
+            return {
+                "results": results,
+                "facets": facets,
+                "total": total,
+                "limit": limit,
+                "offset": offset,
+            }
+        except exceptions.NotFoundError:
+            return {}
 
     async def search_tasks_faceted(
         self,
