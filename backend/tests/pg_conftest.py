@@ -9,8 +9,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import jwt
 import pytest
-from elasticsearch import AsyncElasticsearch
-from elasticsearch.dsl import async_connections
 from fastapi import Depends
 from fastapi_cache import FastAPICache
 from httpx import AsyncClient
@@ -28,13 +26,6 @@ from app.es import (
     es_helper,
     get_es_indexer,
     get_es_search,
-)
-from app.indexes import (
-    CommentDoc,
-    NotificationDoc,
-    TaskDoc,
-    UserDoc,
-    UserGroupDoc,
 )
 from app.models import User
 from app.schemas.enum import GlobalUserRole
@@ -183,7 +174,7 @@ class MockESClient:
         else:
             docs = self._documents.get(target_index, {})
 
-        query_dict = body if body else kwargs.get("query", {})
+        query_dict = body or kwargs.get("query", {})
 
         if query_dict and "query" in query_dict:
             query = query_dict["query"]
