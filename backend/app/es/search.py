@@ -300,11 +300,10 @@ class ElasticsearchSearch:
             dict[str, Any]: Dictionary containing results, facets, total count,
                 and pagination information
         """
-        fs = faceted_class()
-        if query:
-            fs = fs.query(query)
-        if filters:
-            fs = fs.filter(filters)
+        fs = faceted_class(
+            query=query or None,
+            filters=filters or {},
+        )
         fs = fs[offset : offset + limit]
 
         response = await fs.execute()
