@@ -66,7 +66,11 @@ test-coverage: ## Tests with coverage (pytest --cov)
 
 test-pg-coverage: ## PG tests with coverage
 	uv sync --group test
-	PYTHONPATH=. POSTGRES_DB=taskflow_test uv run pytest --asyncio-mode=auto --cov=app --cov-report=term-missing
+	PYTHONPATH=. POSTGRES_DB=taskflow_test uv run pytest --asyncio-mode=auto --cov=app --cov-report=xml --cov-report=term-missing
+
+test-pg-coverage-before-fall: ## PG tests with coverage before fall
+	uv sync --group test
+	PYTHONPATH=. POSTGRES_DB=taskflow_test uv run pytest -x --asyncio-mode=auto --cov=app --cov-report=xml --cov-report=term-missing
 
 dev: ## Development check (lint + test-backend)
 	make lint
