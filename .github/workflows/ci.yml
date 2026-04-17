@@ -1,0 +1,16 @@
+name: Taskflow CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    uses: ./.github/workflows/quality.yml
+    secrets: inherit
+
+  test:
+    needs: lint
+    uses: ./.github/workflows/test.yml
+    secrets: inherit

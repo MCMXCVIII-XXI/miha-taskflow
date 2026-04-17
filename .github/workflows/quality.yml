@@ -1,6 +1,7 @@
 name: TaskFlow-Lint-and-Format
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:

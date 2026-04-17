@@ -1,6 +1,7 @@
 name: Taskflow-Tests
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
@@ -9,6 +10,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    if: "!needs.test.result == 'cancelled'"
     defaults:
       run:
         working-directory: backend
