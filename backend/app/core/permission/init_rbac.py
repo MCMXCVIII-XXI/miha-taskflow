@@ -1,4 +1,5 @@
 from sqlalchemy import delete
+from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Base, db_helper
@@ -43,8 +44,11 @@ class RBAC:
 
     async def __clear(self) -> None:
         """Clear only RolePermission bindings, keep Role and Permission data."""
-        # Role↔Permission
-        await self.db.execute(delete(RolePermission))
+        try:
+            # Role↔Permission
+            await self.db.execute(delete(RolePermission))
+        except ProgrammingError:
+            pass
 
     async def init(self) -> None:
         """
