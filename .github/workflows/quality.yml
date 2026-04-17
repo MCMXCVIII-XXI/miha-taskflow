@@ -1,6 +1,7 @@
-name: TaskFlow-Lint-and-Format
+name: TaskFlow-Lint
 
 on:
+  workflow_call:
   push:
     branches: [main]
   pull_request:
@@ -22,5 +23,5 @@ jobs:
           enable-cache: true
           python-version: 3.11
 
-      - name: Lint & Format
+      - name: Lint
         run: make lint
