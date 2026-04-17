@@ -12,9 +12,11 @@ class CelerySettings(BaseSettings):
     """
 
     BROKER_URL: AnyUrl = Field(
+        default="redis://localhost:6379/0",
         description="Celery broker URL",
     )
     BACKEND_URL: AnyUrl = Field(
+        default="redis://localhost:6379/1",
         description="Celery result backend URL",
     )
     TASK_SERIALIZER: str = Field(

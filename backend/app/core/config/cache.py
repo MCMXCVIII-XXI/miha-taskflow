@@ -12,6 +12,7 @@ class CacheSettings(BaseSettings):
     """
 
     URL: AnyUrl = Field(
+        default="redis://localhost:6379/0",
         description="Cache URL",
     )
     CONNECT_RETRY: bool = Field(default=False, description="Connect retry")

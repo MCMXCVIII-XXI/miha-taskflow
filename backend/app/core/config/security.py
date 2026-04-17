@@ -12,6 +12,7 @@ class SecuritySettings(BaseSettings):
     """
 
     ALLOWED_ORIGINS: list[AnyUrl] = Field(
+        default=[],
         description="Allowed origins",
     )
 

@@ -12,6 +12,7 @@ class DBSettings(BaseSettings):
     """
 
     URL: AnyUrl = Field(
+        default="postgresql+asyncpg://user:pass@localhost:5432/postgres",
         description="Database URL",
     )
     ECHO: bool = Field(default=False, description="Echo SQL queries")

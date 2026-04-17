@@ -12,6 +12,7 @@ class ESSettings(BaseSettings):
     """
 
     URL: list[AnyUrl] = Field(
+        default=["http://localhost:9200"],
         description="Elasticsearch URL for the cluster",
     )
     USERNAME: str | None = Field(default=None, description="Elasticsearch username")
