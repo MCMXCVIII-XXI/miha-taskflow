@@ -11,12 +11,13 @@ The logging system supports:
 - Structured logging with context binding
 """
 
-import os
 import sys
 from pathlib import Path
 from typing import Any
 
 from loguru import logger
+
+from app.core.config import logging_settings
 
 
 def setup_logging() -> None:
@@ -30,43 +31,32 @@ def setup_logging() -> None:
     JSON serialization can be enabled via LOG_JSON environment variable.
     """
     # Get log path from environment or default
-    log_path = Path("logs/app.log")
+    log_path = Path(logging_settings.FILE_PATH)
     log_path.parent.mkdir(parents=True, exist_ok=True)
 
     # Remove default handler
     logger.remove()
 
     # Stdout - human readable for development
-    logger.add(
-        sys.stdout,
-        format=(
-            "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
-            "<level>{level: <8}</level> | "
-            "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> - "
-            "<level>{message}</level>"
-        ),
-        level="DEBUG",
-        colorize=True,
-    )
+    if logging_settings.CONSOLE_ENABLED:
+        logger.add(
+            sys.stdout,
+            format=logging_settings.CONSOLE_FORMAT,
+            level=logging_settings.CONSOLE_LEVEL,
+            colorize=logging_settings.CONSOLE_COLORIZE,
+        )
 
-    # File - JSON format for production/processing
-    serialize_json = os.getenv("LOG_JSON", "false").lower() == "true"
-
-    logger.add(
-        str(log_path),
-        format=(
-            "{time:YYYY-MM-DD HH:mm:ss.SSS} | "
-            "{level: <8} | "
-            "{name}:{function}:{line} - "
-            "{message}"
-        ),
-        rotation="00:00",  # Rotate at midnight
-        retention="30 days",  # Keep 30 days
-        level="DEBUG",
-        serialize=serialize_json,  # JSON format for production
-        encoding="utf-8",
-        enqueue=True,  # Thread-safe writing
-    )
+    if logging_settings.FILE_ENABLED:
+        logger.add(
+            str(log_path),
+            format=logging_settings.FILE_FORMAT,
+            rotation=logging_settings.FILE_ROTATION,
+            retention=logging_settings.FILE_RETENTION,
+            level=logging_settings.FILE_LEVEL,
+            serialize=logging_settings.FILE_JSON,
+            encoding=logging_settings.FILE_ENCODING,
+            enqueue=logging_settings.FILE_ENQUEUE,
+        )
 
 
 def get_logger(name: str | None = None) -> Any:
