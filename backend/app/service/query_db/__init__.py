@@ -3,6 +3,7 @@ from .group import GroupQueries
 from .group_membership import GroupMembershipQueries
 from .join import JoinQueries
 from .notification import NotificationQueries
+from .outbox import OutboxQueries
 from .rating import RatingQueries
 from .role import RoleQueries
 from .task import TaskQueries
@@ -17,6 +18,7 @@ __all__ = [
     "GroupQueries",
     "JoinQueries",
     "NotificationQueries",
+    "OutboxQueries",
     "RatingQueries",
     "RoleQueries",
     "TaskAssigneeQueries",
