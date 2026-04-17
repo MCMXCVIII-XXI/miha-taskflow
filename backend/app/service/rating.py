@@ -1,7 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.log import get_logger
+from app.core.log import logging
 from app.db import db_helper
 from app.models import Rating as RatingModel
 from app.models import User as UserModel
@@ -11,7 +11,7 @@ from app.schemas.enum import RatingTarget, TaskStatus
 from .base import BaseService
 from .exceptions import group_exc, rating_exc, task_exc
 
-logger = get_logger("service.rating")
+logger = logging.get_logger(__name__)
 
 
 class RatingService(BaseService):

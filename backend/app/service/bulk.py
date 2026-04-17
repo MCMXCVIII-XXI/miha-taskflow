@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.log import logging
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import Comment as CommentModel
@@ -18,6 +19,8 @@ from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
 
 from .base import BaseService
+
+logger = logging.get_logger(__name__)
 
 
 class BulkService(BaseService):

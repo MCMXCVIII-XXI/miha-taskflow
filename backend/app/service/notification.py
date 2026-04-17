@@ -1,7 +1,7 @@
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.log import get_logger
+from app.core.log import logging
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import Notification as NotificationModel
@@ -21,7 +21,7 @@ from .exceptions import notifi_exc
 from .sse import get_sse_service
 from .utils import Indexer
 
-logger = get_logger("service.notification")
+logger = logging.get_logger(__name__)
 
 
 class NotificationService(BaseService):

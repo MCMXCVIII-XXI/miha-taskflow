@@ -5,7 +5,7 @@ from fastapi import Depends
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.log import get_logger
+from app.core.log import logging
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import JoinRequest as JoinRequestModel
@@ -26,6 +26,7 @@ from app.schemas import (
 from app.schemas.enum import (
     JoinPolicy,
     JoinRequestStatus,
+    OutboxEventType,
     TaskSphere,
     TaskStatus,
 )
@@ -33,11 +34,12 @@ from app.schemas.enum import (
 from .base import GroupTaskBaseService
 from .exceptions import group_exc, task_exc
 from .notification import NotificationService, get_notification_service
+from .outbox import OutboxService
 from .search import task_search
 from .utils import Indexer
 from .xp import XPService, get_xp_service
 
-logger = get_logger("service.task")
+logger = logging.get_logger(__name__)
 
 
 class TaskService(GroupTaskBaseService):
@@ -186,9 +188,17 @@ class TaskService(GroupTaskBaseService):
         self._db.add(task)
         self._db.add(user_role)
         await self._db.flush()
+        task_id = task.id
 
         assignee = TaskAssignee(user_id=current_user.id, task_id=task.id)
         self._db.add(assignee)
+
+        outbox_service = OutboxService(self._db)
+        await outbox_service.publish(
+            event_type=OutboxEventType.CREATED,
+            entity_type="task",
+            entity_id=task_id,
+        )
 
         await self._db.commit()
         await self._db.refresh(task)
@@ -418,6 +428,13 @@ class TaskService(GroupTaskBaseService):
         for field, value in task_in.model_dump(exclude_unset=True).items():
             setattr(task, field, value)
 
+        outbox_service = OutboxService(self._db)
+        await outbox_service.publish(
+            event_type=OutboxEventType.UPDATED,
+            entity_type="task",
+            entity_id=task_id,
+        )
+
         await self._db.commit()
         await self._db.refresh(task)
         await self._indexer.index(task)
@@ -465,6 +482,14 @@ class TaskService(GroupTaskBaseService):
             raise task_exc.TaskNotFound(message="Task not found")
 
         task.is_active = False
+
+        outbox_service = OutboxService(self._db)
+        await outbox_service.publish(
+            event_type=OutboxEventType.DELETED,
+            entity_type="task",
+            entity_id=task_id,
+        )
+
         await self._db.commit()
         await self._indexer.delete({"type": "task", "id": task_id})
         await self._invalidate("tasks")
@@ -502,6 +527,18 @@ class TaskService(GroupTaskBaseService):
         task = await self._validate_task_status_update(task_id, status)
         old_status = task.status
         task.status = status
+
+        outbox_service = OutboxService(self._db)
+        await outbox_service.publish(
+            event_type=OutboxEventType.UPDATED,
+            entity_type="task",
+            entity_id=task_id,
+            payload={
+                "old_status": old_status.value,
+                "new_status": status.value,
+            },
+        )
+
         await self._db.commit()
         await self._db.refresh(task)
         await self._invalidate("tasks")
@@ -1083,7 +1120,9 @@ def get_task_service(
         db: Database session from db_helper.get_session
         indexer: Elasticsearch indexer from get_es_indexer
         notification_service: Notification service instance
-        xp_service: XP service instance
+            from get_notification_service
+        xp_service: XP service instance from get_xp_service
+        outbox_service: Outbox service instance from get_outbox_service
 
     Returns:
         Fresh TaskService instance with injected dependencies

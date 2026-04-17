@@ -26,7 +26,7 @@ from .base import BaseService
 from .exceptions import user_exc
 from .utils import Indexer
 
-logger = get_logger("service.admin")
+logger = get_logger(__name__)
 
 
 class AdminService(BaseService):

@@ -2,7 +2,7 @@ from fastapi import Depends
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.log import get_logger
+from app.core.log import logging
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import Comment as CommentModel
@@ -10,12 +10,14 @@ from app.models import User as UserModel
 from app.schemas import (
     CommentRead,
 )
+from app.schemas.enum import OutboxEventType
 
 from .base import BaseService
 from .exceptions import comment_exc, task_exc
+from .outbox import OutboxService
 from .utils import Indexer
 
-logger = get_logger("service.comment")
+logger = logging.get_logger(__name__)
 
 
 class CommentService(BaseService):
@@ -63,6 +65,15 @@ class CommentService(BaseService):
             parent_id=parent_id,
         )
         self._db.add(comment)
+        await self._db.flush()
+
+        outbox_service = OutboxService(self._db)
+        await outbox_service.publish(
+            event_type=OutboxEventType.CREATED,
+            entity_type="comment",
+            entity_id=comment.id,
+        )
+
         await self._db.commit()
         await self._db.refresh(comment)
         await self._indexer.index(comment)
@@ -114,6 +125,14 @@ class CommentService(BaseService):
             )
 
         comment.content = content
+
+        outbox_service = OutboxService(self._db)
+        await outbox_service.publish(
+            event_type=OutboxEventType.CREATED,
+            entity_type="comment",
+            entity_id=comment.id,
+        )
+
         await self._db.commit()
         await self._db.refresh(comment)
         await self._indexer.index(comment)
@@ -136,6 +155,14 @@ class CommentService(BaseService):
             raise comment_exc.ForbiddenError(
                 message="You can only delete your own comments"
             )
+
+        outbox_service = OutboxService(self._db)
+        await outbox_service.publish(
+            event_type=OutboxEventType.DELETED,
+            entity_type="comment",
+            entity_id=comment.id,
+        )
+
         await self._db.delete(comment)
         await self._db.commit()
         await self._indexer.delete({"type": "comment", "id": comment_id})
