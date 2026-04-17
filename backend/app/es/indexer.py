@@ -129,7 +129,6 @@ class ElasticsearchIndexer:
                     message=f"Error creating TaskDoc for task \
                         {getattr(task, 'id', 'unknown')}: {e}"
                 ) from e
-                # Continue with other tasks
 
         if docs:
             logger.info(f"Bulk indexing {len(docs)} tasks")
@@ -152,7 +151,6 @@ class ElasticsearchIndexer:
                     message=f"Error creating UserDoc for user \
                         {getattr(user, 'id', 'unknown')}: {e}"
                 ) from e
-                # Continue with other users
 
         if docs:
             logger.info(f"Bulk indexing {len(docs)} users")
@@ -175,7 +173,6 @@ class ElasticsearchIndexer:
                     message=f"Error creating UserGroupDoc for group \
                         {getattr(group, 'id', 'unknown')}: {e}"
                 ) from e
-                # Continue with other groups
 
         if docs:
             logger.info(f"Bulk indexing {len(docs)} groups")
@@ -198,7 +195,6 @@ class ElasticsearchIndexer:
                     message=f"Error creating CommentDoc for comment \
                         {getattr(comment, 'id', 'unknown')}: {e}"
                 ) from e
-                # Continue with other comments
 
         if docs:
             logger.info(f"Bulk indexing {len(docs)} comments")
@@ -271,12 +267,12 @@ class ElasticsearchIndexer:
         actions = []
         for doc in docs:
             if doc:
-                action = doc.to_dict(True)
-                action["_index"] = doc.Index.name
+                action = {"index": {"_index": doc.Index.name, "_id": str(doc.id)}}
                 actions.append(action)
+                actions.append(doc.to_dict(True))
 
         stats = await self._client.bulk(body=actions, refresh=True)
-        return stats.to_dict()
+        return stats.body
 
     async def refresh_all(self) -> None:
         """Refresh all indices."""

@@ -3,6 +3,12 @@ from .base import BaseService
 from .comment import CommentService, get_comment_service
 from .group import GroupService, get_group_service
 from .notification import NotificationService, get_notification_service
+from .outbox import (
+    OutboxService,
+    OutboxTaskService,
+    get_outbox_service,
+    outbox_task_service,
+)
 from .rating import RatingService, get_rating_service
 from .sse import SSEService, get_sse_service
 from .task import TaskService, get_task_service
@@ -15,6 +21,8 @@ __all__ = [
     "CommentService",
     "GroupService",
     "NotificationService",
+    "OutboxService",
+    "OutboxTaskService",
     "RatingService",
     "SSEService",
     "TaskService",
@@ -24,9 +32,11 @@ __all__ = [
     "get_comment_service",
     "get_group_service",
     "get_notification_service",
+    "get_outbox_service",
     "get_rating_service",
     "get_sse_service",
     "get_task_service",
     "get_user_service",
     "get_xp_service",
+    "outbox_task_service",
 ]

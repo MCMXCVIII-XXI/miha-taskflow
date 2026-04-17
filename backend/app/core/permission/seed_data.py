@@ -20,8 +20,6 @@ class SeedData:
         It uses the `roles` and `permissions` attributes to insert data into database.
         The `seed` method is used to seed the database with the roles and permissions.
         Permissions template: {resource}:{action}[:context]
-
-
     """
 
     def __init__(self, db: AsyncSession) -> None:

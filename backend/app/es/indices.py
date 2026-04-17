@@ -3,7 +3,7 @@ from typing import ClassVar
 from elasticsearch import AsyncElasticsearch, exceptions
 from elasticsearch.dsl import AsyncDocument
 
-from app.core.config import elasticsearch_settings
+from app.core.config import es_settings
 from app.indexes import (
     CommentDoc,
     NotificationDoc,
@@ -50,7 +50,7 @@ class IndexSettings:
         Raises:
             es_exc.ElasticsearchMappingError: If index creation fails
         """
-        prefix = elasticsearch_settings.INDEX_PREFIX
+        prefix = es_settings.INDEX_PREFIX
         created = []
 
         for doc_class in self.DOCUMENTS:
@@ -86,7 +86,7 @@ class IndexSettings:
         Raises:
             es_exc.ElasticsearchIndexNotFoundError: If index deletion fails
         """
-        prefix = elasticsearch_settings.INDEX_PREFIX
+        prefix = es_settings.INDEX_PREFIX
         deleted = []
 
         for doc_class in self.DOCUMENTS:

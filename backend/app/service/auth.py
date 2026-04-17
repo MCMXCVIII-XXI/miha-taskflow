@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import security_exc
-from app.core.log import get_logger
+from app.core.log import logging
 from app.core.log.mask import _mask_email
 from app.core.security import (
     create_access_token,
@@ -19,13 +19,14 @@ from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import User as UserModel
 from app.schemas import RefreshTokenRequest, TokenResponse, UserCreate
-from app.schemas.enum import TokenType
+from app.schemas.enum import OutboxEventType, TokenType
 
 from .base import BaseService
 from .exceptions import user_exc
+from .outbox import OutboxService
 from .utils import Indexer
 
-logger = get_logger("service.auth")
+logger = logging.get_logger(__name__)
 
 
 class AuthenticationService(BaseService):
@@ -158,6 +159,15 @@ class AuthenticationService(BaseService):
         )
 
         self._db.add(user)
+        await self._db.flush()
+
+        outbox_service = OutboxService(self._db)
+        await outbox_service.publish(
+            event_type=OutboxEventType.CREATED,
+            entity_type="user",
+            entity_id=user.id,
+        )
+
         await self._db.commit()
         await self._db.refresh(user)
         await self._indexer.index(user)

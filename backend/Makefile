@@ -16,10 +16,17 @@ db-up: ## Start database only
 es-up: ## Start elasticsearch only
 	docker-compose up elasticsearch -d --build
 
+celery: ## Start celery only
+	docker-compose up celery-worker -d --build
+	docker-compose up celery-beat -d --build
+	docker-compose up flower -d --build
+
 infra-up: ## Start infrastructure (cache + db + es)
 	make cache-up
 	make db-up
 	make es-up
+	make celery
+
 
 logs: ## Show all services logs (follow)
 	docker-compose logs -f

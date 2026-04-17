@@ -8,9 +8,8 @@ wheels/
 *.egg-info
 *.egg
 .env
-.env.local
-.env.*.local
 .env_*
+.env.*
 
 # Virtual environments
 .venv

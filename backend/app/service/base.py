@@ -37,6 +37,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.cache import KeyBuilder
 from app.core.exceptions import rbac_exc
+from app.core.log import logging
 from app.models import UserRole as UserRoleModel
 from app.schemas.enum import BaseRank, TaskDifficulty, TaskSphere, XPThreshold
 from app.schemas.enum import SecondaryUserRole as SecondaryUserRoleEnum
@@ -49,6 +50,7 @@ from .query_db import (
     GroupQueries,
     JoinQueries,
     NotificationQueries,
+    OutboxQueries,
     RatingQueries,
     RoleQueries,
     TaskAssigneeQueries,
@@ -57,6 +59,8 @@ from .query_db import (
     UserRoleQueries,
     UserSkillQueries,
 )
+
+logger = logging.get_logger(__name__)
 
 
 class BaseService:
@@ -77,6 +81,7 @@ class BaseService:
             db: SQLAlchemy async session for database operations
         """
         self._db = db
+        self._outbox_queries = OutboxQueries()
         self._comment_queries = CommentQueries()
         self._group_queries = GroupQueries()
         self._group_membership_queries = GroupMembershipQueries()

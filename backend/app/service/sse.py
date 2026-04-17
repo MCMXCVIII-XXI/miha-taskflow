@@ -4,10 +4,10 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.core.config import sse_settings
-from app.core.log import get_logger
+from app.core.log import logging
 from app.core.sse import sse_manager
 
-logger = get_logger("service.sse")
+logger = logging.get_logger(__name__)
 
 
 class SSEService:

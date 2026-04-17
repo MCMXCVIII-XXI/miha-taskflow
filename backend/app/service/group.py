@@ -4,7 +4,7 @@ from fastapi import Depends
 from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.log import get_logger
+from app.core.log import logging
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import (
@@ -26,16 +26,18 @@ from app.schemas import (
 from app.schemas.enum import (
     JoinPolicy,
     JoinRequestStatus,
+    OutboxEventType,
 )
 
 from .base import GroupTaskBaseService
 from .exceptions import group_exc, join_request_exc
 from .notification import NotificationService, get_notification_service
+from .outbox import OutboxService
 from .search import group_search
 from .task import TaskService, get_task_service
 from .utils import Indexer
 
-logger = get_logger("service.group")
+logger = logging.get_logger(__name__)
 
 
 class GroupService(GroupTaskBaseService):
@@ -273,6 +275,13 @@ class GroupService(GroupTaskBaseService):
             user_id=current_user.id, group_id=group.id
         )
         self._db.add(membership)
+
+        outbox_service = OutboxService(self._db)
+        await outbox_service.publish(
+            event_type=OutboxEventType.CREATED,
+            entity_type="group",
+            entity_id=group.id,
+        )
 
         await self._grant_role_if_not_exists(
             user_id=current_user.id,
@@ -520,6 +529,13 @@ class GroupService(GroupTaskBaseService):
         for key, value in group_update.items():
             setattr(group, key, value)
 
+        outbox_service = OutboxService(self._db)
+        await outbox_service.publish(
+            event_type=OutboxEventType.UPDATED,
+            entity_type="group",
+            entity_id=group.id,
+        )
+
         await self._db.commit()
         await self._db.refresh(group)
         await self._indexer.index(group)
@@ -563,6 +579,14 @@ class GroupService(GroupTaskBaseService):
             raise group_exc.GroupNotFound(message="Group not found")
 
         group.is_active = False
+
+        outbox_service = OutboxService(self._db)
+        await outbox_service.publish(
+            event_type=OutboxEventType.DELETED,
+            entity_type="group",
+            entity_id=group.id,
+        )
+
         await self._db.delete(user_role)
         await self._cleanup_role_if_no_groups(
             current_user.id, self._role.GROUP_ADMIN.value

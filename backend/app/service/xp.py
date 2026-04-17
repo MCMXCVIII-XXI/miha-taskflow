@@ -6,12 +6,15 @@ from fastapi import Depends
 from sqlalchemy import ScalarResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.log import logging
 from app.db import db_helper
 from app.models import UserSkill
 from app.schemas import UserSkillWithTitle
 from app.schemas.enum import TaskSphere
 
 from .base import XPBaseService
+
+logger = logging.get_logger(__name__)
 
 
 class XPService(XPBaseService):

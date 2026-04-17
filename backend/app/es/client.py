@@ -12,7 +12,7 @@ from typing import Any
 from elasticsearch import AsyncElasticsearch
 from elasticsearch.dsl import async_connections
 
-from app.core.config import ElasticsearchSettings, elasticsearch_settings
+from app.core.config import ESSettings, es_settings
 
 from .exceptions import es_exc
 
@@ -29,7 +29,7 @@ class ElasticsearchHelper:
         _client (AsyncElasticsearch | None): Active Elasticsearch client instance
     """
 
-    def __init__(self, settings: ElasticsearchSettings):
+    def __init__(self, settings: ESSettings):
         self._settings = settings
         self._client: AsyncElasticsearch | None = None
         self._auto_setup_dsl = True
@@ -140,4 +140,4 @@ class ElasticsearchHelper:
         yield client
 
 
-es_helper = ElasticsearchHelper(elasticsearch_settings)
+es_helper = ElasticsearchHelper(es_settings)
