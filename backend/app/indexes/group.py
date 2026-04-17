@@ -12,10 +12,13 @@ from elasticsearch.dsl import (
     mapped_field,
 )
 
+from app.core.log import logging
 from app.models import UserGroup
 from app.schemas import UserGroupRead
 
 from .utils import RUSSIAN_ANALYZER_SETTINGS, get_index_name
+
+logger = logging.get_logger(__name__)
 
 
 class UserGroupDoc(AsyncDocument):
@@ -51,7 +54,6 @@ class UserGroupDoc(AsyncDocument):
     def from_orm(cls, group: UserGroup) -> "UserGroupDoc":
         """SQLAlchemy UserGroup → ES."""
         admin = getattr(group, "admin", None)
-
         return cls(
             id=group.id,
             name=group.name or "",
