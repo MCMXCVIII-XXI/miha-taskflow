@@ -1,4 +1,4 @@
-from pydantic import AnyUrl, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +11,7 @@ class SecuritySettings(BaseSettings):
     Environment variables prefix: SECURITY_
     """
 
-    ALLOWED_ORIGINS: list[AnyUrl] = Field(
+    ALLOWED_ORIGINS: list[str] = Field(
         default=[],
         description="Allowed origins",
     )

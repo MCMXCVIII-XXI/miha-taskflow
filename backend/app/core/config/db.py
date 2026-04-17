@@ -1,4 +1,4 @@
-from pydantic import AnyUrl, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +11,7 @@ class DBSettings(BaseSettings):
     Environment variables prefix: DB_
     """
 
-    URL: AnyUrl = Field(
+    URL: str = Field(
         default="postgresql+asyncpg://user:pass@localhost:5432/postgres",
         description="Database URL",
     )
