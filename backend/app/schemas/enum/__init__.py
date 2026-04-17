@@ -14,6 +14,7 @@ from .notification import (
     NotificationTargetType,
     NotificationType,
 )
+from .outbox import OutboxEventType, OutboxStatus
 from .rating import RatingTarget
 from .role import GlobalUserRole, SecondaryUserRole
 from .task import TaskDifficulty, TaskPriority, TaskSphere, TaskStatus, TaskVisibility
@@ -33,6 +34,8 @@ __all__ = [
     "NotificationStatus",
     "NotificationTargetType",
     "NotificationType",
+    "OutboxEventType",
+    "OutboxStatus",
     "ProductRank",
     "QARank",
     "RatingTarget",
