@@ -1,4 +1,4 @@
-from pydantic import AnyUrl, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,10 +11,12 @@ class CelerySettings(BaseSettings):
     Environment variables prefix: CELERY_
     """
 
-    BROKER_URL: AnyUrl = Field(
+    BROKER_URL: str = Field(
+        default="redis://localhost:6379/0",
         description="Celery broker URL",
     )
-    BACKEND_URL: AnyUrl = Field(
+    BACKEND_URL: str = Field(
+        default="redis://localhost:6379/1",
         description="Celery result backend URL",
     )
     TASK_SERIALIZER: str = Field(

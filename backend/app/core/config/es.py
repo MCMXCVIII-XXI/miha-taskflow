@@ -1,4 +1,4 @@
-from pydantic import AnyUrl, Field, SecretStr
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +11,8 @@ class ESSettings(BaseSettings):
     Environment variables prefix: ES_
     """
 
-    URL: list[AnyUrl] = Field(
+    URL: list[str] = Field(
+        default=["http://localhost:9200"],
         description="Elasticsearch URL for the cluster",
     )
     USERNAME: str | None = Field(default=None, description="Elasticsearch username")

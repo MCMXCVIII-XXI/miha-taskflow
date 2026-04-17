@@ -1,4 +1,4 @@
-from pydantic import AnyUrl, Field
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -11,7 +11,8 @@ class CacheSettings(BaseSettings):
     Environment variables prefix: CACHE_
     """
 
-    URL: AnyUrl = Field(
+    URL: str = Field(
+        default="redis://localhost:6379/0",
         description="Cache URL",
     )
     CONNECT_RETRY: bool = Field(default=False, description="Connect retry")
