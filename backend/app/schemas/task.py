@@ -111,3 +111,4 @@ class TaskUpdate(BaseModel):
         default=None, description="Task visibility"
     )
     is_active: bool | None = Field(default=None, description="Task active status")
+    deadline: datetime | None = Field(default=None, description="Task deadline")

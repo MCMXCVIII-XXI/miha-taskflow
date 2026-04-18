@@ -16,6 +16,11 @@ class UserGroupRead(BaseModel):
         GroupVisibility.PUBLIC, description="Group visibility"
     )
     join_policy: JoinPolicy = Field(JoinPolicy.REQUEST, description="Join policy")
+    parent_group_id: int | None = Field(
+        default=None, description="Parent group ID for subgroups"
+    )
+    level: int | None = Field(default=None, description="Group level")
+
     is_active: bool = Field(description="Group is active")
     invite_policy: InvitePolicy = Field(
         InvitePolicy.ADMIN_ONLY, description="Invite policy"
@@ -40,9 +45,7 @@ class UserGroupCreate(BaseModel):
     invite_policy: InvitePolicy = Field(
         default=InvitePolicy.ADMIN_ONLY, description="Invite policy"
     )
-    join_policy: JoinPolicy = Field(
-        default=JoinPolicy.REQUEST, description="Join policy"
-    )
+    join_policy: JoinPolicy = Field(default=JoinPolicy.OPEN, description="Join policy")
 
     @field_validator("parent_group_id", mode="before")
     @classmethod
@@ -61,6 +64,7 @@ class UserGroupUpdate(BaseModel):
     )
     visibility: GroupVisibility | None = Field(None, description="Group visibility")
     invite_policy: InvitePolicy | None = Field(None, description="Invite policy")
+    join_policy: JoinPolicy | None = Field(None, description="Join policy")
 
 
 class UserGroupMembership(BaseModel):

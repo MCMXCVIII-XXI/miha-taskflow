@@ -35,8 +35,8 @@ class UserDoc(AsyncDocument):
     assigned_task_ids: M[list[str]] = mapped_field(Keyword(multi=True))
     comment_ids: M[list[str]] = mapped_field(Keyword(multi=True))
     group_ids: M[list[str]] = mapped_field(Keyword(multi=True))
-    admin_group_ids: M[list[str]] = mapped_field(Keyword(multi=True))
-    member_group_ids: M[list[str]] = mapped_field(Keyword(multi=True))
+    admin_group_ids: M[list[int]] = mapped_field(Keyword(multi=True))
+    member_group_ids: M[list[int]] = mapped_field(Keyword(multi=True))
     is_active: M[bool] = mapped_field(Boolean(), default=True)
 
     class Index:
