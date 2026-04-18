@@ -2,7 +2,9 @@ from typing import Any, ClassVar
 
 from elasticsearch.dsl import (
     AsyncFacetedSearch,
+    DateHistogramFacet,
     Facet,
+    RangeFacet,
     TermsFacet,
 )
 
@@ -32,6 +34,9 @@ class TaskFacetedSearch(AsyncFacetedSearch):
         "spheres": TermsFacet(field="spheres.keyword"),
         "group_id": TermsFacet(field="group_id"),
         "assignee_ids": TermsFacet(field="assignee_ids.keyword"),
+        "is_active": TermsFacet(field="is_active"),
+        "date_created": DateHistogramFacet(field="created_at", interval="month"),
+        "date_deadline": DateHistogramFacet(field="deadline", interval="week"),
     }
 
 
@@ -78,6 +83,17 @@ class GroupFacetedSearch(AsyncFacetedSearch):
         "visibility": TermsFacet(field="visibility.keyword"),
         "join_policy": TermsFacet(field="join_policy.keyword"),
         "invite_policy": TermsFacet(field="invite_policy.keyword"),
+        "is_active": TermsFacet(field="is_active"),
+        "level": RangeFacet(
+            field="level",
+            ranges=[
+                ("root", (None, 1)),  # level 0
+                ("l1", (1, 2)),  # level 1
+                ("l2", (2, 3)),  # level 2
+                ("l3", (3, 4)),  # level 3
+                ("deep", (4, None)),  # level 4+
+            ],
+        ),
     }
 
 
@@ -100,6 +116,8 @@ class CommentFacetedSearch(AsyncFacetedSearch):
     facets: ClassVar[dict[str, Facet]] = {
         "task_id": TermsFacet(field="task_id"),
         "user_id": TermsFacet(field="user_id"),
+        "date_created": DateHistogramFacet(field="created_at", interval="week"),
+        "parent_id": TermsFacet(field="parent_id"),
     }
 
 
@@ -129,4 +147,6 @@ class NotificationFacetedSearch(AsyncFacetedSearch):
         "sender_id": TermsFacet(field="sender_id"),
         "recipient_id": TermsFacet(field="recipient_id"),
         "target_type": TermsFacet(field="target_type.keyword"),
+        "is_read": TermsFacet(field="is_read"),
+        "date_created": DateHistogramFacet(field="created_at", interval="day"),
     }

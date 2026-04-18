@@ -2733,6 +2733,7 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-ordering" },
     { name = "pytest-xdist" },
+    { name = "sentry-sdk" },
     { name = "testcontainers" },
 ]
 lint = [
@@ -2782,6 +2783,7 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "pytest-ordering", specifier = ">=0.6" },
     { name = "pytest-xdist", specifier = ">=3.8.0" },
+    { name = "sentry-sdk", specifier = ">=2.0" },
     { name = "testcontainers", extras = ["postgres"], specifier = ">=4.14.2" },
 ]
 lint = [
