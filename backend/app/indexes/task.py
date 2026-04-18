@@ -59,7 +59,6 @@ class TaskDoc(AsyncDocument):
             selectinload(Task.comments)
         )
         """
-        # Безопасное извлечение связанных данных
         group_info = getattr(task, "group", None)
         group_name = group_info.name if group_info else ""
 

@@ -3,7 +3,6 @@ from typing import Any, ClassVar
 
 from elasticsearch.dsl import (
     AsyncDocument,
-    Boolean,
     Date,
     Integer,
     Keyword,
@@ -32,8 +31,6 @@ class NotificationDoc(AsyncDocument):
     response: M[str | None] = mapped_field(Keyword())
     status: M[str] = mapped_field(Keyword())
     created_at: M[datetime] = mapped_field(Date())
-    is_read: M[bool] = mapped_field(Boolean(), default=False)
-    updated_at: M[datetime | None] = mapped_field(Date(), default=None)
 
     class Index:
         name = get_index_name("notifications_v1")
@@ -66,8 +63,6 @@ class NotificationDoc(AsyncDocument):
             if hasattr(notification.status.value, "value")
             else str(notification.status.value or ""),
             created_at=notification.created_at,
-            is_read=getattr(notification, "is_read", False),
-            updated_at=getattr(notification, "updated_at", None),
         )
 
     def to_read_schema(self) -> NotificationRead:
