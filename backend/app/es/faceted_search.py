@@ -35,8 +35,8 @@ class TaskFacetedSearch(AsyncFacetedSearch):
         "group_id": TermsFacet(field="group_id"),
         "assignee_ids": TermsFacet(field="assignee_ids.keyword"),
         "is_active": TermsFacet(field="is_active"),
-        "date_created": DateHistogramFacet(field="created_at", interval="month"),
-        "date_deadline": DateHistogramFacet(field="deadline", interval="week"),
+        "date_created": DateHistogramFacet(field="created_at", fixed_interval="30d"),
+        "date_deadline": DateHistogramFacet(field="deadline", fixed_interval="7d"),
     }
 
 
@@ -116,7 +116,7 @@ class CommentFacetedSearch(AsyncFacetedSearch):
     facets: ClassVar[dict[str, Facet]] = {
         "task_id": TermsFacet(field="task_id"),
         "user_id": TermsFacet(field="user_id"),
-        "date_created": DateHistogramFacet(field="created_at", interval="week"),
+        "date_created": DateHistogramFacet(field="created_at", fixed_interval="7d"),
         "parent_id": TermsFacet(field="parent_id"),
     }
 
@@ -148,5 +148,5 @@ class NotificationFacetedSearch(AsyncFacetedSearch):
         "recipient_id": TermsFacet(field="recipient_id"),
         "target_type": TermsFacet(field="target_type.keyword"),
         "is_read": TermsFacet(field="is_read"),
-        "date_created": DateHistogramFacet(field="created_at", interval="day"),
+        "date_created": DateHistogramFacet(field="created_at", fixed_interval="1d"),
     }

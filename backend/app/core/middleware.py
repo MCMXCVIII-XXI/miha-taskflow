@@ -20,7 +20,7 @@ from app.core.metrics import http_request_duration_seconds, http_requests_total
 
 logger = get_logger("http")
 
-SLOW_QUERY_THRESHOLD = 1.0  # seconds
+SLOW_QUERY_THRESHOLD = 1.0
 
 
 async def http_logging_middleware(request: Request, call_next: Any) -> Any:

@@ -1,0 +1,31 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+# Здесь можно добавить Alertmanager, если захочешь позже
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ["alertmanager:9093"]
+
+rule_files:
+  # пусто, пока не нужен rules
+  # - "rules/*.rules"
+
+scrape_configs:
+  # сам Prometheus
+  - job_name: prometheus
+    static_configs:
+      - targets: ["prometheus:9090"]
+
+  # пример: если будешь поднимать node_exporter или cadvisor
+  # - job_name: node
+  #   static_configs:
+  #     - targets: ["host.docker.internal:9100"]
+  # если у тебя есть /metrics в backend (например, FastAPI + prometheus‑client)
+  - job_name: backend
+    static_configs:
+      - targets: ["backend:8000"]
+    # если метрики живут не на корне, а по /metrics:
+    # metrics_path: /metrics
+    # доп. параметры можно добавить далее

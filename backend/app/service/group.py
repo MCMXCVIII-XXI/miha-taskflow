@@ -5,6 +5,7 @@ from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import logging
+from app.core.metrics import GROUP_ACTIONS_TOTAL
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import (
@@ -289,6 +290,7 @@ class GroupService(GroupTaskBaseService):
             role_name=self._role.GROUP_ADMIN.value,
         )
         await self._db.commit()
+        GROUP_ACTIONS_TOTAL.labels(action="create", status="success").inc()
         await self._db.refresh(group)
         await self._indexer.index(group)
         await self._invalidate("groups")
@@ -409,6 +411,7 @@ class GroupService(GroupTaskBaseService):
         membership_create = UserGroupMembershipModel(group_id=group_id, user_id=user_id)
         self._db.add(membership_create)
         await self._db.commit()
+        GROUP_ACTIONS_TOTAL.labels(action="add_member").inc()
         await self._db.refresh(membership_create)
         await self._invalidate("groups")
 
@@ -454,6 +457,7 @@ class GroupService(GroupTaskBaseService):
         await self._db.delete(membership)
         await self._cleanup_role_if_no_groups(user_id, self._role.MEMBER.value)
         await self._db.commit()
+        GROUP_ACTIONS_TOTAL.labels(action="remove_member").inc()
 
         logger.info(
             "Member removed from group: group_id={group_id}, user_id={removed_user}",
@@ -537,6 +541,7 @@ class GroupService(GroupTaskBaseService):
         )
 
         await self._db.commit()
+        GROUP_ACTIONS_TOTAL.labels(action="update").inc()
         await self._db.refresh(group)
         await self._indexer.index(group)
         await self._invalidate("groups")
@@ -592,6 +597,7 @@ class GroupService(GroupTaskBaseService):
             current_user.id, self._role.GROUP_ADMIN.value
         )
         await self._db.commit()
+        GROUP_ACTIONS_TOTAL.labels(action="delete").inc()
         await self._indexer.delete({"type": "group", "id": group_id})
         await self._invalidate("groups")
 
@@ -787,6 +793,7 @@ class GroupService(GroupTaskBaseService):
             )
             self._db.add(membership)
             await self._db.commit()
+            GROUP_ACTIONS_TOTAL.labels(action="join_open").inc()
             await self._grant_role_if_not_exists(
                 group_id=group_id,
                 user_id=current_user.id,
@@ -848,6 +855,7 @@ class GroupService(GroupTaskBaseService):
         await self._db.delete(membership)
         await self._cleanup_role_if_no_groups(current_user.id, self._role.MEMBER.value)
         await self._db.commit()
+        GROUP_ACTIONS_TOTAL.labels(action="exit").inc()
         await self._invalidate("groups")
 
         logger.info(

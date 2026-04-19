@@ -52,8 +52,12 @@ class UserGroupDoc(AsyncDocument):
 
     @classmethod
     def from_orm(cls, group: UserGroup) -> "UserGroupDoc":
-        """SQLAlchemy UserGroup → ES."""
         admin = getattr(group, "admin", None)
+        sub_group_ids = getattr(group, "sub_group_ids", []) or []
+        task_ids = getattr(group, "task_ids", []) or []
+        user_count = getattr(group, "member_count", 0) or 0
+        task_count = getattr(group, "task_count", 0) or 0
+
         return cls(
             id=group.id,
             name=group.name or "",
@@ -70,10 +74,10 @@ class UserGroupDoc(AsyncDocument):
             updated_at=group.updated_at,
             invite_policy=group.invite_policy.value,
             admin_username=getattr(admin, "username", "") if admin else "",
-            task_count=0,
-            member_count=0,
-            sub_group_ids=[],
-            task_ids=[],
+            task_count=task_count,
+            member_count=user_count,
+            sub_group_ids=sub_group_ids,
+            task_ids=task_ids,
         )
 
     def to_read_schema(self) -> UserGroupRead:

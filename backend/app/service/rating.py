@@ -2,6 +2,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import logging
+from app.core.metrics import SOCIAL_ACTIONS_TOTAL
 from app.db import db_helper
 from app.models import Rating as RatingModel
 from app.models import User as UserModel
@@ -111,6 +112,7 @@ class RatingService(BaseService):
         )
         self._db.add(rating)
         await self._db.commit()
+        SOCIAL_ACTIONS_TOTAL.labels(action="rating_create").inc()
         return RatingRead.model_validate(rating)
 
     async def get_rating(
@@ -204,6 +206,7 @@ class RatingService(BaseService):
 
         await self._db.delete(rating)
         await self._db.commit()
+        SOCIAL_ACTIONS_TOTAL.labels(action="rating_delete").inc()
 
 
 def get_rating_service(

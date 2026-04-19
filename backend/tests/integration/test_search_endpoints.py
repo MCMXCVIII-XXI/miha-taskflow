@@ -726,3 +726,723 @@ class TestSearchEdgeCases:
             "/search/notifications/search?limit=101", headers=admin_auth_headers
         )
         assert response.status_code == 422
+
+
+class TestSearchMyGroups:
+    """Tests for /search/groups/my endpoint."""
+
+    async def test_search_my_groups_no_params(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Default search - no parameters."""
+        await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        response = await test_client.get("/search/groups/my", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert "results" in data
+        assert "total" in data
+
+    async def test_search_my_groups_with_q(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Search with query string."""
+        await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/groups/my?q=Test", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_groups_with_visibility(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by visibility."""
+        await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test", "visibility": "public"},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/groups/my?visibility=public", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_groups_with_limit(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Custom limit."""
+        await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/groups/my?limit=5", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_groups_without_auth(self, test_client: AsyncClient):
+        """Without auth returns 401."""
+        response = await test_client.get("/search/groups/my")
+        assert response.status_code == 401
+
+    async def test_search_my_groups_with_scope_admin(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by scope admin."""
+        await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/groups/my?scope=admin", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_groups_with_scope_member(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by scope member."""
+        await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/groups/my?scope=member", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_groups_with_join_policy(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by join_policy."""
+        await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test", "join_policy": "open"},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/groups/my?join_policy=open", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_groups_with_facets(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by facets."""
+        await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/groups/my?facets=true", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_groups_with_offset(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by offset."""
+        await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/groups/my?offset=10", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_groups_limit_zero(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Limit=0 returns 422."""
+        await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/groups/my?limit=0", headers=auth_headers
+        )
+        assert response.status_code == 422
+
+    async def test_search_my_groups_limit_exceed(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Limit>100 returns 422."""
+        await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/groups/my?limit=101", headers=auth_headers
+        )
+        assert response.status_code == 422
+
+
+class TestSearchMyTasks:
+    """Tests for /search/tasks/my endpoint."""
+
+    async def test_search_my_tasks_no_params(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Default search - no parameters."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": "Test Task", "priority": "medium", "group_id": group_id},
+            headers=auth_headers,
+        )
+        response = await test_client.get("/search/tasks/my", headers=auth_headers)
+        assert response.status_code == 200
+        data = response.json()
+        assert "results" in data
+
+    async def test_search_my_tasks_with_status(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by status."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": "Test Task", "priority": "medium", "group_id": group_id},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/tasks/my?status=pending", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_tasks_with_limit(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Custom limit."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": "Test Task", "priority": "medium", "group_id": group_id},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/tasks/my?limit=5", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_tasks_without_auth(self, test_client: AsyncClient):
+        """Without auth returns 401."""
+        response = await test_client.get("/search/tasks/my")
+        assert response.status_code == 401
+
+    async def test_search_my_tasks_with_q(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Search with query string."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": "Test Task", "priority": "medium", "group_id": group_id},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/tasks/my?q=Test", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_tasks_with_priority(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by priority."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": "Test Task", "priority": "high", "group_id": group_id},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/tasks/my?priority=high", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_tasks_with_difficulty(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by difficulty."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": "Test Task",
+                "priority": "medium",
+                "difficulty": "medium",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/tasks/my?difficulty=medium", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_tasks_with_facets(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by facets."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": "Test Task", "priority": "medium", "group_id": group_id},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/tasks/my?facets=true", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_tasks_with_offset(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by offset."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": "Test Task", "priority": "medium", "group_id": group_id},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/tasks/my?offset=10", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_my_tasks_limit_zero(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Limit=0 returns 422."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": "Test Task", "priority": "medium", "group_id": group_id},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/tasks/my?limit=0", headers=auth_headers
+        )
+        assert response.status_code == 422
+
+    async def test_search_my_tasks_limit_exceed(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Limit>100 returns 422."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"title": "Test Task", "priority": "medium", "group_id": group_id},
+            headers=auth_headers,
+        )
+        response = await test_client.get(
+            "/search/tasks/my?limit=101", headers=auth_headers
+        )
+        assert response.status_code == 422
+
+
+class TestSearchUsersByGroup:
+    """Tests for /search/users/by-group endpoint."""
+
+    async def test_search_users_by_group_required_group_id(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """group_id is required."""
+        response = await test_client.get("/search/users/by-group", headers=auth_headers)
+        assert response.status_code == 422
+
+    async def test_search_users_by_group_no_params(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Default search - no parameters."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/users/by-group?group_id={group_id}", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_by_group_without_auth(self, test_client: AsyncClient):
+        """Without auth returns 401."""
+        response = await test_client.get("/search/users/by-group?group_id=1")
+        assert response.status_code == 401
+
+    async def test_search_users_by_group_with_q(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Search with query string."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/users/by-group?group_id={group_id}&q=Test",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_by_group_with_role(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by role."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/users/by-group?group_id={group_id}&role=member",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_by_group_with_is_active(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by is_active."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/users/by-group?group_id={group_id}&is_active=true",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_by_group_with_facets(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by facets."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/users/by-group?group_id={group_id}&facets=true",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_by_group_with_limit(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by limit."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/users/by-group?group_id={group_id}&limit=5",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_by_group_with_offset(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by offset."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/users/by-group?group_id={group_id}&offset=10",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_users_by_group_limit_exceed(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Limit>100 returns 422."""
+        response = await test_client.get(
+            "/search/users/by-group?group_id=1&limit=101",
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
+
+    async def test_search_users_by_group_invalid_group_id(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Invalid group_id returns 422."""
+        response = await test_client.get(
+            "/search/users/by-group?group_id=abc",
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
+
+
+class TestSearchTasksByGroup:
+    """Tests for /search/tasks/by-group endpoint."""
+
+    async def test_search_tasks_by_group_required_group_id(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """group_id is required."""
+        response = await test_client.get("/search/tasks/by-group", headers=auth_headers)
+        assert response.status_code == 422
+
+    async def test_search_tasks_by_group_no_params(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Default search - no parameters."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/tasks/by-group?group_id={group_id}", headers=auth_headers
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_by_group_without_auth(self, test_client: AsyncClient):
+        """Without auth returns 401."""
+        response = await test_client.get("/search/tasks/by-group?group_id=1")
+        assert response.status_code == 401
+
+    async def test_search_tasks_by_group_with_q(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Search with query string."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/tasks/by-group?group_id={group_id}&q=Test",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_by_group_with_status(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by status."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/tasks/by-group?group_id={group_id}&status=pending",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_by_group_with_priority(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by priority."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/tasks/by-group?group_id={group_id}&priority=high",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_by_group_with_difficulty(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by difficulty."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/tasks/by-group?group_id={group_id}&difficulty=medium",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_by_group_with_spheres(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by spheres."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/tasks/by-group?group_id={group_id}&spheres=backend",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_by_group_with_assignee_ids(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by assignee_ids."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/tasks/by-group?group_id={group_id}&assignee_ids=1",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_by_group_with_facets(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by facets."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/tasks/by-group?group_id={group_id}&facets=true",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_by_group_with_limit(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by limit."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/tasks/by-group?group_id={group_id}&limit=5",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_by_group_with_offset(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Filter by offset."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": "Test Group", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+        response = await test_client.get(
+            f"/search/tasks/by-group?group_id={group_id}&offset=10",
+            headers=auth_headers,
+        )
+        assert response.status_code == 200
+
+    async def test_search_tasks_by_group_limit_exceed(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Limit>100 returns 422."""
+        response = await test_client.get(
+            "/search/tasks/by-group?group_id=1&limit=101",
+            headers=auth_headers,
+        )
+        assert response.status_code == 422
+
+    async def test_search_tasks_by_group_invalid_group_id(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Invalid group_id returns 422."""
+        response = await test_client.get(
+            "/search/tasks/by-group?group_id=abc",
+            headers=auth_headers,
+        )
+        assert response.status_code == 422

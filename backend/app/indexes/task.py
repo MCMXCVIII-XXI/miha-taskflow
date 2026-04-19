@@ -49,47 +49,47 @@ class TaskDoc(AsyncDocument):
 
     @classmethod
     def from_orm(cls, task: Task) -> "TaskDoc":
-        """
-        Convert Task ORM model to TaskDoc for Elasticsearch.
-
-        Note: For optimal performance, task should be loaded with:
-        select(Task).options(
-            joinedload(Task.group),
-            selectinload(Task.assignees),
-            selectinload(Task.comments)
-        )
-        """
+        title = getattr(task, "title", "") or ""
+        description = getattr(task, "description", "") or ""
+        status = getattr(
+            task, "status", type("Enum", (), {"value": lambda s: ""})()
+        ).value
+        priority = getattr(
+            task, "priority", type("Enum", (), {"value": lambda s: ""})()
+        ).value
+        difficulty = getattr(task, "difficulty", None)
+        visibility = getattr(
+            task, "visibility", type("Enum", (), {"value": lambda s: ""})()
+        ).value
+        group_id_raw = getattr(task, "group_id", None)
+        group_id = int(group_id_raw) if group_id_raw is not None else None
+        is_active = getattr(task, "is_active", True)
+        deadline = getattr(task, "deadline", None)
+        spheres = getattr(task, "spheres", [])
+        assignee_ids = getattr(task, "assignee_ids", [])
+        comment_count = getattr(task, "comment_count", 0)
         group_info = getattr(task, "group", None)
         group_name = group_info.name if group_info else ""
-
-        spheres_data = task.spheres or []
-        spheres = []
-        for s in spheres_data:
-            if isinstance(s, dict) and "sphere" in s:
-                spheres.append(s["sphere"])
-            elif hasattr(s, "sphere"):
-                spheres.append(s.sphere)
+        group_admin_username = getattr(task, "group_admin_username", "")
 
         return cls(
             id=task.id,
-            title=task.title or "",
-            description=task.description or "",
-            status=task.status.value,
-            priority=task.priority.value,
-            difficulty=str(task.difficulty.value) if task.difficulty else None,
-            visibility=task.visibility.value,
-            group_id=int(task.group_id) if task.group_id else None,
-            assignee_ids=[],
+            title=title,
+            description=description,
+            status=status,
+            priority=priority,
+            difficulty=difficulty,
+            visibility=visibility,
+            group_id=group_id,
             created_at=task.created_at,
             updated_at=task.updated_at,
-            group_name=group_name,
-            comment_count=0,
-            group_admin_username=getattr(group_info, "admin_username", "")
-            if group_info
-            else "",
-            is_active=getattr(task, "is_active", True),
-            deadline=task.deadline,
+            is_active=is_active,
+            deadline=deadline,
             spheres=spheres,
+            assignee_ids=assignee_ids,
+            comment_count=comment_count,
+            group_name=group_name,
+            group_admin_username=group_admin_username,
         )
 
     def to_read_schema(self) -> TaskRead:

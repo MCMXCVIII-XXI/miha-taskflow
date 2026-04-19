@@ -5,6 +5,10 @@ from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import logging
+from app.core.metrics import (
+    SEARCH_QUERIES_TOTAL,
+    USER_ACTIONS_TOTAL,
+)
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import User as UserModel
@@ -136,6 +140,7 @@ class UserService(BaseService):
             return await user_svc.get_my_profile(current_user)
         """
         user = await self._assert_active_current_user(current_user)
+        USER_ACTIONS_TOTAL.labels(action="get_profile", role="user").inc()
         return UserRead.model_validate(user)
 
     async def get_user(self, user_id: int) -> dict[str, Any]:
@@ -147,6 +152,7 @@ class UserService(BaseService):
 
         top_skills = await self._xp_service.get_top_skills(user_id, 3)
         top_skills = top_skills or []
+        USER_ACTIONS_TOTAL.labels(action="get_user", role="user").inc()
 
         return {**UserRead.model_validate(user).model_dump(), "top_skills": top_skills}
 
@@ -174,6 +180,7 @@ class UserService(BaseService):
             users = await user_svc.search_users()
             results = await user_svc._db.execute(users)
         """
+        SEARCH_QUERIES_TOTAL.labels(entity="user", status="success").inc()
         return self._user_queries.get_user(is_active=True)
 
     @user_search
@@ -201,6 +208,7 @@ class UserService(BaseService):
         Example Usage:
             group_users = await user_svc.search_users_in_group(group_id=123)
         """
+        SEARCH_QUERIES_TOTAL.labels(entity="user_group", status="success").inc()
         return self._user_queries.by_group_membership(group_id, is_active=True)
 
     @user_search
@@ -228,6 +236,7 @@ class UserService(BaseService):
         Example Usage:
             task_users = await user_svc.search_users_in_tasks(task_id=456)
         """
+        SEARCH_QUERIES_TOTAL.labels(entity="user_task", status="success").inc()
         return self._user_queries.by_task_assignee(task_id, is_active=True)
 
     async def update_my_profile(
@@ -306,6 +315,7 @@ class UserService(BaseService):
         )
 
         await self._db.commit()
+        USER_ACTIONS_TOTAL.labels(action="update_profile", role="user").inc()
         await self._db.refresh(user)
         await self._indexer.index(user)
         await self._invalidate("auth")
@@ -348,6 +358,7 @@ class UserService(BaseService):
         )
 
         await self._db.commit()
+        USER_ACTIONS_TOTAL.labels(action="delete_profile", role="user").inc()
         await self._indexer.delete({"type": "user", "id": current_user.id})
         await self._invalidate("users")
         await self._invalidate("auth")
@@ -382,6 +393,7 @@ class UserService(BaseService):
         admin = await self._db.scalar(
             self._user_queries.get_admin_group(group_id=group_id, is_active=True)
         )
+        USER_ACTIONS_TOTAL.labels(action="get_group_admin", role="admin").inc()
         if not admin:
             raise user_exc.UserNotFound(message="Not found admin")
         return UserRead.model_validate(admin)
@@ -411,6 +423,7 @@ class UserService(BaseService):
         owner = await self._db.scalar(
             self._user_queries.by_owner_task(task_id=task_id, is_active=True)
         )
+        USER_ACTIONS_TOTAL.labels(action="get_owner_task", role="owner").inc()
         if not owner:
             raise user_exc.UserNotFound(message="Task owner not found")
         return UserRead.model_validate(owner)

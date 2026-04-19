@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import get_logger
+from app.core.metrics import USER_ACTIONS_TOTAL
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import User as UserModel
@@ -85,6 +86,7 @@ class AdminService(BaseService):
         query = query.limit(limit).offset(offset)
         result = await self._db.scalars(query)
         users = result.all()
+        USER_ACTIONS_TOTAL.labels(action="admin_list_users").inc()
 
         return [UserRead.model_validate(user) for user in users]
 
@@ -137,6 +139,7 @@ class AdminService(BaseService):
 
         user.is_active = False
         await self._db.commit()
+        USER_ACTIONS_TOTAL.labels(action="admin_delete_user").inc()
         await self._indexer.delete({"type": "user", "id": user.id})
 
         logger.info(
