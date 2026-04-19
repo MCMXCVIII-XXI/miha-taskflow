@@ -37,6 +37,8 @@ services:
     restart: unless-stopped
     tty: true
     stdin_open: true
+    networks:
+      - database
 
   backend:
     build:
@@ -58,6 +60,12 @@ services:
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_BACKEND_URL}
     restart: unless-stopped
+    networks:
+      - background
+      - search
+      - cache
+      - monitoring
+      - database
 
   cache:
     image: redis:8.4.2-alpine
@@ -92,6 +100,9 @@ services:
     restart: unless-stopped
     tty: true
     stdin_open: true
+    networks:
+      - cache
+      - background
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:9.3.3
@@ -122,6 +133,8 @@ services:
     restart: unless-stopped
     depends_on:
       - cache
+    networks:
+      - search
 
   celery-worker:
     build:
@@ -142,6 +155,8 @@ services:
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_BACKEND_URL}
     restart: unless-stopped
+    networks:
+      - background
 
   celery-beat:
     build:
@@ -162,6 +177,8 @@ services:
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_BACKEND_URL}
     restart: unless-stopped
+    networks:
+      - background
 
   flower:
     build:
@@ -185,8 +202,76 @@ services:
       timeout: 10s
       retries: 3
     restart: unless-stopped
+    networks:
+      - background
+
+  prometheus:
+    image: prom/prometheus:latest
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/etc/prometheus/console_libraries"
+      - "--web.console.templates=/etc/prometheus/consoles"
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  grafana:
+    image: grafana/grafana:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - monitoring
+
+  loki:
+    image: grafana/loki:latest
+    ports: ["3100:3100"]
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml
+    networks:
+      - monitoring
+
+  alloy:
+    image: grafana/alloy:latest
+    volumes:
+      - ./alloy.hcl:/etc/alloy/config.alloy
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    ports:
+      - "12345:12345"
+    networks:
+      - monitoring
+    depends_on:
+      - loki
+    restart: unless-stopped
+    command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
+
+networks:
+  search:
+    driver: bridge
+  monitoring:
+    driver: bridge
+  cache:
+    driver: bridge
+  background:
+    driver: bridge
+  database:
+    driver: bridge
 
 volumes:
   postgres_data:
   redis_data:
   es_data:
+  grafana_data:
