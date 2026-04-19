@@ -12,7 +12,7 @@ class DBSettings(BaseSettings):
     """
 
     URL: str = Field(
-        default="postgresql+asyncpg://user:pass@localhost:5432/postgres",
+        default="postgresql+asyncpg://user:pass@localhost:5432/taskflow",
         description="Database URL",
     )
     ECHO: bool = Field(default=False, description="Echo SQL queries")
