@@ -19,7 +19,7 @@ from app.schemas.enum import GlobalUserRole, TaskSphere
 
 if TYPE_CHECKING:
     from .comment import Comment
-    from .group import UserGroupMembership
+    from .group import UserGroup, UserGroupMembership
     from .notification import Notification
     from .task import TaskAssignee
 
@@ -52,6 +52,11 @@ class User(Base, IdPkMixin):
         "Notification",
         back_populates="recipient",
         foreign_keys="Notification.recipient_id",
+    )
+    admin_groups: Mapped[list["UserGroup"]] = relationship(
+        "UserGroup",
+        back_populates="admin",
+        foreign_keys="UserGroup.admin_id",
     )
     assigned_tasks: Mapped[list["TaskAssignee"]] = relationship(
         "TaskAssignee", back_populates="user"

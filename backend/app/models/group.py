@@ -66,6 +66,12 @@ class UserGroup(Base, IdPkMixin):
         "UserGroup", back_populates="parent_group", foreign_keys=[parent_group_id]
     )
 
+    admin: Mapped["User"] = relationship(
+        "User",
+        foreign_keys=[admin_id],
+        back_populates="admin_groups",
+    )
+
 
 class UserGroupMembership(Base, IdPkMixin):
     """User group membership model."""
