@@ -31,12 +31,12 @@ class UserDoc(AsyncDocument):
     role: M[str] = mapped_field(Keyword())
     created_at: M[datetime] = mapped_field(Date())
     updated_at: M[datetime | None] = mapped_field(Date())
-    notification_ids: M[list[str]] = mapped_field(Keyword(multi=True))
-    assigned_task_ids: M[list[str]] = mapped_field(Keyword(multi=True))
-    comment_ids: M[list[str]] = mapped_field(Keyword(multi=True))
-    group_ids: M[list[str]] = mapped_field(Keyword(multi=True))
-    admin_group_ids: M[list[int]] = mapped_field(Keyword(multi=True))
-    member_group_ids: M[list[int]] = mapped_field(Keyword(multi=True))
+    notification_sent_ids: M[list[int | None]] = mapped_field(Keyword(multi=True))
+    notification_received_ids: M[list[int | None]] = mapped_field(Keyword(multi=True))
+    assigned_task_ids: M[list[int | None]] = mapped_field(Keyword(multi=True))
+    comment_ids: M[list[int | None]] = mapped_field(Keyword(multi=True))
+    admin_group_ids: M[list[int | None]] = mapped_field(Keyword(multi=True))
+    member_group_ids: M[list[int | None]] = mapped_field(Keyword(multi=True))
     is_active: M[bool] = mapped_field(Boolean(), default=True)
 
     class Index:
@@ -49,7 +49,13 @@ class UserDoc(AsyncDocument):
 
     @classmethod
     def from_orm(cls, user: User) -> "UserDoc":
-        """SQLAlchemy User → ES Document."""
+        notification_sent_ids = getattr(user, "notification_sent_ids", [])
+        notification_received_ids = getattr(user, "notification_received_ids", [])
+        comment_ids = getattr(user, "comment_ids", [])
+        admin_group_ids = getattr(user, "admin_group_ids", [])
+        member_group_ids = getattr(user, "member_group_ids", [])
+        assigned_task_ids = getattr(user, "assigned_task_ids", [])
+
         return cls(
             id=user.id,
             username=user.username or "",
@@ -65,12 +71,12 @@ class UserDoc(AsyncDocument):
             created_at=user.created_at,
             updated_at=user.updated_at,
             is_active=getattr(user, "is_active", True),
-            notification_ids=[],
-            assigned_task_ids=[],
-            comment_ids=[],
-            group_ids=[],
-            admin_group_ids=[],
-            member_group_ids=[],
+            notification_sent_ids=notification_sent_ids,
+            notification_received_ids=notification_received_ids,
+            comment_ids=comment_ids,
+            admin_group_ids=admin_group_ids,
+            member_group_ids=member_group_ids,
+            assigned_task_ids=assigned_task_ids,
         )
 
     def to_read_schema(self) -> UserRead:
