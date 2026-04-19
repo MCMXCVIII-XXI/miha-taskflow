@@ -129,3 +129,119 @@ async def search_notifications(
         offset=offset,
         current_user=current_user,
     )
+
+
+@router.get("/groups/my")
+@cache(expire=300, key_builder=search_key)
+async def search_my_groups(
+    scope: list[str] | None = Query(default=None),
+    q: str = Query(default=""),
+    visibility: str | None = Query(default=None),
+    join_policy: str | None = Query(default=None),
+    facets: bool = Query(default=True),
+    limit: int = Query(default=10, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: UserModel = Depends(require_permissions_db("group:view:own")),
+    svc: ESSearchService = Depends(get_es_search_service),
+) -> dict[str, Any]:
+    """Search my groups."""
+    return await svc.search_my_groups(
+        current_user=current_user,
+        scope=scope,
+        q=q,
+        visibility=visibility,
+        join_policy=join_policy,
+        facets=facets,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/tasks/my")
+@cache(expire=300, key_builder=search_key)
+async def search_my_tasks(
+    scope: list[str] | None = Query(default=None),
+    q: str = Query(default=""),
+    status: str | None = Query(default=None),
+    priority: str | None = Query(default=None),
+    difficulty: str | None = Query(default=None),
+    facets: bool = Query(default=True),
+    limit: int = Query(default=10, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: UserModel = Depends(require_permissions_db("task:view:own")),
+    svc: ESSearchService = Depends(get_es_search_service),
+) -> dict[str, Any]:
+    """Search my tasks."""
+    return await svc.search_my_tasks(
+        current_user=current_user,
+        scope=scope,
+        q=q,
+        status=status,
+        priority=priority,
+        difficulty=difficulty,
+        facets=facets,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/users/by-group")
+@cache(expire=300, key_builder=search_key)
+async def search_users_by_group(
+    group_id: int = Query(),
+    q: str = Query(default=""),
+    role: str | None = Query(default=None),
+    is_active: bool | None = Query(default=None),
+    facets: bool = Query(default=True),
+    limit: int = Query(default=10, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: UserModel = Depends(require_permissions_db("user:view:any")),
+    svc: ESSearchService = Depends(get_es_search_service),
+) -> dict[str, Any]:
+    """Search users in a specific group (admins + members)."""
+    return await svc.search_users_by_group(
+        group_id=group_id,
+        current_user=current_user,
+        q=q,
+        role=role,
+        is_active=is_active,
+        facets=facets,
+        limit=limit,
+        offset=offset,
+    )
+
+
+@router.get("/tasks/by-group")
+@cache(expire=300, key_builder=search_key)
+async def search_tasks_by_group(
+    group_id: int = Query(),
+    q: str = Query(default=""),
+    status: str | None = Query(default=None),
+    priority: str | None = Query(default=None),
+    difficulty: str | None = Query(default=None),
+    spheres: list[str] | None = Query(
+        default=None,
+    ),
+    assignee_ids: list[int] | None = Query(
+        default=None,
+    ),
+    facets: bool = Query(default=True),
+    limit: int = Query(default=10, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    current_user: UserModel = Depends(require_permissions_db("task:view:any")),
+    svc: ESSearchService = Depends(get_es_search_service),
+) -> dict[str, Any]:
+    """Search tasks by group."""
+    return await svc.search_tasks_by_group(
+        group_id=group_id,
+        current_user=current_user,
+        q=q,
+        status=status,
+        priority=priority,
+        difficulty=difficulty,
+        spheres=spheres,
+        assignee_ids=assignee_ids,
+        facets=facets,
+        limit=limit,
+        offset=offset,
+    )
