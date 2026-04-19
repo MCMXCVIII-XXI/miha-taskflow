@@ -185,6 +185,46 @@ async def create_test_client(session_factory) -> AsyncClient:
                 "offset": 0,
             }
         )
+        mock_search.search_my_groups = AsyncMock(
+            return_value={
+                "results": [],
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_my_tasks = AsyncMock(
+            return_value={
+                "results": [],
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_tasks_by_user = AsyncMock(
+            return_value={
+                "results": [],
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_users_by_group = AsyncMock(
+            return_value={
+                "results": [],
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
+        mock_search.search_tasks_by_group = AsyncMock(
+            return_value={
+                "results": [],
+                "total": 0,
+                "limit": 10,
+                "offset": 0,
+            }
+        )
         return mock_search
 
     app.dependency_overrides[get_notification_service] = (
@@ -212,6 +252,7 @@ def override_session_factory(session_factory):
     async def override_get_session():
         async with session_factory() as session:
             yield session
+            await session.close()
 
     return override_get_session
 
