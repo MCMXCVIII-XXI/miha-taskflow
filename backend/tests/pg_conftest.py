@@ -5,7 +5,7 @@ import subprocess
 
 # Import uuid for fixtures
 import uuid
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
 import pytest
@@ -547,3 +547,34 @@ def mock_indexer(mock_es):
     mock_indexer_instance.delete_comment = AsyncMock(return_value=True)
     mock_indexer_instance.delete_notification = AsyncMock(return_value=True)
     return mock_indexer_instance
+
+
+@pytest.fixture(autouse=True)
+def mock_prometheus_metrics():
+    """Mock all Prometheus metrics to avoid label errors in tests."""
+    mock_metric = MagicMock()
+    mock_labels = MagicMock()
+    mock_labels.inc.return_value = None
+    mock_labels.set.return_value = None
+    mock_labels.time.return_value = MagicMock()
+    mock_metric.labels.return_value = mock_labels
+    mock_metric.inc.return_value = None
+    mock_metric.set.return_value = None
+
+    with (
+        patch("app.service.user.USER_ACTIONS_TOTAL", mock_metric),
+        patch("app.service.admin.USER_ACTIONS_TOTAL", mock_metric),
+        patch("app.service.task.TASKS_TOTAL", mock_metric),
+        patch("app.service.task.SEARCH_QUERIES_TOTAL", mock_metric),
+        patch("app.service.group.GROUP_ACTIONS_TOTAL", mock_metric),
+        patch("app.service.comment.SOCIAL_ACTIONS_TOTAL", mock_metric),
+        patch("app.service.rating.SOCIAL_ACTIONS_TOTAL", mock_metric),
+        patch("app.service.notification.NOTIFICATION_SENT_TOTAL", mock_metric),
+        patch("app.service.xp.XP_CHANGES_TOTAL", mock_metric),
+        patch("app.service.xp.SEARCH_QUERIES_TOTAL", mock_metric),
+        patch("app.service.search.es_search.SEARCH_QUERIES_TOTAL", mock_metric),
+        patch("app.service.search.es_search.SEARCH_LATENCY_SECONDS", mock_metric),
+        patch("app.core.middleware.http_requests_total", mock_metric),
+        patch("app.core.middleware.http_request_duration_seconds", mock_metric),
+    ):
+        yield
