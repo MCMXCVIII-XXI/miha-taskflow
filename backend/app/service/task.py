@@ -6,6 +6,10 @@ from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import logging
+from app.core.metrics import (
+    SEARCH_QUERIES_TOTAL,
+    TASKS_TOTAL,
+)
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import JoinRequest as JoinRequestModel
@@ -201,6 +205,13 @@ class TaskService(GroupTaskBaseService):
         )
 
         await self._db.commit()
+        TASKS_TOTAL.labels(
+            action="create",
+            status="success",
+            sphere=task.sphere.value
+            if hasattr(task, "sphere") and task.sphere
+            else "general",
+        ).inc()
         await self._db.refresh(task)
 
         await self._index_task_and_invalidate_cache(task)
@@ -302,6 +313,7 @@ class TaskService(GroupTaskBaseService):
                 return await task_svc.search_tasks(search=search)
             ```
         """
+        SEARCH_QUERIES_TOTAL.labels(entity="task", status="success").inc()
         return self._task_queries.get_task(is_active=True)
 
     @task_search
@@ -329,6 +341,7 @@ class TaskService(GroupTaskBaseService):
         Example Usage:
             tasks = await task_svc.search_my_tasks(current_user)
         """
+        SEARCH_QUERIES_TOTAL.labels(entity="my_tasks", status="success").inc()
         group_ids = await self._get_id_admin_groups(current_user)
         return self._task_queries.by_owner(group_ids, is_active=True)
 
@@ -358,6 +371,7 @@ class TaskService(GroupTaskBaseService):
         Example Usage:
             group_tasks = await task_svc.search_group_tasks(123, current_user)
         """
+        SEARCH_QUERIES_TOTAL.labels(entity="group_tasks", status="success").inc()
         await self._check_group_access(group_id, current_user)
         return self._task_queries.get_task(group_id=group_id, is_active=True)
 
@@ -386,6 +400,7 @@ class TaskService(GroupTaskBaseService):
         Example Usage:
             assigned = await task_svc.search_assigned_tasks(current_user)
         """
+        SEARCH_QUERIES_TOTAL.labels(entity="assigned_tasks", status="success").inc()
         return self._task_queries.by_assigned(current_user.id, is_active=True)
 
     async def update_my_task(
@@ -436,6 +451,7 @@ class TaskService(GroupTaskBaseService):
         )
 
         await self._db.commit()
+        TASKS_TOTAL.labels(action="update", status="success").inc()
         await self._db.refresh(task)
         await self._indexer.index(task)
         await self._invalidate("tasks")
@@ -491,6 +507,7 @@ class TaskService(GroupTaskBaseService):
         )
 
         await self._db.commit()
+        TASKS_TOTAL.labels(action="delete", status="deleted").inc()
         await self._indexer.delete({"type": "task", "id": task_id})
         await self._invalidate("tasks")
 
@@ -540,6 +557,13 @@ class TaskService(GroupTaskBaseService):
         )
 
         await self._db.commit()
+        TASKS_TOTAL.labels(
+            action="update",
+            status="success",
+            sphere=task.sphere.value
+            if hasattr(task, "sphere") and task.sphere
+            else "general",
+        ).inc()
         await self._db.refresh(task)
         await self._invalidate("tasks")
 
@@ -749,6 +773,7 @@ class TaskService(GroupTaskBaseService):
         assignee = TaskAssignee(task_id=task_id, user_id=user_id)
         self._db.add(assignee)
         await self._db.commit()
+        TASKS_TOTAL.labels(action="add_assignee", status="success").inc()
         await self._invalidate("tasks")
 
         if self._notification:
@@ -786,6 +811,7 @@ class TaskService(GroupTaskBaseService):
         assignee = TaskAssignee(task_id=task_id, user_id=user_id)
         self._db.add(assignee)
         await self._db.commit()
+        TASKS_TOTAL.labels(action="join_direct").inc()
         await self._invalidate("tasks")
 
         logger.info(
@@ -824,6 +850,7 @@ class TaskService(GroupTaskBaseService):
         await self._db.delete(assignee)
         await self._cleanup_assignee_role_if_no_tasks(user_id)
         await self._db.commit()
+        TASKS_TOTAL.labels(action="remove_assignee").inc()
         await self._invalidate("tasks")
 
         logger.info(
@@ -879,6 +906,7 @@ class TaskService(GroupTaskBaseService):
 
         request.status = JoinRequestStatus.APPROVED
         await self._db.commit()
+        TASKS_TOTAL.labels(action="approve_join", status="success").inc()
 
         await self._handle_group_membership(request, task, group, current_user)
         await self._add_user_to_task_assignees(request)
@@ -1013,6 +1041,7 @@ class TaskService(GroupTaskBaseService):
 
         request.status = JoinRequestStatus.REJECTED
         await self._db.commit()
+        TASKS_TOTAL.labels(action="reject_join", status="rejected").inc()
 
         notification = await self._notification.notify_join_request_rejected(
             admin_id=current_user.id,
@@ -1071,6 +1100,7 @@ class TaskService(GroupTaskBaseService):
             )
             self._db.add(request)
             await self._db.commit()
+            TASKS_TOTAL.labels(action="join_request").inc()
 
             if self._notification:
                 await self._notification.notify_join_request_created(
@@ -1097,6 +1127,7 @@ class TaskService(GroupTaskBaseService):
         await self._db.delete(assignee)
         await self._cleanup_assignee_role_if_no_tasks(current_user.id)
         await self._db.commit()
+        TASKS_TOTAL.labels(action="exit_task").inc()
         await self._invalidate("tasks")
 
     async def bulk_index_tasks(self, tasks: list[TaskModel]) -> dict[str, Any]:

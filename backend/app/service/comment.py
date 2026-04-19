@@ -3,6 +3,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import logging
+from app.core.metrics import SOCIAL_ACTIONS_TOTAL
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import Comment as CommentModel
@@ -75,6 +76,7 @@ class CommentService(BaseService):
         )
 
         await self._db.commit()
+        SOCIAL_ACTIONS_TOTAL.labels(action="comment_create").inc()
         await self._db.refresh(comment)
         await self._indexer.index(comment)
         return CommentRead.model_validate(comment)
@@ -128,12 +130,13 @@ class CommentService(BaseService):
 
         outbox_service = OutboxService(self._db)
         await outbox_service.publish(
-            event_type=OutboxEventType.CREATED,
+            event_type=OutboxEventType.UPDATED,
             entity_type="comment",
             entity_id=comment.id,
         )
 
         await self._db.commit()
+        SOCIAL_ACTIONS_TOTAL.labels(action="comment_update").inc()
         await self._db.refresh(comment)
         await self._indexer.index(comment)
         return CommentRead.model_validate(comment)
@@ -165,6 +168,7 @@ class CommentService(BaseService):
 
         await self._db.delete(comment)
         await self._db.commit()
+        SOCIAL_ACTIONS_TOTAL.labels(action="comment_delete").inc()
         await self._indexer.delete({"type": "comment", "id": comment_id})
 
 

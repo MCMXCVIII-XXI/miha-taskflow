@@ -2,6 +2,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import logging
+from app.core.metrics import NOTIFICATION_SENT_TOTAL
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import Notification as NotificationModel
@@ -188,7 +189,7 @@ class NotificationService(BaseService):
                     else None,
                 },
             )
-
+        NOTIFICATION_SENT_TOTAL.labels(type=type.value, status="sent").inc()
         return NotificationRead.model_validate(notification)
 
     async def get_my_notifications(
@@ -242,6 +243,7 @@ class NotificationService(BaseService):
         )
         notification.status = NotificationStatus.READ
         await self._db.commit()
+        NOTIFICATION_SENT_TOTAL.labels(action="mark_read").inc()
         return NotificationRead.model_validate(notification)
 
     async def mark_all_as_read(self, user_id: int) -> int:
@@ -251,6 +253,10 @@ class NotificationService(BaseService):
             )
         )
         await self._db.commit()
+        NOTIFICATION_SENT_TOTAL.labels(
+            action="mark_all_read",
+            count=result.rowcount,  # type: ignore[attr-defined]
+        ).inc()
         return result.rowcount  # type: ignore[attr-defined]
 
     async def respond_to_notification(
@@ -275,6 +281,7 @@ class NotificationService(BaseService):
         notification.response = response
         notification.status = NotificationStatus.READ
         await self._db.commit()
+        NOTIFICATION_SENT_TOTAL.labels(action="respond", response=response.value).inc()
         return NotificationRead.model_validate(notification)
 
     async def notify_group_invite(

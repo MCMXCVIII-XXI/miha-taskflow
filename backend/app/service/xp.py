@@ -7,6 +7,7 @@ from sqlalchemy import ScalarResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import logging
+from app.core.metrics import SEARCH_QUERIES_TOTAL, XP_CHANGES_TOTAL
 from app.db import db_helper
 from app.models import UserSkill
 from app.schemas import UserSkillWithTitle
@@ -182,6 +183,7 @@ class XPService(XPBaseService):
         Fetch the leaderboard for a given sphere, sorted by XP total.
         """
         logger.info("Starting leaderboard fetch", sphere=sphere, limit=limit)
+        SEARCH_QUERIES_TOTAL.labels(entity="xp_leaderboard", status="success").inc()
         if sphere:
             task_sphere = TaskSphere(sphere)
             logger.debug(
@@ -243,6 +245,7 @@ class XPService(XPBaseService):
             skill = UserSkill(user_id=user_id, sphere=sphere)
             self._db.add(skill)
             await self._db.commit()
+            XP_CHANGES_TOTAL.labels(direction="skill_create").inc()
             await self._db.refresh(skill)
             logger.info(
                 "New user skill created",
@@ -403,6 +406,7 @@ class XPService(XPBaseService):
             xp_allowed=xp_allowed,
         )
         await self._db.commit()
+        XP_CHANGES_TOTAL.labels(direction="gain").inc()
 
         leveled_up = skill.level > skill._old_level  # type: ignore[attr-defined]
         logger.info(
@@ -460,6 +464,7 @@ class XPService(XPBaseService):
 
     async def get_user_skills(self, user_id: int) -> list[UserSkillWithTitle]:
         """Get all skills for a user, enriched with progress information."""
+        SEARCH_QUERIES_TOTAL.labels(entity="user_skills", status="success").inc()
         logger.info("Starting fetch of user skills", user_id=user_id)
         skills = await self._get_user_skills_raw(user_id)
         enriched = [self._enrich_skill_with_progress(skill) for skill in skills]
@@ -472,6 +477,7 @@ class XPService(XPBaseService):
         self, user_id: int, limit: int = 3
     ) -> list[UserSkillWithTitle]:
         """Get the top skills for a user based on their XP total."""
+        SEARCH_QUERIES_TOTAL.labels(entity="top_skills", status="success").inc()
         logger.info("Fetching top skills for user", user_id=user_id, limit=limit)
         skills = await self.get_user_skills(user_id)
         top_skills = sorted(skills, key=lambda s: s.xp_total, reverse=True)[:limit]
