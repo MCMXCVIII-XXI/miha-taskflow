@@ -1,0 +1,7 @@
+galaxy_info:
+  role_name: workers
+  author: you
+  description: Celery workers role
+  license: MIT
+dependencies:
+  - app

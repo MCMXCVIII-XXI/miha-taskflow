@@ -1,0 +1,11 @@
+- name: Create elasticsearch compose file
+  ansible.builtin.template:
+    src: docker-compose.search.yml.j2
+    dest: "{{ compose_project_dir }}/docker-compose-search.yml"
+    mode: "0644"
+
+- name: Start search stack
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose-search.yml up -d --remove-orphans
+    chdir: "{{ compose_project_dir }}"
+  changed_when: true

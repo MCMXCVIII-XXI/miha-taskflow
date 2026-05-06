@@ -1,0 +1,5 @@
+db_name: taskflow
+db_user: taskflow
+db_password: change_me
+db_port: 5432
+db_host: 127.0.0.1

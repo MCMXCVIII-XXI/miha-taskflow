@@ -1,0 +1,7 @@
+galaxy_info:
+  role_name: monitoring
+  author: you
+  description: Monitoring role
+  license: MIT
+dependencies:
+  - common

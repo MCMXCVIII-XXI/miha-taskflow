@@ -1,0 +1,5 @@
+nginx_site_name: taskflow
+edge_server_name: _
+edge_upstream_host: backend
+edge_upstream_port: 8000
+media_root: /var/www/media

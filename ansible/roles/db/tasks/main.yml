@@ -1,0 +1,11 @@
+- name: Create db compose file
+  ansible.builtin.template:
+    src: docker-compose.db.yml.j2
+    dest: "{{ compose_project_dir }}/docker-compose-db.yml"
+    mode: "0644"
+
+- name: Start db stack
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose-db.yml up -d --remove-orphans
+    chdir: "{{ compose_project_dir }}"
+  changed_when: true

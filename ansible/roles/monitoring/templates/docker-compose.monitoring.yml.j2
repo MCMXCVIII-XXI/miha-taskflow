@@ -1,0 +1,7 @@
+services:
+  prometheus:
+    image: "{{ prometheus_image }}"
+    restart: unless-stopped
+  node-exporter:
+    image: "{{ node_exporter_image }}"
+    restart: unless-stopped

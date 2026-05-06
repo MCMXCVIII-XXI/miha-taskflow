@@ -1,0 +1,11 @@
+- name: Create edge compose file
+  ansible.builtin.template:
+    src: docker-compose.edge.yml.j2
+    dest: "{{ compose_project_dir }}/docker-compose-edge.yml"
+    mode: "0644"
+
+- name: Start edge stack
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose-edge.yml up -d --remove-orphans
+    chdir: "{{ compose_project_dir }}"
+  changed_when: true

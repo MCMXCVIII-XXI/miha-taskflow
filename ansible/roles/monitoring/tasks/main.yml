@@ -1,0 +1,11 @@
+- name: Create monitoring compose file
+  ansible.builtin.template:
+    src: docker-compose.monitoring.yml.j2
+    dest: "{{ compose_project_dir }}/docker-compose-monitoring.yml"
+    mode: "0644"
+
+- name: Start monitoring stack
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose-monitoring.yml up -d --remove-orphans
+    chdir: "{{ compose_project_dir }}"
+  changed_when: true

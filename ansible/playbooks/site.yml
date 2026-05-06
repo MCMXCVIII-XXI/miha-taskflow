@@ -1,0 +1,40 @@
+- name: Base setup
+  hosts: all
+  roles:
+    - common
+
+- name: Database setup
+  hosts: db
+  roles:
+    - db
+
+- name: Redis setup
+  hosts: redis
+  roles:
+    - redis
+
+- name: Search setup
+  hosts: search
+  roles:
+    - search
+
+- name: Backend setup
+  hosts: backend
+  roles:
+    - app
+
+- name: Workers setup
+  hosts: workers
+  roles:
+    - app
+    - workers
+
+- name: Edge setup
+  hosts: edge
+  roles:
+    - edge
+
+- name: Monitoring setup
+  hosts: monitoring
+  roles:
+    - monitoring

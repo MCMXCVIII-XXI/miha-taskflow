@@ -1,0 +1,12 @@
+services:
+  db:
+    image: "{{ postgres_image }}"
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: taskflow
+      POSTGRES_USER: taskflow
+      POSTGRES_PASSWORD: change_me
+    volumes:
+      - db_data:/var/lib/postgresql/data
+volumes:
+  db_data:

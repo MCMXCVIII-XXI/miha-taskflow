@@ -1,0 +1,9 @@
+output "app_public_ip" { value = module.app.public_ip }
+output "app_private_ip" { value = module.app.private_ip }
+output "db_private_ip" { value = module.db.private_ip }
+output "redis_private_ip" { value = module.redis.private_ip }
+output "workers_private_ip" { value = module.workers.private_ip }
+output "monitoring_private_ip" { value = module.monitoring.private_ip }
+output "edge_public_ip" { value = module.edge.public_ip }
+output "edge_private_ip" { value = module.edge.private_ip }
+output "search_private_ip" { value = module.search.private_ip }

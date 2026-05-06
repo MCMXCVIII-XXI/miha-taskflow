@@ -1,0 +1,10 @@
+services:
+  search:
+    image: "{{ elasticsearch_image }}"
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+    volumes:
+      - search_data:/usr/share/elasticsearch/data
+volumes:
+  search_data:

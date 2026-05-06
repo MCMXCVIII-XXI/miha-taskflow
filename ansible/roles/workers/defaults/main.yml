@@ -1,0 +1,8 @@
+worker_user: taskflow
+worker_group: taskflow
+worker_dir: /opt/taskflow/app
+worker_venv_dir: /opt/taskflow/venv
+worker_service_name: taskflow-worker
+worker_exec_start: /opt/taskflow/venv/bin/celery -A app.core.celery worker -l info
+worker_env_file: /opt/taskflow/.env
+worker_concurrency: 2

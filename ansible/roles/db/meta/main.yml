@@ -1,0 +1,7 @@
+galaxy_info:
+  role_name: db
+  author: you
+  description: PostgreSQL role
+  license: MIT
+dependencies:
+  - common

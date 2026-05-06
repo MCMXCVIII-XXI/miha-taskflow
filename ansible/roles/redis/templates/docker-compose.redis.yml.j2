@@ -1,0 +1,9 @@
+services:
+  redis:
+    image: "{{ redis_image }}"
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+volumes:
+  redis_data:
