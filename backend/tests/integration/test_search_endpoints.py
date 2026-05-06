@@ -1,3 +1,5 @@
+import uuid
+
 from httpx import AsyncClient
 
 
@@ -737,7 +739,7 @@ class TestSearchMyGroups:
         """Default search - no parameters."""
         await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         response = await test_client.get("/search/groups/my", headers=auth_headers)
@@ -752,7 +754,7 @@ class TestSearchMyGroups:
         """Search with query string."""
         await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         response = await test_client.get(
@@ -766,7 +768,11 @@ class TestSearchMyGroups:
         """Filter by visibility."""
         await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test", "visibility": "public"},
+            json={
+                "name": f"Test Group {uuid.uuid4().hex[:8]}",
+                "description": "Test",
+                "visibility": "public",
+            },
             headers=auth_headers,
         )
         response = await test_client.get(
@@ -780,7 +786,7 @@ class TestSearchMyGroups:
         """Custom limit."""
         await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         response = await test_client.get(
@@ -799,7 +805,7 @@ class TestSearchMyGroups:
         """Filter by scope admin."""
         await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         response = await test_client.get(
@@ -813,7 +819,7 @@ class TestSearchMyGroups:
         """Filter by scope member."""
         await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         response = await test_client.get(
@@ -827,7 +833,11 @@ class TestSearchMyGroups:
         """Filter by join_policy."""
         await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test", "join_policy": "open"},
+            json={
+                "name": f"Test Group {uuid.uuid4().hex[:8]}",
+                "description": "Test",
+                "join_policy": "open",
+            },
             headers=auth_headers,
         )
         response = await test_client.get(
@@ -841,7 +851,7 @@ class TestSearchMyGroups:
         """Filter by facets."""
         await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         response = await test_client.get(
@@ -855,7 +865,7 @@ class TestSearchMyGroups:
         """Filter by offset."""
         await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         response = await test_client.get(
@@ -869,7 +879,7 @@ class TestSearchMyGroups:
         """Limit=0 returns 422."""
         await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         response = await test_client.get(
@@ -883,7 +893,7 @@ class TestSearchMyGroups:
         """Limit>100 returns 422."""
         await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         response = await test_client.get(
@@ -901,7 +911,7 @@ class TestSearchMyTasks:
         """Default search - no parameters."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -921,7 +931,7 @@ class TestSearchMyTasks:
         """Filter by status."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -941,7 +951,7 @@ class TestSearchMyTasks:
         """Custom limit."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -966,7 +976,7 @@ class TestSearchMyTasks:
         """Search with query string."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -986,7 +996,7 @@ class TestSearchMyTasks:
         """Filter by priority."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1006,7 +1016,7 @@ class TestSearchMyTasks:
         """Filter by difficulty."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1031,7 +1041,7 @@ class TestSearchMyTasks:
         """Filter by facets."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1051,7 +1061,7 @@ class TestSearchMyTasks:
         """Filter by offset."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1071,7 +1081,7 @@ class TestSearchMyTasks:
         """Limit=0 returns 422."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1091,7 +1101,7 @@ class TestSearchMyTasks:
         """Limit>100 returns 422."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1122,7 +1132,7 @@ class TestSearchUsersByGroup:
         """Default search - no parameters."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1142,7 +1152,7 @@ class TestSearchUsersByGroup:
         """Search with query string."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1158,7 +1168,7 @@ class TestSearchUsersByGroup:
         """Filter by role."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1174,7 +1184,7 @@ class TestSearchUsersByGroup:
         """Filter by is_active."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1190,7 +1200,7 @@ class TestSearchUsersByGroup:
         """Filter by facets."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1206,7 +1216,7 @@ class TestSearchUsersByGroup:
         """Filter by limit."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1222,7 +1232,7 @@ class TestSearchUsersByGroup:
         """Filter by offset."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1269,7 +1279,7 @@ class TestSearchTasksByGroup:
         """Default search - no parameters."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1289,7 +1299,7 @@ class TestSearchTasksByGroup:
         """Search with query string."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1305,7 +1315,7 @@ class TestSearchTasksByGroup:
         """Filter by status."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1321,7 +1331,7 @@ class TestSearchTasksByGroup:
         """Filter by priority."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1337,7 +1347,7 @@ class TestSearchTasksByGroup:
         """Filter by difficulty."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1353,7 +1363,7 @@ class TestSearchTasksByGroup:
         """Filter by spheres."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1369,7 +1379,7 @@ class TestSearchTasksByGroup:
         """Filter by assignee_ids."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1385,7 +1395,7 @@ class TestSearchTasksByGroup:
         """Filter by facets."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1401,7 +1411,7 @@ class TestSearchTasksByGroup:
         """Filter by limit."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]
@@ -1417,7 +1427,7 @@ class TestSearchTasksByGroup:
         """Filter by offset."""
         group_resp = await test_client.post(
             "/groups",
-            json={"name": "Test Group", "description": "Test"},
+            json={"name": f"Test Group {uuid.uuid4().hex[:8]}", "description": "Test"},
             headers=auth_headers,
         )
         group_id = group_resp.json()["id"]

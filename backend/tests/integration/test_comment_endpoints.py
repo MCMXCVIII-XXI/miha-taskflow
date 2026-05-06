@@ -2,6 +2,8 @@ import uuid
 
 from httpx import AsyncClient
 
+from tests.conftest import register_user
+
 
 class TestCreateComment:
     async def test_create_comment_returns_201(
@@ -22,6 +24,7 @@ class TestCreateComment:
                 "title": f"Comment Task_{unique_id}",
                 "description": "Test",
                 "priority": "medium",
+                "group_id": group_id,
             },
             headers=admin_auth_headers,
         )
@@ -74,7 +77,12 @@ class TestGetTaskComments:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Comments Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Comments Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -107,7 +115,12 @@ class TestGetTaskComments:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Limit Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Limit Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -131,7 +144,12 @@ class TestGetTaskComments:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Offset Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Offset Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -164,7 +182,12 @@ class TestGetComment:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Get Comment Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Get Comment Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -211,7 +234,12 @@ class TestUpdateComment:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Update Comment Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Update Comment Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -238,7 +266,6 @@ class TestUpdateComment:
         """Update other user's comment — returns 403."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group and task
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Update Others Group_{unique_id}", "description": "Test"},
@@ -248,12 +275,16 @@ class TestUpdateComment:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Update Others Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Update Others Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
 
-        # Admin creates comment
         create_resp = await test_client.post(
             f"/tasks/{task_id}/comments",
             json={"content": "Admin comment"},
@@ -261,21 +292,10 @@ class TestUpdateComment:
         )
         comment_id = create_resp.json()["id"]
 
-        # Create second user (regular USER)
-        user2_resp = await test_client.post(
-            "/auth",
-            json={
-                "username": f"user2_{unique_id}",
-                "email": f"user2_{unique_id}@test.com",
-                "password": "Test123456789",
-                "first_name": "User2",
-                "last_name": "Test",
-            },
+        user2_headers = await register_user(
+            test_client, f"user2_{unique_id}", f"user2_{unique_id}@test.com"
         )
-        user2_token = user2_resp.json()["access_token"]
-        user2_headers = {"Authorization": f"Bearer {user2_token}"}
 
-        # User2 tries to update admin's comment - should return 403
         response = await test_client.patch(
             f"/comments/{comment_id}",
             json={"content": "Hacked content"},
@@ -310,7 +330,12 @@ class TestDeleteComment:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Delete Comment Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Delete Comment Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -333,7 +358,6 @@ class TestDeleteComment:
         """Delete other's comment — returns 403."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group and task
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Delete Others Group_{unique_id}", "description": "Test"},
@@ -343,12 +367,16 @@ class TestDeleteComment:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Delete Others Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Delete Others Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
 
-        # Admin creates comment
         create_resp = await test_client.post(
             f"/tasks/{task_id}/comments",
             json={"content": "Admin comment"},
@@ -356,21 +384,10 @@ class TestDeleteComment:
         )
         comment_id = create_resp.json()["id"]
 
-        # Create second user (regular USER)
-        user2_resp = await test_client.post(
-            "/auth",
-            json={
-                "username": f"user2_{unique_id}",
-                "email": f"user2_{unique_id}@test.com",
-                "password": "Test123456789",
-                "first_name": "User2",
-                "last_name": "Test",
-            },
+        user2_headers = await register_user(
+            test_client, f"user2_{unique_id}", f"user2_{unique_id}@test.com"
         )
-        user2_token = user2_resp.json()["access_token"]
-        user2_headers = {"Authorization": f"Bearer {user2_token}"}
 
-        # User2 tries to delete admin's comment - should return 403
         response = await test_client.delete(
             f"/comments/{comment_id}", headers=user2_headers
         )
@@ -401,7 +418,12 @@ class TestCommentEdgeCases:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Empty Content Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Empty Content Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -427,7 +449,12 @@ class TestCommentEdgeCases:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Long Content Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Long Content Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -454,7 +481,12 @@ class TestCommentEdgeCases:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Update Empty Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Update Empty Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -483,7 +515,6 @@ class TestCreateCommentReply:
         """Create reply to existing comment — returns 201."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group, task, and first comment
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Reply Group_{unique_id}", "description": "Test"},
@@ -493,12 +524,16 @@ class TestCreateCommentReply:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Reply Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Reply Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
 
-        # Create parent comment
         parent_resp = await test_client.post(
             f"/tasks/{task_id}/comments",
             json={"content": "Parent comment"},
@@ -506,7 +541,6 @@ class TestCreateCommentReply:
         )
         parent_id = parent_resp.json()["id"]
 
-        # Create reply
         reply_resp = await test_client.post(
             f"/tasks/{task_id}/comments",
             json={"content": "Reply comment", "parent_id": parent_id},
@@ -538,12 +572,13 @@ class TestCreateCommentReply:
             json={
                 "title": f"Reply Nonexistent Task_{unique_id}",
                 "description": "Test",
+                "priority": "medium",
+                "group_id": group_id,
             },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
 
-        # Try to reply to nonexistent comment
         response = await test_client.post(
             f"/tasks/{task_id}/comments",
             json={"content": "Reply", "parent_id": 99999},
@@ -557,7 +592,6 @@ class TestCreateCommentReply:
         """Create reply to comment from different task — returns 404."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates two groups and tasks
         group_resp1 = await test_client.post(
             "/groups",
             json={"name": f"Reply Different Group1_{unique_id}", "description": "Test"},
@@ -567,7 +601,12 @@ class TestCreateCommentReply:
 
         task_resp1 = await test_client.post(
             f"/tasks/groups/{group_id1}",
-            json={"title": f"Reply Different Task1_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Reply Different Task1_{unique_id}",
+                "description": "Test",
+                "priority": "medium",
+                "group_id": group_id1,
+            },
             headers=admin_auth_headers,
         )
         task_id1 = task_resp1.json()["id"]
@@ -581,12 +620,16 @@ class TestCreateCommentReply:
 
         task_resp2 = await test_client.post(
             f"/tasks/groups/{group_id2}",
-            json={"title": f"Reply Different Task2_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Reply Different Task2_{unique_id}",
+                "description": "Test",
+                "priority": "medium",
+                "group_id": group_id2,
+            },
             headers=admin_auth_headers,
         )
         task_id2 = task_resp2.json()["id"]
 
-        # Create parent comment in task1
         parent_resp = await test_client.post(
             f"/tasks/{task_id1}/comments",
             json={"content": "Parent comment"},
@@ -594,7 +637,6 @@ class TestCreateCommentReply:
         )
         parent_id = parent_resp.json()["id"]
 
-        # Try to reply in task2 with parent from task1
         response = await test_client.post(
             f"/tasks/{task_id2}/comments",
             json={"content": "Reply", "parent_id": parent_id},
@@ -612,7 +654,6 @@ class TestCommentPermissions:
         """Regular USER can create comment in their group."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group and task
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Perm Group_{unique_id}", "description": "Test"},
@@ -622,12 +663,16 @@ class TestCommentPermissions:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Perm Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Perm Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
 
-        # Create regular user
         user_resp = await test_client.post(
             "/auth",
             json={
@@ -641,7 +686,6 @@ class TestCommentPermissions:
         user_token = user_resp.json()["access_token"]
         user_headers = {"Authorization": f"Bearer {user_token}"}
 
-        # User creates comment - should succeed
         response = await test_client.post(
             f"/tasks/{task_id}/comments",
             json={"content": "User comment"},
@@ -655,7 +699,6 @@ class TestCommentPermissions:
         """USER cannot comment on task outside their groups."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group1 with task
         group_resp1 = await test_client.post(
             "/groups",
             json={"name": f"Perm Group1_{unique_id}", "description": "Test"},
@@ -665,12 +708,16 @@ class TestCommentPermissions:
 
         task_resp1 = await test_client.post(
             f"/tasks/groups/{group_id1}",
-            json={"title": f"Perm Task1_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Perm Task1_{unique_id}",
+                "description": "Test",
+                "priority": "medium",
+                "group_id": group_id1,
+            },
             headers=admin_auth_headers,
         )
         task_id1 = task_resp1.json()["id"]
 
-        # Admin creates group2 with task (user not member)
         group_resp2 = await test_client.post(
             "/groups",
             json={"name": f"Perm Group2_{unique_id}", "description": "Test"},
@@ -680,12 +727,16 @@ class TestCommentPermissions:
 
         task_resp2 = await test_client.post(
             f"/tasks/groups/{group_id2}",
-            json={"title": f"Perm Task2_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Perm Task2_{unique_id}",
+                "description": "Test",
+                "priority": "medium",
+                "group_id": group_id2,
+            },
             headers=admin_auth_headers,
         )
         assert task_resp2.status_code == 201
 
-        # Create regular user (not in any group)
         user_resp = await test_client.post(
             "/auth",
             json={
@@ -699,14 +750,10 @@ class TestCommentPermissions:
         user_token = user_resp.json()["access_token"]
         user_headers = {"Authorization": f"Bearer {user_token}"}
 
-        # User tries to comment on task in group1 - should work if user joined
-        # (In current implementation, user can view any task,
-        #   but let's check permissions)
         response = await test_client.post(
             f"/tasks/{task_id1}/comments",
             json={"content": "Test comment"},
             headers=user_headers,
         )
-        # USER_PERMISSIONS includes "task:view:any", so this might succeed
-        # Let's check actual behavior
+
         assert response.status_code in [201, 403]

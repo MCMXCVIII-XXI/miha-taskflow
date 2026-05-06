@@ -108,108 +108,6 @@ class TestGetGroup:
         assert resp.status_code == 403
 
 
-class TestSearchGroups:
-    async def test_search_my_groups_returns_200(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search owned groups — returns 200."""
-        await test_client.post(
-            "/groups",
-            json={"name": "My Group", "description": "Owned"},
-            headers=auth_headers,
-        )
-        resp = await test_client.get("/groups/me", headers=auth_headers)
-        assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
-
-    async def test_search_member_groups_returns_200(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search member groups — returns 200."""
-        create_resp = await test_client.post(
-            "/groups",
-            json={"name": "Member Group", "description": "For membership"},
-            headers=auth_headers,
-        )
-        group_id = create_resp.json()["id"]
-        await test_client.post(f"/groups/{group_id}/join", headers=auth_headers)
-
-        resp = await test_client.get("/groups/members", headers=auth_headers)
-        assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
-
-    async def test_search_groups_with_limit(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search groups with limit — returns limited results."""
-        for i in range(3):
-            await test_client.post(
-                "/groups",
-                json={"name": f"Limit Group {i}", "description": f"Group {i}"},
-                headers=auth_headers,
-            )
-
-        resp = await test_client.get("/groups?limit=2", headers=auth_headers)
-        assert resp.status_code == 200
-        assert len(resp.json()) <= 2
-
-    async def test_search_groups_with_offset(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search groups with offset — skips first results."""
-        for i in range(11):
-            await test_client.post(
-                "/groups",
-                json={"name": f"Offset Group {i}", "description": f"Group {i}"},
-                headers=auth_headers,
-            )
-
-        resp_all = await test_client.get("/groups", headers=auth_headers)
-        resp_offset = await test_client.get("/groups?offset=1", headers=auth_headers)
-
-        assert resp_all.status_code == 200
-        assert resp_offset.status_code == 200
-
-        all_data = resp_all.json()
-        offset_data = resp_offset.json()
-
-        assert len(all_data) <= 10, "Data should not exceed default limit"
-        assert len(offset_data) <= 10, "Data should not exceed default limit"
-        assert offset_data[0]["id"] != all_data[0]["id"], (
-            "Offset should skip first element"
-        )
-
-    async def test_search_groups_by_name_filter(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search groups by name filter — returns matching groups."""
-        await test_client.post(
-            "/groups",
-            json={"name": "UniqueFilterGroup123", "description": "Test"},
-            headers=auth_headers,
-        )
-        await test_client.post(
-            "/groups",
-            json={"name": "Other Group", "description": "Other"},
-            headers=auth_headers,
-        )
-
-        resp = await test_client.get("/groups?name=UniqueFilter", headers=auth_headers)
-        assert resp.status_code == 200
-        groups = resp.json()
-        assert any("UniqueFilterGroup123" in g["name"] for g in groups)
-
-    async def test_search_groups_empty_result(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search groups with non-matching filter — returns empty list."""
-        resp = await test_client.get(
-            "/groups?name=NonExistent12345", headers=auth_headers
-        )
-        assert resp.status_code == 200
-        assert resp.json() == []
-
-
 class TestJoinGroup:
     async def test_join_group_returns_201(
         self, test_client: AsyncClient, auth_headers: dict
@@ -222,7 +120,6 @@ class TestJoinGroup:
         )
         assert create_resp.status_code == 201
         group_id = create_resp.json()["id"]
-        # Creator is automatically a member, so join returns 409
         resp = await test_client.post(
             f"/groups/{group_id}/join",
             headers=auth_headers,
@@ -366,7 +263,6 @@ class TestExitGroup:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Exit group without being member — returns 403 (permission denied)."""
-        # Admin creates group
         create_resp = await test_client.post(
             "/groups",
             json={"name": "Not Joined", "description": "Test"},
@@ -374,8 +270,6 @@ class TestExitGroup:
         )
         group_id = create_resp.json()["id"]
 
-        # Try to exit with another user who is not member
-        # They get 403 because they don't have group:exit:member permission
         user2_resp = await test_client.post(
             "/auth",
             json={
@@ -424,7 +318,6 @@ class TestGroupJoinRequests:
         """Get group join requests — returns 200."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Join Req Group_{unique_id}", "description": "Test"},
@@ -432,7 +325,6 @@ class TestGroupJoinRequests:
         )
         group_id = group_resp.json()["id"]
 
-        # Create another user who will request to join
         user2_resp = await test_client.post(
             "/auth",
             json={
@@ -444,14 +336,12 @@ class TestGroupJoinRequests:
             },
         )
 
-        # User2 requests to join
         join_resp = await test_client.post(
             f"/groups/{group_id}/join",
             headers={"Authorization": f"Bearer {user2_resp.json()['access_token']}"},
         )
         assert join_resp.status_code == 201
 
-        # Admin gets join requests
         response = await test_client.get(
             f"/groups/{group_id}/join-requests",
             headers=auth_headers,
@@ -466,7 +356,6 @@ class TestGroupJoinRequests:
         """Reject join request — returns 200."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Reject Group_{unique_id}", "description": "Test"},
@@ -474,7 +363,6 @@ class TestGroupJoinRequests:
         )
         group_id = group_resp.json()["id"]
 
-        # Create another user who will request to join
         user2_resp = await test_client.post(
             "/auth",
             json={
@@ -487,15 +375,13 @@ class TestGroupJoinRequests:
         )
         user2_token = user2_resp.json()["access_token"]
 
-        # User2 requests to join
         join_resp = await test_client.post(
             f"/groups/{group_id}/join",
             headers={"Authorization": f"Bearer {user2_token}"},
         )
         assert join_resp.status_code == 201
-        request_id = 1  # Default request_id
+        request_id = 1
 
-        # Admin rejects join request
         response = await test_client.post(
             f"/groups/{group_id}/join-requests/{request_id}/reject",
             headers=auth_headers,
@@ -512,7 +398,6 @@ class TestApproveJoinRequest:
         """Approve join request — returns 200 with notification."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group with REQUEST join policy
         group_resp = await test_client.post(
             "/groups",
             json={
@@ -524,7 +409,6 @@ class TestApproveJoinRequest:
         )
         group_id = group_resp.json()["id"]
 
-        # Create another user who will request to join
         user2_resp = await test_client.post(
             "/auth",
             json={
@@ -537,14 +421,12 @@ class TestApproveJoinRequest:
         )
         user2_token = user2_resp.json()["access_token"]
 
-        # User2 requests to join (should create join request since policy is REQUEST)
         join_resp = await test_client.post(
             f"/groups/{group_id}/join",
             headers={"Authorization": f"Bearer {user2_token}"},
         )
         assert join_resp.status_code == 201
 
-        # Get join requests to find request_id
         requests_resp = await test_client.get(
             f"/groups/{group_id}/join-requests",
             headers=auth_headers,
@@ -553,7 +435,6 @@ class TestApproveJoinRequest:
         assert len(requests) > 0, "No join requests found"
         request_id = requests[0]["id"]
 
-        # Admin approves join request
         response = await test_client.post(
             f"/groups/{group_id}/join-requests/{request_id}/approve",
             headers=auth_headers,
@@ -578,7 +459,6 @@ class TestApproveJoinRequest:
         """Approve request from different group — returns 404."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates two groups with REQUEST policy
         group1_resp = await test_client.post(
             "/groups",
             json={
@@ -601,7 +481,6 @@ class TestApproveJoinRequest:
         )
         group2_id = group2_resp.json()["id"]
 
-        # Create user who joins group1
         user2_resp = await test_client.post(
             "/auth",
             json={
@@ -614,20 +493,17 @@ class TestApproveJoinRequest:
         )
         user2_token = user2_resp.json()["access_token"]
 
-        # User joins group1 (creates join request)
         await test_client.post(
             f"/groups/{group1_id}/join",
             headers={"Authorization": f"Bearer {user2_token}"},
         )
 
-        # Get request_id from group1
         requests_resp = await test_client.get(
             f"/groups/{group1_id}/join-requests",
             headers=auth_headers,
         )
         request_id = requests_resp.json()[0]["id"]
 
-        # Try to approve with group2 — should fail
         response = await test_client.post(
             f"/groups/{group2_id}/join-requests/{request_id}/approve",
             headers=auth_headers,
@@ -647,7 +523,6 @@ class TestApproveJoinRequest:
         """Non-admin approves join request — returns 403."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group with REQUEST policy
         group_resp = await test_client.post(
             "/groups",
             json={
@@ -659,7 +534,6 @@ class TestApproveJoinRequest:
         )
         group_id = group_resp.json()["id"]
 
-        # Create regular user
         user2_resp = await test_client.post(
             "/auth",
             json={
@@ -672,9 +546,410 @@ class TestApproveJoinRequest:
         )
         user2_headers = {"Authorization": f"Bearer {user2_resp.json()['access_token']}"}
 
-        # Try to approve as non-admin
         response = await test_client.post(
             f"/groups/{group_id}/join-requests/1/approve",
             headers=user2_headers,
         )
         assert response.status_code == 403
+
+
+class TestAddMemberNotifications:
+    async def test_add_member_creates_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Add member to group creates group_invite notification."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Invite Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        invitee_headers = await register_user(
+            test_client, f"invitee_{unique_id}", f"invitee_{unique_id}@test.com"
+        )
+        invitee_id = int(
+            (await test_client.get("/users/me", headers=invitee_headers)).json()["id"]
+        )
+
+        resp = await test_client.post(
+            f"/groups/{group_id}/members/{invitee_id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+
+        notif_resp = await test_client.get("/notifications", headers=invitee_headers)
+        notifications = notif_resp.json()
+        assert len(notifications) > 0
+        assert notifications[0]["type"] == "group_invite"
+        assert notifications[0]["target_type"] == "group"
+        assert notifications[0]["target_id"] == group_id
+
+    async def test_add_member_returns_201_with_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Add member returns 201 with notification data."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"AddMember_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        invitee_headers = await register_user(
+            test_client, f"invitee2_{unique_id}", f"invitee2_{unique_id}@test.com"
+        )
+        invitee_id = int(
+            (await test_client.get("/users/me", headers=invitee_headers)).json()["id"]
+        )
+
+        resp = await test_client.post(
+            f"/groups/{group_id}/members/{invitee_id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+
+    async def test_add_member_notification_has_correct_data(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Notification contains correct group data."""
+        unique_id = str(uuid.uuid4())[:8]
+        group_name = f"Data Test_{unique_id}"
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": group_name, "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        invitee_headers = await register_user(
+            test_client, f"invitee3_{unique_id}", f"invitee3_{unique_id}@test.com"
+        )
+        invitee_id = int(
+            (await test_client.get("/users/me", headers=invitee_headers)).json()["id"]
+        )
+
+        await test_client.post(
+            f"/groups/{group_id}/members/{invitee_id}",
+            headers=auth_headers,
+        )
+
+        notif_resp = await test_client.get("/notifications", headers=invitee_headers)
+        notifications = notif_resp.json()
+        assert len(notifications) > 0
+        assert "Invitation" in notifications[0]["title"]
+        assert group_name in notifications[0]["message"]
+
+
+class TestJoinGroupNotifications:
+    async def test_join_open_group_creates_group_join_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Join OPEN group creates group_join notification to admin."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Open Group_{unique_id}",
+                "description": "Test",
+                "join_policy": "open",
+            },
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"joiner_{unique_id}", f"joiner_{unique_id}@test.com"
+        )
+
+        resp = await test_client.post(
+            f"/groups/{group_id}/join",
+            headers=user2_headers,
+        )
+        assert resp.status_code == 201
+
+        notif_resp = await test_client.get("/notifications", headers=auth_headers)
+        notifications = notif_resp.json()
+        assert len(notifications) > 0
+        join_notifs = [n for n in notifications if n["type"] == "group_join"]
+        assert len(join_notifs) > 0
+
+    async def test_join_request_group_creates_request_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Join REQUEST group creates join_request_created notification."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Request Group_{unique_id}",
+                "description": "Test",
+                "join_policy": "request",
+            },
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"requester_{unique_id}", f"requester_{unique_id}@test.com"
+        )
+
+        resp = await test_client.post(
+            f"/groups/{group_id}/join",
+            headers=user2_headers,
+        )
+        assert resp.status_code == 201
+
+        notif_resp = await test_client.get("/notifications", headers=auth_headers)
+        notifications = notif_resp.json()
+        assert len(notifications) > 0
+        request_notifs = [n for n in notifications if "join" in n["type"].lower()]
+        assert len(request_notifs) > 0
+
+    async def test_join_group_returns_201_with_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Join group returns correct response."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Join Return_{unique_id}",
+                "description": "Test",
+                "join_policy": "open",
+            },
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"joiner2_{unique_id}", f"joiner2_{unique_id}@test.com"
+        )
+
+        resp = await test_client.post(
+            f"/groups/{group_id}/join",
+            headers=user2_headers,
+        )
+        assert resp.status_code == 201
+
+
+class TestApproveJoinRequestNotifications:
+    async def test_approve_request_creates_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Approve join request creates join_request_approved notification."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Approve Notif_{unique_id}",
+                "description": "Test",
+                "join_policy": "request",
+            },
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"approve_user_{unique_id}", f"approve_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/groups/{group_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/groups/{group_id}/join-requests",
+            headers=auth_headers,
+        )
+        request_id = requests_resp.json()[0]["id"]
+
+        resp = await test_client.post(
+            f"/groups/{group_id}/join-requests/{request_id}/approve",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        notif_resp = await test_client.get("/notifications", headers=user2_headers)
+        notifications = notif_resp.json()
+        assert len(notifications) > 0
+
+    async def test_approve_request_returns_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Approve returns NotificationRead."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Approve Return_{unique_id}",
+                "description": "Test",
+                "join_policy": "request",
+            },
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"approve2_{unique_id}", f"approve2_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/groups/{group_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/groups/{group_id}/join-requests",
+            headers=auth_headers,
+        )
+        request_id = requests_resp.json()[0]["id"]
+
+        resp = await test_client.post(
+            f"/groups/{group_id}/join-requests/{request_id}/approve",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "id" in data
+        assert data["type"] == "group_join"
+
+    async def test_approve_request_notification_correct_recipient(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Notification sent to correct user."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Recipient Test_{unique_id}",
+                "description": "Test",
+                "join_policy": "request",
+            },
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"recipient_{unique_id}", f"recipient_{unique_id}@test.com"
+        )
+        user2_id = int(
+            (await test_client.get("/users/me", headers=user2_headers)).json()["id"]
+        )
+
+        await test_client.post(
+            f"/groups/{group_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/groups/{group_id}/join-requests",
+            headers=auth_headers,
+        )
+        request_id = requests_resp.json()[0]["id"]
+
+        await test_client.post(
+            f"/groups/{group_id}/join-requests/{request_id}/approve",
+            headers=auth_headers,
+        )
+
+        notif_resp = await test_client.get("/notifications", headers=user2_headers)
+        notifications = notif_resp.json()
+        assert len(notifications) > 0
+        assert notifications[0]["recipient_id"] == user2_id
+
+
+class TestRejectJoinRequestNotifications:
+    async def test_reject_request_creates_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Reject join request creates notification."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Reject Notif_{unique_id}",
+                "description": "Test",
+                "join_policy": "request",
+            },
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"reject_user_{unique_id}", f"reject_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/groups/{group_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/groups/{group_id}/join-requests",
+            headers=auth_headers,
+        )
+        request_id = requests_resp.json()[0]["id"]
+
+        resp = await test_client.post(
+            f"/groups/{group_id}/join-requests/{request_id}/reject",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+
+        notif_resp = await test_client.get("/notifications", headers=user2_headers)
+        notifications = notif_resp.json()
+        assert len(notifications) > 0
+
+    async def test_reject_request_returns_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Reject returns NotificationRead."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={
+                "name": f"Reject Return_{unique_id}",
+                "description": "Test",
+                "join_policy": "request",
+            },
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"reject2_{unique_id}", f"reject2_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/groups/{group_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/groups/{group_id}/join-requests",
+            headers=auth_headers,
+        )
+        request_id = requests_resp.json()[0]["id"]
+
+        resp = await test_client.post(
+            f"/groups/{group_id}/join-requests/{request_id}/reject",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "id" in data

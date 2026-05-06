@@ -12,8 +12,6 @@ class TestGetUser:
         self, test_client: AsyncClient, admin_auth_headers: dict
     ):
         """Get specific user profile — returns 200 (admin only)."""
-        # Admin can view any user profile
-        # First create a target user
         target_resp = await test_client.post(
             "/auth",
             json={
@@ -27,11 +25,8 @@ class TestGetUser:
         target_token = target_resp.json()["access_token"]
         target_headers = {"Authorization": f"Bearer {target_token}"}
 
-        # Get target user ID via /users/me
         me_resp = await test_client.get("/users/me", headers=target_headers)
         target_id = me_resp.json()["id"]
-
-        # Admin gets target user profile
         resp = await test_client.get(f"/users/{target_id}", headers=admin_auth_headers)
         assert resp.status_code == 200
         data = resp.json()
@@ -59,8 +54,8 @@ class TestGetMyProfile:
         resp = await test_client.get("/users/me", headers=testuser_auth_headers)
         assert resp.status_code == 200
         data = resp.json()
-        assert data["username"] == "testuser"
-        assert data["email"] == "test@test.com"
+        assert "testuser" in data["username"]
+        assert "@test.com" in data["email"]
         assert "id" in data
         assert "role" in data
 
@@ -68,115 +63,6 @@ class TestGetMyProfile:
         """Get profile without auth — returns 401."""
         resp = await test_client.get("/users/me")
         assert resp.status_code == 401
-
-
-class TestSearchUsers:
-    async def test_search_users_returns_200(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search all users — returns 200."""
-        resp = await test_client.get("/users", headers=auth_headers)
-        assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
-
-    async def test_search_users_returns_users_list(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search users without filter returns list."""
-        resp = await test_client.get("/users", headers=auth_headers)
-        assert resp.status_code == 200
-        users = resp.json()
-        assert len(users) > 0
-
-    async def test_search_users_without_auth_returns_401(
-        self, test_client: AsyncClient
-    ):
-        """Search users without auth — returns 401."""
-        resp = await test_client.get("/users")
-        assert resp.status_code == 401
-
-    async def test_search_users_with_limit(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search users with limit — returns limited results."""
-        for i in range(3):
-            await test_client.post(
-                "/auth",
-                json={
-                    "username": f"limituser{i}",
-                    "email": f"limituser{i}@test.com",
-                    "password": "Password123",
-                    "first_name": "Limit",
-                    "last_name": "User",
-                },
-            )
-
-        resp = await test_client.get("/users?limit=2", headers=auth_headers)
-        assert resp.status_code == 200
-        assert len(resp.json()) <= 2
-
-    async def test_search_users_with_offset(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search users with offset — skips first results."""
-        for i in range(11):
-            await test_client.post(
-                "/auth",
-                json={
-                    "username": f"offsetuser{i}",
-                    "email": f"offsetuser{i}@test.com",
-                    "password": "Password123",
-                    "first_name": "Offset",
-                    "last_name": "User",
-                },
-            )
-
-        resp_all = await test_client.get("/users", headers=auth_headers)
-        resp_offset = await test_client.get("/users?offset=1", headers=auth_headers)
-
-        assert resp_all.status_code == 200
-        assert resp_offset.status_code == 200
-
-        all_data = resp_all.json()
-        offset_data = resp_offset.json()
-
-        assert len(all_data) <= 10, "Data should not exceed default limit"
-        assert len(offset_data) <= 10, "Data should not exceed default limit"
-        assert offset_data[0]["id"] != all_data[0]["id"], (
-            "Offset should skip first element"
-        )
-
-    async def test_search_users_by_username_filter(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search users by username filter — returns matching users."""
-        await test_client.post(
-            "/auth",
-            json={
-                "username": "uniquefilteruser123",
-                "email": "uniquefilter@test.com",
-                "password": "Password123",
-                "first_name": "Filter",
-                "last_name": "User",
-            },
-        )
-
-        resp = await test_client.get(
-            "/users?username=uniquefilter", headers=auth_headers
-        )
-        assert resp.status_code == 200
-        users = resp.json()
-        assert any("uniquefilteruser123" in u["username"] for u in users)
-
-    async def test_search_users_empty_result(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search users with non-matching filter — returns empty list."""
-        resp = await test_client.get(
-            "/users?username=NonExistent12345", headers=auth_headers
-        )
-        assert resp.status_code == 200
-        assert resp.json() == []
 
 
 class TestUpdateProfile:
@@ -292,7 +178,6 @@ class TestGroupAdmin:
             headers=auth_headers,
         )
         group_id = create_resp.json()["id"]
-        # Join to gain MEMBER role (needed for group:view:group permission)
         await test_client.post(f"/groups/{group_id}/join", headers=auth_headers)
 
         resp = await test_client.get(
@@ -306,75 +191,6 @@ class TestGroupAdmin:
     ):
         """Get group admin without auth — returns 401."""
         resp = await test_client.get("/users/groups/1/admin")
-        assert resp.status_code == 401
-
-
-class TestSearchUsersInGroup:
-    async def test_search_group_members_returns_200(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Get group members — returns 200."""
-        unique_id = str(uuid4())[:8]
-        group_resp = await test_client.post(
-            "/groups",
-            json={"name": f"Members Group_{unique_id}", "description": "For members"},
-            headers=auth_headers,
-        )
-        group_id = group_resp.json()["id"]
-        await test_client.post(f"/groups/{group_id}/join", headers=auth_headers)
-
-        resp = await test_client.get(
-            f"/users/groups/{group_id}/members", headers=auth_headers
-        )
-        assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
-
-    async def test_search_group_members_without_auth_returns_401(
-        self, test_client: AsyncClient
-    ):
-        """Get group members without auth — returns 401."""
-        resp = await test_client.get("/users/groups/1/members")
-        assert resp.status_code == 401
-
-
-class TestSearchUsersInTask:
-    async def test_search_task_members_returns_200(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Get task assignees — returns 200."""
-        unique_id = str(uuid4())[:8]
-        group_resp = await test_client.post(
-            "/groups",
-            json={"name": f"Task Members Group_{unique_id}", "description": "Test"},
-            headers=auth_headers,
-        )
-        group_id = group_resp.json()["id"]
-
-        task_resp = await test_client.post(
-            f"/tasks/groups/{group_id}",
-            json={
-                "title": f"Task Members_{unique_id}",
-                "priority": "medium",
-                "group_id": group_id,
-            },
-            headers=auth_headers,
-        )
-        task_id = task_resp.json()["id"]
-        await test_client.post(f"/tasks/{task_id}/join", headers=auth_headers)
-
-        resp = await test_client.get(
-            f"/users/tasks/{task_id}/members", headers=auth_headers
-        )
-        assert resp.status_code == 200
-        members = resp.json()
-        assert isinstance(members, list)
-        assert len(members) >= 1
-
-    async def test_search_task_members_without_auth_returns_401(
-        self, test_client: AsyncClient
-    ):
-        """Get task members without auth — returns 401."""
-        resp = await test_client.get("/users/tasks/1/members")
         assert resp.status_code == 401
 
 

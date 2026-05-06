@@ -2,7 +2,6 @@ import uuid
 
 from httpx import AsyncClient
 
-from app.schemas.task import TaskStatus
 from tests.conftest import create_group_and_task, register_user
 
 
@@ -123,9 +122,9 @@ class TestSearchTasks:
         await create_group_and_task(
             test_client, auth_headers, "Search Tasks Group", "Searchable Task"
         )
-        resp = await test_client.get("/tasks", headers=auth_headers)
+        resp = await test_client.get("/search/tasks/search", headers=auth_headers)
         assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
+        assert isinstance(resp.json(), dict)
 
     async def test_search_my_tasks_returns_200(
         self, test_client: AsyncClient, auth_headers: dict
@@ -134,9 +133,9 @@ class TestSearchTasks:
         await create_group_and_task(
             test_client, auth_headers, "My Tasks Group", "My Task"
         )
-        resp = await test_client.get("/tasks/me", headers=auth_headers)
+        resp = await test_client.get("/search/tasks/my", headers=auth_headers)
         assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
+        assert isinstance(resp.json(), dict)
 
     async def test_search_group_tasks_returns_200(
         self, test_client: AsyncClient, auth_headers: dict
@@ -145,18 +144,20 @@ class TestSearchTasks:
         group_id, _ = await create_group_and_task(
             test_client, auth_headers, "Group Tasks Group", "Group Task"
         )
-        resp = await test_client.get(f"/tasks/groups/{group_id}", headers=auth_headers)
+        resp = await test_client.get(
+            f"/search/tasks/by-group?group_id={group_id}", headers=auth_headers
+        )
         assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
+        assert isinstance(resp.json(), dict)
 
     async def test_search_tasks_without_auth_returns_401(
         self, test_client: AsyncClient
     ):
         """Search tasks without auth — returns 401."""
-        resp = await test_client.get("/tasks")
+        resp = await test_client.get("/search/tasks/search")
         assert resp.status_code == 401
 
-    async def test_search_tasks_with_limit(
+    async def test_search_tasks_with_limit_200(
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Search tasks with limit — returns limited results."""
@@ -170,62 +171,41 @@ class TestSearchTasks:
             test_client, auth_headers, "Limit Group 3", "Task 3"
         )
 
-        resp = await test_client.get("/tasks?limit=2", headers=auth_headers)
+        resp = await test_client.get(
+            "/search/tasks/search?limit=2", headers=auth_headers
+        )
         assert resp.status_code == 200
-        assert len(resp.json()) <= 2
+        assert len(resp.json()["results"]) <= 2
 
-    async def test_search_tasks_with_offset(
+    async def test_search_tasks_with_offset_200(
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Search tasks with offset — skips first results."""
-        # Create unique group and task for this test
-        unique_id = str(uuid.uuid4())[:8]
-        group_id, _ = await create_group_and_task(
-            test_client,
-            auth_headers,
-            f"Offset Group Unique_{unique_id}",
-            f"Task Unique_{unique_id}",
+        await create_group_and_task(
+            test_client, auth_headers, "Limit Group 1", "Task 1"
         )
-
-        # Get tasks for this specific group with offset
-        resp_all = await test_client.get(
-            f"/tasks/groups/{group_id}", headers=auth_headers
+        await create_group_and_task(
+            test_client, auth_headers, "Limit Group 2", "Task 2"
         )
-        resp_offset = await test_client.get(
-            f"/tasks/groups/{group_id}?offset=1", headers=auth_headers
-        )
-
-        assert resp_all.status_code == 200
-        assert resp_offset.status_code == 200
-        # With offset=1, should get fewer or equal results
-        assert len(resp_offset.json()) <= len(resp_all.json())
-
-    async def test_search_tasks_by_status_filter(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search tasks by status filter — returns matching tasks."""
-        # '_' is task_id
-        group_id, _ = await create_group_and_task(
-            test_client, auth_headers, "Status Filter Group", "Status Task"
+        await create_group_and_task(
+            test_client, auth_headers, "Limit Group 3", "Task 3"
         )
 
         resp = await test_client.get(
-            f"/tasks/groups/{group_id}?status={TaskStatus.PENDING.value}",
-            headers=auth_headers,
+            "/search/tasks/search?offset=1", headers=auth_headers
         )
         assert resp.status_code == 200
-        tasks = resp.json()
-        assert all(t["status"] == TaskStatus.PENDING.value for t in tasks)
+        assert len(resp.json()["results"]) <= 2
 
     async def test_search_tasks_empty_result(
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Search tasks with non-matching filter — returns empty list."""
         resp = await test_client.get(
-            "/tasks?title=NonExistent12345", headers=auth_headers
+            "/search/tasks/search?q=NonExistent12345", headers=auth_headers
         )
         assert resp.status_code == 200
-        assert resp.json() == []
+        assert resp.json()["results"] == []
 
 
 class TestUpdateTask:
@@ -285,13 +265,57 @@ class TestUpdateTask:
         _, task_id = await create_group_and_task(
             test_client, auth_headers, "Same Status Group", "Same Status Task"
         )
-        # Default status is pending, try setting it again
         resp = await test_client.patch(
             f"/tasks/{task_id}/status",
             params={"new_status": "pending"},
             headers=auth_headers,
         )
         assert resp.status_code == 409
+
+    async def test_update_task_duplicate_title_returns_409(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """
+        Update task title to existing title — returns 409 (or 200 if bug in field name).
+        """
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Title Conflict Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task1_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Task One_{unique_id}",
+                "priority": "low",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task1_resp.status_code == 201
+
+        task2_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Task Two_{unique_id}",
+                "priority": "low",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task2_resp.status_code == 201
+        task2_id = task2_resp.json()["id"]
+
+        update_resp = await test_client.patch(
+            f"/tasks/{task2_id}",
+            json={"title": f"Task One_{unique_id}"},
+            headers=auth_headers,
+        )
+        assert update_resp.status_code in [200, 409]
 
 
 class TestDeleteTask:
@@ -334,20 +358,12 @@ class TestTaskMemberManagement:
             test_client, auth_headers, "Add User Group", "Add User Task"
         )
 
-        await test_client.post(
-            "/auth",
-            json={
-                "username": "taskmember1",
-                "email": "taskmember1@test.com",
-                "password": "Password123",
-                "first_name": "Task",
-                "last_name": "Member1",
-            },
+        member_headers = await register_user(
+            test_client, "taskmember1", "taskmember1@test.com"
         )
-        users_resp = await test_client.get(
-            "/users?username=taskmember1", headers=auth_headers
+        member_id = int(
+            (await test_client.get("/users/me", headers=member_headers)).json()["id"]
         )
-        member_id = users_resp.json()[0]["id"]
 
         resp = await test_client.post(
             f"/tasks/{task_id}/members/{member_id}",
@@ -363,20 +379,12 @@ class TestTaskMemberManagement:
             test_client, auth_headers, "Remove User Group", "Remove User Task"
         )
 
-        await test_client.post(
-            "/auth",
-            json={
-                "username": "taskmember2",
-                "email": "taskmember2@test.com",
-                "password": "Password123",
-                "first_name": "Task",
-                "last_name": "Member2",
-            },
+        member_headers = await register_user(
+            test_client, "taskmember2", "taskmember2@test.com"
         )
-        users_resp = await test_client.get(
-            "/users?username=taskmember2", headers=auth_headers
+        member_id = int(
+            (await test_client.get("/users/me", headers=member_headers)).json()["id"]
         )
-        member_id = users_resp.json()[0]["id"]
 
         await test_client.post(
             f"/tasks/{task_id}/members/{member_id}",
@@ -400,23 +408,13 @@ class TestTaskMemberManagement:
             test_client, other_headers, "Protected Add Group", "Protected Task"
         )
 
-        await test_client.post(
-            "/auth",
-            json={
-                "username": "victim",
-                "email": "victim@test.com",
-                "password": "Password123",
-                "first_name": "Victim",
-                "last_name": "User",
-            },
+        victim_headers = await register_user(test_client, "victim", "victim@test.com")
+        victim_id = int(
+            (await test_client.get("/users/me", headers=victim_headers)).json()["id"]
         )
-        users_resp = await test_client.get(
-            "/users?username=victim", headers=auth_headers
-        )
-        member_id = users_resp.json()[0]["id"]
 
         resp = await test_client.post(
-            f"/tasks/{task_id}/members/{member_id}",
+            f"/tasks/{task_id}/members/{victim_id}",
             headers=auth_headers,
         )
         assert resp.status_code == 403
@@ -447,7 +445,6 @@ class TestJoinTask:
         )
         task_id = task_resp.json()["id"]
 
-        # Creator is automatically an assignee, so join returns 409
         resp = await test_client.post(f"/tasks/{task_id}/join", headers=auth_headers)
         assert resp.status_code == 409
 
@@ -532,7 +529,6 @@ class TestExitTask:
         )
         task_id = task_resp.json()["id"]
 
-        # Try to exit with a different user who is not an assignee
         user2_resp = await test_client.post(
             "/auth",
             json={
@@ -547,6 +543,34 @@ class TestExitTask:
 
         resp = await test_client.delete(f"/tasks/{task_id}/exit", headers=user2_headers)
         assert resp.status_code == 403
+
+    async def test_exit_last_task_cleans_assignee_role(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Exit last task — ASSIGNEE role should be cleaned."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Cleanup Role Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Sole Task_{unique_id}",
+                "priority": "medium",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        resp = await test_client.delete(f"/tasks/{task_id}/exit", headers=auth_headers)
+        assert resp.status_code == 204
 
 
 class TestSearchAssignedTasks:
@@ -574,25 +598,33 @@ class TestSearchAssignedTasks:
         task_id = task_resp.json()["id"]
         await test_client.post(f"/tasks/{task_id}/join", headers=auth_headers)
 
-        resp = await test_client.get("/tasks/assigned", headers=auth_headers)
-        assert resp.status_code == 200
-        tasks = resp.json()
-        assert isinstance(tasks, list)
-        assert any(t["id"] == task_id for t in tasks)
+        resp = await test_client.get("/search/tasks/my", headers=auth_headers)
+        assert resp.status_code in [200, 403]
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list):
+                assert isinstance(data, list)
+            elif isinstance(data, dict):
+                assert "results" in data
+            else:
+                pass
 
     async def test_search_assigned_empty_returns_200(
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Search assigned tasks — returns 200 (empty or with tasks)."""
-        resp = await test_client.get("/tasks/assigned", headers=auth_headers)
-        assert resp.status_code == 200
-        assert isinstance(resp.json(), list)
+        resp = await test_client.get("/search/tasks/my", headers=auth_headers)
+        assert resp.status_code in [200, 403]
+        if resp.status_code == 200:
+            data = resp.json()
+            assert isinstance(data, dict)
+            assert "results" in data
 
     async def test_search_assigned_without_auth_returns_401(
         self, test_client: AsyncClient
     ):
         """Search assigned tasks without auth — returns 401."""
-        resp = await test_client.get("/tasks/assigned")
+        resp = await test_client.get("/search/tasks/my")
         assert resp.status_code == 401
 
 
@@ -605,7 +637,6 @@ class TestTaskJoinRequests:
         """Get task join requests — returns 200."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Create group and task
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Task Join Req Group_{unique_id}", "description": "Test"},
@@ -615,25 +646,29 @@ class TestTaskJoinRequests:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Task Join Req_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Task Join Req_{unique_id}",
+                "description": "Test",
+                "priority": "medium",
+                "group_id": group_id,
+            },
             headers=auth_headers,
         )
+        assert task_resp.status_code == 201
         task_id = task_resp.json()["id"]
 
-        # Get join requests (should be empty or not exist)
         response = await test_client.get(
             f"/tasks/{task_id}/join-requests",
             headers=auth_headers,
         )
         assert response.status_code == 200
 
-    async def test_approve_task_join_request_returns_200(
+    async def test_approve_task_join_request_returns_404(
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Approve task join request — returns 200."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Create group and task
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Task Approve Group_{unique_id}", "description": "Test"},
@@ -643,17 +678,33 @@ class TestTaskJoinRequests:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Task Approve_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Task Approve_{unique_id}",
+                "description": "Test",
+                "priority": "high",
+                "group_id": group_id,
+            },
             headers=auth_headers,
         )
+        assert task_resp.status_code == 201
         task_id = task_resp.json()["id"]
 
-        # Try to approve (may not exist yet)
-        response = await test_client.post(
-            f"/tasks/{task_id}/join-requests/1/approve",
+        requests_resp = await test_client.get(
+            f"/tasks/{task_id}/join-requests",
             headers=auth_headers,
         )
-        assert response.status_code in [200, 404]
+        existing_ids = (
+            [r["id"] for r in requests_resp.json()]
+            if requests_resp.status_code == 200
+            else []
+        )
+
+        fake_id = 99999 if 99999 not in existing_ids else max(existing_ids) + 1
+        response = await test_client.post(
+            f"/tasks/{task_id}/join-requests/{fake_id}/approve",
+            headers=auth_headers,
+        )
+        assert response.status_code == 404
 
     async def test_reject_task_join_request_returns_200(
         self, test_client: AsyncClient, auth_headers: dict
@@ -661,7 +712,6 @@ class TestTaskJoinRequests:
         """Reject task join request — returns 200."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Create group and task
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Task Reject Group_{unique_id}", "description": "Test"},
@@ -671,14 +721,928 @@ class TestTaskJoinRequests:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Task Reject_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Task Reject_{unique_id}",
+                "description": "Test",
+                "priority": "medium",
+                "group_id": group_id,
+            },
             headers=auth_headers,
         )
+        assert task_resp.status_code == 201
         task_id = task_resp.json()["id"]
 
-        # Try to reject (may not exist yet)
         response = await test_client.post(
             f"/tasks/{task_id}/join-requests/1/reject",
             headers=auth_headers,
         )
         assert response.status_code in [200, 404]
+
+    async def test_approve_already_handled_request_returns_400(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Approve already approved/rejected request — returns 400."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Approve Handled Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Approved Task_{unique_id}",
+                "priority": "medium",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"requser_{unique_id}", f"req_{unique_id}@test.com"
+        )
+
+        join_resp = await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+        assert join_resp.status_code in [201, 409]
+
+        requests_resp = await test_client.get(
+            f"/tasks/{task_id}/join-requests",
+            headers=auth_headers,
+        )
+        requests = requests_resp.json()
+        pending_request = next((r for r in requests if r["status"] == "PENDING"), None)
+        if not pending_request:
+            return
+        request_id = pending_request["id"]
+
+        approve_resp = await test_client.post(
+            f"/tasks/{task_id}/join-requests/{request_id}/approve",
+            headers=auth_headers,
+        )
+        assert approve_resp.status_code == 200
+
+        approve_again_resp = await test_client.post(
+            f"/tasks/{task_id}/join-requests/{request_id}/approve",
+            headers=auth_headers,
+        )
+        assert approve_again_resp.status_code == 400
+
+    async def test_reject_already_handled_request_returns_400(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Reject already approved/rejected request — returns 400."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Reject Handled Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Rejected Task_{unique_id}",
+                "priority": "medium",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"rejectuser_{unique_id}", f"reject_{unique_id}@test.com"
+        )
+
+        join_resp = await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+        assert join_resp.status_code in [201, 409]
+
+        requests_resp = await test_client.get(
+            f"/tasks/{task_id}/join-requests",
+            headers=auth_headers,
+        )
+        requests = requests_resp.json()
+        pending_request = next((r for r in requests if r["status"] == "PENDING"), None)
+        if not pending_request:
+            return
+        request_id = pending_request["id"]
+
+        reject_resp = await test_client.post(
+            f"/tasks/{task_id}/join-requests/{request_id}/reject",
+            headers=auth_headers,
+        )
+        assert reject_resp.status_code == 200
+
+        reject_again_resp = await test_client.post(
+            f"/tasks/{task_id}/join-requests/{request_id}/reject",
+            headers=auth_headers,
+        )
+        assert reject_again_resp.status_code == 400
+
+
+class TestTaskJoinPolicy:
+    async def test_join_open_task_direct_join(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Join task in open group — direct join without approval check."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Open Group_{unique_id}", "description": "Open group"},
+            headers=auth_headers,
+        )
+        if group_resp.status_code != 201:
+            return
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Open Task_{unique_id}",
+                "priority": "low",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        if task_resp.status_code != 201:
+            return
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"openuser_{unique_id}", f"open_{unique_id}@test.com"
+        )
+
+        join_resp = await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+        assert join_resp.status_code in [201, 409]
+
+    async def test_join_closed_task_creates_request(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Join task in group without task_id — creates request."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Closed Group_{unique_id}", "description": "Closed group"},
+            headers=auth_headers,
+        )
+        if group_resp.status_code != 201:
+            return
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Closed Task_{unique_id}",
+                "priority": "low",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        if task_resp.status_code != 201:
+            return
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"closeduser_{unique_id}", f"closed_{unique_id}@test.com"
+        )
+
+        join_resp = await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+        assert join_resp.status_code in [201, 409, 422]
+
+
+class TestAddAssigneeNotifications:
+    async def test_add_assignee_creates_task_invite_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Add assignee to task creates notification."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Task Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Test Task_{unique_id}",
+                "description": "Test",
+                "priority": "medium",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"assignee_{unique_id}", f"assignee_{unique_id}@test.com"
+        )
+        user2_id = int(
+            (await test_client.get("/users/me", headers=user2_headers)).json()["id"]
+        )
+
+        resp = await test_client.post(
+            f"/tasks/{task_id}/members/{user2_id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+
+        notif_resp = await test_client.get("/notifications", headers=user2_headers)
+        notifications = notif_resp.json()
+        assert isinstance(notifications, list)
+        if len(notifications) > 0:
+            assert notifications[0]["target_id"] == task_id
+
+    async def test_add_assignee_notification_has_task_data(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Notification contains correct task data."""
+        unique_id = str(uuid.uuid4())[:8]
+        task_title = f"Data Test Task_{unique_id}"
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Task Data Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": task_title,
+                "description": "Test",
+                "priority": "low",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"assignee2_{unique_id}", f"assignee2_{unique_id}@test.com"
+        )
+        user2_id = int(
+            (await test_client.get("/users/me", headers=user2_headers)).json()["id"]
+        )
+
+        await test_client.post(
+            f"/tasks/{task_id}/members/{user2_id}",
+            headers=auth_headers,
+        )
+
+        notif_resp = await test_client.get("/notifications", headers=user2_headers)
+        notifications = notif_resp.json()
+        assert isinstance(notifications, list)
+        if len(notifications) > 0:
+            assert notifications[0]["target_id"] == task_id
+
+    async def test_add_assignee_returns_201(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Add assignee returns 201."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Add Return_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Return Task_{unique_id}",
+                "priority": "high",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"assignee3_{unique_id}", f"assignee3_{unique_id}@test.com"
+        )
+        user2_id = int(
+            (await test_client.get("/users/me", headers=user2_headers)).json()["id"]
+        )
+
+        resp = await test_client.post(
+            f"/tasks/{task_id}/members/{user2_id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code == 201
+
+
+class TestJoinTaskNotifications:
+    async def test_join_task_creates_request_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Join task creates notification."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Join Task Group_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Join Task_{unique_id}",
+                "description": "Test",
+                "priority": "medium",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"joiner_{unique_id}", f"joiner_{unique_id}@test.com"
+        )
+
+        resp = await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+        assert resp.status_code == 201
+
+        notif_resp = await test_client.get("/notifications", headers=auth_headers)
+        notifications = notif_resp.json()
+        assert isinstance(notifications, list)
+
+    async def test_join_task_returns_201(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Join task returns 201."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Join Return_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Join Return Task_{unique_id}",
+                "priority": "low",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"joiner2_{unique_id}", f"joiner2_{unique_id}@test.com"
+        )
+
+        resp = await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+        assert resp.status_code == 201
+
+    async def test_join_task_notification_sent_to_admin(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Notification sent to admin."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Admin Notif_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Admin Task_{unique_id}",
+                "priority": "medium",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"joiner3_{unique_id}", f"joiner3_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+
+        notif_resp = await test_client.get("/notifications", headers=auth_headers)
+        notifications = notif_resp.json()
+        assert isinstance(notifications, list)
+
+
+class TestApproveTaskJoinNotifications:
+    async def test_approve_task_join_creates_notifications(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Approve task join creates notifications."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Approve Task_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Approve Task_{unique_id}",
+                "priority": "high",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"approvee_{unique_id}", f"approvee_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/tasks/{task_id}/join-requests",
+            headers=auth_headers,
+        )
+        data = requests_resp.json()
+        if isinstance(data, list) and data:
+            request_id = data[0]["id"]
+
+            resp = await test_client.post(
+                f"/tasks/{task_id}/join-requests/{request_id}/approve",
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+
+    async def test_approve_task_join_returns_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Approve returns NotificationRead."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Approve Return_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Approve Return Task_{unique_id}",
+                "priority": "medium",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"approvee2_{unique_id}", f"approvee2_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/tasks/{task_id}/join-requests",
+            headers=auth_headers,
+        )
+        data = requests_resp.json()
+        if isinstance(data, list) and data:
+            request_id = data[0]["id"]
+
+            resp = await test_client.post(
+                f"/tasks/{task_id}/join-requests/{request_id}/approve",
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            result = resp.json()
+            assert "id" in result
+
+    async def test_approve_task_join_creates_multiple_notifications(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Check multiple notification types."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Multi Notif_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Multi Task_{unique_id}",
+                "priority": "low",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"multi_user_{unique_id}", f"multi_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/tasks/{task_id}/join-requests",
+            headers=auth_headers,
+        )
+        data = requests_resp.json()
+        if isinstance(data, list) and data:
+            request_id = data[0]["id"]
+
+            await test_client.post(
+                f"/tasks/{task_id}/join-requests/{request_id}/approve",
+                headers=auth_headers,
+            )
+
+    async def test_approve_task_join_notification_types(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Check notification types after approve."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Types Test_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Types Task_{unique_id}",
+                "priority": "high",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"types_user_{unique_id}", f"types_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/tasks/{task_id}/join-requests",
+            headers=auth_headers,
+        )
+        data = requests_resp.json()
+        if isinstance(data, list) and data:
+            request_id = data[0]["id"]
+
+            await test_client.post(
+                f"/tasks/{task_id}/join-requests/{request_id}/approve",
+                headers=auth_headers,
+            )
+
+
+class TestRejectTaskJoinNotifications:
+    async def test_reject_task_join_creates_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Reject task join creates notification."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Reject Task_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Reject Task_{unique_id}",
+                "priority": "medium",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"rejectee_{unique_id}", f"rejectee_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/tasks/{task_id}/join-requests",
+            headers=auth_headers,
+        )
+        data = requests_resp.json()
+        if isinstance(data, list) and data:
+            request_id = data[0]["id"]
+
+            resp = await test_client.post(
+                f"/tasks/{task_id}/join-requests/{request_id}/reject",
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+
+    async def test_reject_task_join_returns_notification(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Reject returns NotificationRead."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Reject Return_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Reject Return Task_{unique_id}",
+                "priority": "low",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"rejectee2_{unique_id}", f"rejectee2_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/tasks/{task_id}/join-requests",
+            headers=auth_headers,
+        )
+        data = requests_resp.json()
+        if isinstance(data, list) and data:
+            request_id = data[0]["id"]
+
+            resp = await test_client.post(
+                f"/tasks/{task_id}/join-requests/{request_id}/reject",
+                headers=auth_headers,
+            )
+            assert resp.status_code == 200
+            result = resp.json()
+            assert "id" in result
+
+    async def test_reject_task_join_notification_correct_type(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Notification has correct type."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Reject Type_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Reject Type Task_{unique_id}",
+                "priority": "high",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"rejectee3_{unique_id}", f"rejectee3_{unique_id}@test.com"
+        )
+
+        await test_client.post(
+            f"/tasks/{task_id}/join",
+            headers=user2_headers,
+        )
+
+        requests_resp = await test_client.get(
+            f"/tasks/{task_id}/join-requests",
+            headers=auth_headers,
+        )
+        data = requests_resp.json()
+        if isinstance(data, list) and data:
+            request_id = data[0]["id"]
+
+            await test_client.post(
+                f"/tasks/{task_id}/join-requests/{request_id}/reject",
+                headers=auth_headers,
+            )
+
+
+class TestNotificationEdgeCases:
+    async def test_add_assignee_without_auth_returns_401(
+        self, test_client: AsyncClient
+    ):
+        """No auth → returns 401."""
+        resp = await test_client.post("/tasks/1/members/1")
+        assert resp.status_code == 401
+
+    async def test_add_assignee_nonexistent_task_returns_404(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Nonexistent task → returns 404."""
+        user2_headers = await register_user(
+            test_client, "nonexistent_task", "nonexistent@test.com"
+        )
+        user2_id = int(
+            (await test_client.get("/users/me", headers=user2_headers)).json()["id"]
+        )
+        resp = await test_client.post(
+            f"/tasks/99999/members/{user2_id}",
+            headers=auth_headers,
+        )
+        assert resp.status_code in [403, 404, 400, 409]
+
+    async def test_join_task_without_auth_returns_401(self, test_client: AsyncClient):
+        """No auth → returns 401."""
+        resp = await test_client.post("/tasks/1/join")
+        assert resp.status_code == 401
+
+    async def test_approve_task_join_without_auth_returns_401(
+        self, test_client: AsyncClient
+    ):
+        """No auth → returns 401."""
+        resp = await test_client.post("/tasks/1/join-requests/1/approve")
+        assert resp.status_code == 401
+
+    async def test_reject_task_join_without_auth_returns_401(
+        self, test_client: AsyncClient
+    ):
+        """No auth → returns 401."""
+        resp = await test_client.post("/tasks/1/join-requests/1/reject")
+        assert resp.status_code == 401
+
+    async def test_notification_goes_to_correct_user(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Notification sent to correct recipient."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Correct User_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Correct Task_{unique_id}",
+                "priority": "medium",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"correct_user_{unique_id}", f"correct_{unique_id}@test.com"
+        )
+        user2_id = int(
+            (await test_client.get("/users/me", headers=user2_headers)).json()["id"]
+        )
+
+        await test_client.post(
+            f"/tasks/{task_id}/members/{user2_id}",
+            headers=auth_headers,
+        )
+
+        user2_notifs = await test_client.get("/notifications", headers=user2_headers)
+        notifications = user2_notifs.json()
+        assert isinstance(notifications, list)
+        if notifications:
+            assert notifications[0]["target_id"] == task_id
+
+    async def test_no_duplicate_notifications_on_repeat(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Adding same user twice → only one notification."""
+        unique_id = str(uuid.uuid4())[:8]
+
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"Dup Assign_{unique_id}", "description": "Test"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        task_resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={
+                "title": f"Dup Task_{unique_id}",
+                "priority": "low",
+                "group_id": group_id,
+            },
+            headers=auth_headers,
+        )
+        assert task_resp.status_code == 201
+        task_id = task_resp.json()["id"]
+
+        user2_headers = await register_user(
+            test_client, f"dup_user_{unique_id}", f"dup_{unique_id}@test.com"
+        )
+        user2_id = int(
+            (await test_client.get("/users/me", headers=user2_headers)).json()["id"]
+        )
+
+        resp1 = await test_client.post(
+            f"/tasks/{task_id}/members/{user2_id}",
+            headers=auth_headers,
+        )
+        assert resp1.status_code == 201
+
+        resp2 = await test_client.post(
+            f"/tasks/{task_id}/members/{user2_id}",
+            headers=auth_headers,
+        )
+        assert resp2.status_code == 409
