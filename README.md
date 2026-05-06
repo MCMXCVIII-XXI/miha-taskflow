@@ -12,6 +12,7 @@ Task management system with RPG elements (XP, levels, ratings).
 - [API Endpoints](#api-endpoints)
 - [Data Models](#data-models)
 - [Directory Structure](#directory-structure)
+- [Environment Variables](#environment-variables)
 - [Running the Project](#running-the-project)
 - [Testing](#testing)
 - [CLI Commands](#cli-commands)
@@ -211,9 +212,25 @@ taskflow/
 
 ---
 
+## Environment Variables
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `TOKEN_SECRET_KEY` | JWT secret key | |
+| `TOKEN_ALGORITHM` | JWT algorithm | HS256 |
+| `DATABASE_URL` | PostgreSQL connection | postgresql+asyncpg://user:pass@db:5432/taskflow |
+| `CACHE_URL` | Redis connection | redis://cache:6379/0 |
+| `ES_URL` | Elasticsearch URLs | ["http://elasticsearch:9200"] |
+| `CELERY_BROKER_URL` | Celery broker | redis://cache:6379/0 |
+| `SECURITY_ALLOWED_ORIGINS` | CORS origins | ["http://localhost:3000"] |
+
+See `.env` file for full configuration.
+
+---
+
 ## Running the Project
 
-### Via Docker Compose 
+### Via Docker Compose
 
 ```bash
 # Clone repository
