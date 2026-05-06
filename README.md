@@ -15,9 +15,10 @@ Task management system with RPG elements: XP, levels, ratings, groups, and real-
 ## Navigation
 
 - [Tech Stack](#tech-stack)
+- [Documentation](#documentation)
 - [Architecture](#architecture)
 - [Key Features](#key-features)
-- [API Endpoints](#api-endpoints)
+- [API](#api)
 - [Data Models](#data-models)
 - [Directory Structure](#directory-structure)
 - [Environment Variables](#environment-variables)
@@ -42,6 +43,12 @@ Task management system with RPG elements: XP, levels, ratings, groups, and real-
 
 ---
 
+## Documentation
+
+For detailed architecture and API documentation, see [context/](backend/context/).
+
+---
+
 ## Architecture
 
 The project follows a layered architecture:
@@ -52,8 +59,10 @@ graph LR
     Domain --> DataAccess[Data Access Layer<br/>app/repositories]
     DataAccess --> DB[(PostgreSQL)]
     Domain --> ES[(Elasticsearch)]
-    Domain --> Cache[(Redis)]
-    Domain -.-> BG[Background<br/>app/background]
+    Domain --> Cache[Redis<br/>Cache]
+    Domain -.-> SSE[Redis<br/>SSE Pub/Sub]
+    BG[Background<br/>app/background] -->|broker| Redis
+    Redis -->|result| BG
 ```
 
 ### Application Layers
@@ -62,8 +71,9 @@ graph LR
 2. **Domain Layer** (`app/service/`, `app/models/`, `app/schemas/`, `app/documents/`) — business logic + data models
    - **Transactions** (`app/service/transactions/`) — atomic operations
    - **Search** (`app/service/search/`) — DB + Elasticsearch
+   - **Exceptions** (`app/service/exceptions/`) — service exceptions
 3. **Data Access Layer** (`app/repositories/`) — repositories, UnitOfWork
-4. **Infrastructure Layer** (`app/core/`, `app/db/`, `app/background/`, `app/cache/`, `app/utils/`) — infrastructure
+4. **Infrastructure Layer** (`app/core/`, `app/db/`, `app/background/`, `app/cache/`, `app/cli/`, `app/es/`, `app/utils/`) — infrastructure
 
 ---
 
@@ -116,39 +126,9 @@ graph LR
 
 ---
 
-## API Endpoints
+## API
 
-### Authentication and Users
-- `POST /api/v1/auth/register` — registration
-- `POST /api/v1/auth/login` — login
-- `GET /api/v1/users/me` — profile
-- `GET /api/v1/users/{id}` — user info
-- `GET /api/v1/users/` — user search
-
-### Tasks
-- `POST /api/v1/tasks/` — create task
-- `GET /api/v1/tasks/{id}` — task info
-- `PUT /api/v1/tasks/{id}` — update task
-- `DELETE /api/v1/tasks/{id}` — delete task
-- `GET /api/v1/tasks/` — task search with filters
-
-### Groups
-- `POST /api/v1/groups/` — create group
-- `GET /api/v1/groups/{id}` — group info
-- `POST /api/v1/groups/{id}/join` — join group
-- `GET /api/v1/groups/` — group search
-
-### Comments
-- `POST /api/v1/tasks/{id}/comments` — add comment
-- `GET /api/v1/tasks/{id}/comments` — list comments
-
-### Ratings and XP
-- `GET /api/v1/ratings/leaderboard` — leaderboard
-- `GET /api/v1/xp/stats` — XP statistics
-
-### Admin
-- `POST /api/v1/admin/create-admin` — create admin (CLI)
-- `GET /api/v1/admin/stats` — system statistics
+Full API documentation is available in [app/api/api.md](app/api/api.md).
 
 ---
 
