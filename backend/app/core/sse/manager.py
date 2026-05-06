@@ -106,12 +106,11 @@ class SSEManager:
 
         async for message in self._pubsub.listen():
             if message["type"] == "pmessage":
-                channel = message["channel"]  # sse:user:123
+                channel = message["channel"]
                 user_id = int(channel.split(":")[-1])
 
                 if user_id in self._connections:
                     await self._connections[user_id].put(message["data"])
 
 
-# SSE manager instance
 sse_manager = SSEManager(cache_settings=cache_settings)

@@ -11,6 +11,7 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import logging
+from app.core.metrics import METRICS
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import Comment as CommentModel
@@ -57,7 +58,12 @@ class BulkService(BaseService):
         Returns:
             dict[str, any]: Indexing operation results and statistics
         """
-        return await self._indexer.bulk_index_tasks(tasks)
+        count = len(tasks)
+        with METRICS.BULK_INDEX_DURATION.labels(entity_type="task").time():
+            result = await self._indexer.bulk_index_tasks(tasks)
+
+        METRICS.BULK_INDEX_TOTAL.labels(entity_type="task", status="success").inc(count)
+        return result
 
     async def bulk_index_users(self, users: list[UserModel]) -> dict[str, Any]:
         """Perform bulk indexing of users to Elasticsearch.
@@ -71,7 +77,12 @@ class BulkService(BaseService):
         Returns:
             dict[str, any]: Indexing operation results and statistics
         """
-        return await self._indexer.bulk_index_users(users)
+        count = len(users)
+        with METRICS.BULK_INDEX_DURATION.labels(entity_type="user").time():
+            result = await self._indexer.bulk_index_users(users)
+
+        METRICS.BULK_INDEX_TOTAL.labels(entity_type="user", status="success").inc(count)
+        return result
 
     async def bulk_index_groups(self, groups: list[UserGroupModel]) -> dict[str, Any]:
         """Perform bulk indexing of groups to Elasticsearch.
@@ -85,7 +96,14 @@ class BulkService(BaseService):
         Returns:
             dict[str, any]: Indexing operation results and statistics
         """
-        return await self._indexer.bulk_index_groups(groups)
+        count = len(groups)
+        with METRICS.BULK_INDEX_DURATION.labels(entity_type="group").time():
+            result = await self._indexer.bulk_index_groups(groups)
+
+        METRICS.BULK_INDEX_TOTAL.labels(entity_type="group", status="success").inc(
+            count
+        )
+        return result
 
     async def bulk_index_comments(self, comments: list[CommentModel]) -> dict[str, Any]:
         """Perform bulk indexing of comments to Elasticsearch.
@@ -99,7 +117,14 @@ class BulkService(BaseService):
         Returns:
             dict[str, any]: Indexing operation results and statistics
         """
-        return await self._indexer.bulk_index_comments(comments)
+        count = len(comments)
+        with METRICS.BULK_INDEX_DURATION.labels(entity_type="comment").time():
+            result = await self._indexer.bulk_index_comments(comments)
+
+        METRICS.BULK_INDEX_TOTAL.labels(entity_type="comment", status="success").inc(
+            count
+        )
+        return result
 
 
 def get_bulk_service(
