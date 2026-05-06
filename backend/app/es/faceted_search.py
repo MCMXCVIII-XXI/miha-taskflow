@@ -8,7 +8,7 @@ from elasticsearch.dsl import (
     TermsFacet,
 )
 
-from app.indexes import CommentDoc, NotificationDoc, TaskDoc, UserDoc, UserGroupDoc
+from app.documents import CommentDoc, NotificationDoc, TaskDoc, UserDoc, UserGroupDoc
 
 
 class TaskFacetedSearch(AsyncFacetedSearch):
