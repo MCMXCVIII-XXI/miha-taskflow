@@ -87,7 +87,6 @@ class DatabaseHelper:
             yield session
 
 
-# Global database helper instance for application-wide database access
 db_helper = DatabaseHelper(
     url=str(db_settings.URL),
     echo=db_settings.ECHO,
