@@ -1,4 +1,4 @@
-name: Taskflow-Tests
+name: Miha-Taskflow-Tests
 
 on:
   workflow_call:
@@ -36,4 +36,4 @@ jobs:
           python-version: 3.11
 
       - name: Tests
-        run: make test-pg-coverage-before-fall
+        run: make test-backend

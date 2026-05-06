@@ -1,4 +1,4 @@
-name: Taskflow CI
+name: Miha-TaskFlow CI
 on:
   push:
     branches: [main]
