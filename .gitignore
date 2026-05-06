@@ -9,7 +9,7 @@ wheels/
 *.egg
 .env
 .env_*
-.env.*
+.env.
 
 # Virtual environments
 .venv
