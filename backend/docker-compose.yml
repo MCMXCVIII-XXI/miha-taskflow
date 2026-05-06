@@ -6,7 +6,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     env_file:
-      - .env_db
+      - .env
     ports:
       - "5432:5432"
     volumes:
@@ -59,6 +59,12 @@ services:
       ELASTICSEARCH_URL: ${ELASTICSEARCH_URL}
       CELERY_BROKER_URL: ${CELERY_BROKER_URL}
       CELERY_RESULT_BACKEND: ${CELERY_BACKEND_URL}
+    healthcheck:                                  
+      test: ["CMD", "curl", "-f", "http://backend:8000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 120s
     restart: unless-stopped
     networks:
       - background
@@ -67,10 +73,11 @@ services:
       - monitoring
       - database
 
+
   cache:
     image: redis:8.4.2-alpine
     env_file:
-      - .env_cache
+      - .env
     ports:
       - "6379:6379"
     volumes:
@@ -258,6 +265,25 @@ services:
     restart: unless-stopped
     command: run --server.http.listen-addr=0.0.0.0:12345 --storage.path=/var/lib/alloy/data /etc/alloy/config.alloy
 
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile.nginx
+    volumes:
+      - media_data:/var/www/media
+    ports:
+      - "80:80"
+    depends_on:
+      backend:
+        condition: service_started
+    networks:
+      - background
+      - search
+      - cache
+      - monitoring
+      - database
+
+
 networks:
   search:
     driver: bridge
@@ -275,3 +301,4 @@ volumes:
   redis_data:
   es_data:
   grafana_data:
+  media_data:
