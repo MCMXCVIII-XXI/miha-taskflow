@@ -1,3 +1,35 @@
+"""Server-Sent Events (SSE) service for real-time notifications.
+
+This module provides the SSEService class for real-time event streaming
+to connected clients using Server-Sent Events protocol.
+
+**Key Components:**
+* `SSEService`: Main service class for SSE operations;
+* `get_sse_service`: FastAPI dependency injection factory.
+
+**Dependencies:**
+* `sse_manager`: Global SSE connection manager for user connections;
+* `asyncio`: For async queue operations.
+
+**Usage Example:**
+    ```python
+    from app.service.sse import get_sse_service
+
+    @router.get("/events")
+    async def events(
+        user_id: int,
+        sse_svc: SSEService = Depends(get_sse_service)
+    ):
+        return sse_svc.event_generator(user_id)
+    ```
+
+**Notes:**
+- Maintains persistent connections to clients;
+- Sends heartbeat every 30 seconds;
+- Supports notification and level_up events;
+- Uses global sse_manager for connection management.
+"""
+
 import asyncio
 from collections.abc import AsyncGenerator
 from datetime import UTC, datetime
@@ -26,19 +58,43 @@ class SSEService:
 
         Args:
             user_id: ID of user to connect to SSE
+                Type: int
 
         Returns:
             asyncio.Queue[str]: Queue for receiving SSE events for this user
+
+        Example:
+            ```python
+            queue = await sse_svc.connect(user_id=123)
+            ```
         """
-        return await sse_manager.connect(user_id)
+        queue = await sse_manager.connect(user_id)
+
+        logger.info(
+            "User connected to SSE: user_id={user_id}",
+            user_id=user_id,
+        )
+
+        return queue
 
     async def disconnect(self, user_id: int) -> None:
         """Disconnect user from SSE event stream.
 
         Args:
             user_id: ID of user to disconnect from SSE
+                Type: int
+
+        Example:
+            ```python
+            await sse_svc.disconnect(user_id=123)
+            ```
         """
         await sse_manager.disconnect(user_id)
+
+        logger.info(
+            "User disconnected from SSE: user_id={user_id}",
+            user_id=user_id,
+        )
 
     async def event_generator(self, user_id: int) -> AsyncGenerator[str, None]:
         """Generate SSE events for a connected user.
@@ -80,13 +136,34 @@ class SSEService:
 
         Args:
             user_id: ID of user to send notification to
-            event_type: Type of event (typically "notification")
+                Type: int
+            event_type: Type of event (typically "notification" or "level_up")
+                Type: str
             data: Notification data to send
+                Type: dict[str, Any]
+
+        Returns:
+            None
+
+        Example:
+            ```python
+            await sse_svc.send_notification(
+                user_id=123,
+                event_type="notification",
+                data={"title": "New message", "body": "Hello!"}
+            )
+            ```
         """
         await sse_manager.publish(
             user_id=user_id,
             event_type="notification",
             data=data,
+        )
+
+        logger.info(
+            "SSE notification sent: user_id={user_id}, event_type={event_type}",
+            user_id=user_id,
+            event_type=event_type,
         )
 
 

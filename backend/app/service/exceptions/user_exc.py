@@ -122,3 +122,20 @@ class CannotDeleteLastAdmin(BaseUserError):
             headers=headers,
             details=details,
         )
+
+
+class PermissionDenied(BaseUserError):
+    """Permission denied."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_403_FORBIDDEN,
+            message=message,
+            headers=headers,
+            details=details,
+        )

@@ -1,25 +1,54 @@
+"""User service for user profile and account management.
+
+This module provides the UserService class for managing user profiles,
+including retrieval, updates, and search operations.
+
+**Key Components:**
+* `UserService`: Main service class for user operations;
+* `get_user_service`: FastAPI dependency injection factory.
+
+**Dependencies:**
+* `UserRepository`: User data access layer;
+* `UnitOfWork`: Transaction management;
+* `ElasticsearchIndexer`: Search index management;
+* `XPService`: XP and skills lookup service.
+
+**Usage Example:**
+    ```python
+    from app.service.user import get_user_service
+
+    @router.get("/users/me")
+    async def get_my_profile(
+        user_svc: UserService = Depends(get_user_service),
+        current_user: User = Depends(get_current_user)
+    ):
+        return await user_svc.get_my_profile(current_user)
+    ```
+
+**Notes:**
+- Read operations use injected db session directly;
+- Write operations use UnitOfWork for atomic transactions;
+- Profiles are indexed in Elasticsearch for search functionality;
+- Soft delete is used (is_active=False) rather than hard deletion.
+"""
+
 from typing import Any
 
 from fastapi import Depends
-from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import logging
 from app.core.metrics import (
-    SEARCH_QUERIES_TOTAL,
-    USER_ACTIONS_TOTAL,
+    METRICS,
 )
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import User as UserModel
-from app.models import UserGroup as UserGroupModel
-from app.schemas import UserRead, UserSearch, UserUpdate
-from app.schemas.enum import OutboxEventType
+from app.schemas import UserRead, UserUpdate
 
 from .base import BaseService
-from .exceptions import group_exc, user_exc
-from .outbox import OutboxService
-from .search import user_search
+from .exceptions import user_exc
+from .transactions.user import UserTransaction, get_user_transaction
 from .utils import Indexer
 from .xp import XPService, get_xp_service
 
@@ -27,25 +56,29 @@ logger = logging.get_logger(__name__)
 
 
 class UserService(BaseService):
-    """Provides user management functionality for the TaskFlow application.
+    """Service for user profile and account management operations.
 
-    This service handles all user-related operations including profile management,
-    search functionality, authentication integration, and XP/leveling system.
-    It implements soft-delete patterns and integrates with Elasticsearch for
-    enhanced search capabilities.
+    Handles user profile retrieval, updates, search, and account deletion.
+    Provides clear separation between read and write operations with
+    UnitOfWork for transactional integrity.
 
     Attributes:
-        _db (AsyncSession): SQLAlchemy async database session
-        _user_queries (UserQueries): User-specific optimized query builders
-        _group_queries (GroupQueries): Group membership query helpers
-        _xp_service (XPService): XP calculation and management service
-        _indexer (Indexer): Elasticsearch indexer wrapper
+        _db (AsyncSession): SQLAlchemy async session for database operations
+        _user_repo (UserRepository): Repository for user data operations
+        _xp_service (XPService): Service for XP and skills lookups
+        _indexer (Indexer): Elasticsearch indexer wrapper for search operations
+        _uow (UnitOfWork): Unit of work for transaction management
 
-    Raises:
-        user_exc.UserNotFound: When user is not found or inactive
-        user_exc.UserEmailConflict: When email already exists
-        user_exc.UserUsernameConflict: When username already exists
-        group_exc.ForbiddenGroupAccess: When user is not authorized
+    Example:
+        ```python
+        user_service = UserService(
+            db=session,
+            indexer=indexer,
+            xp_service=xp_svc,
+            uow=uow
+        )
+        profile = await user_service.get_my_profile(current_user)
+        ```
     """
 
     def __init__(
@@ -53,58 +86,43 @@ class UserService(BaseService):
         db: AsyncSession,
         indexer: ElasticsearchIndexer,
         xp_service: XPService,
+        user_transaction: UserTransaction,
     ) -> None:
+        """Initialize UserService with dependencies.
+
+        Args:
+            db: SQLAlchemy async session for database operations
+            indexer: Elasticsearch client for indexing operations
+            xp_service: Service for XP and skills lookups
+            uow: Unit of work for transactional operations
+        """
         super().__init__(db)
         self._xp_service = xp_service
         self._indexer = Indexer(indexer)
-
-    async def _get_my_group(self, group_id: int, user_id: int) -> UserGroupModel:
-        """
-        Retrieve group where user is administrator/owner with authorization check.
-
-        Details:
-            Internal helper for admin-only group operations.
-            Single scalar query via GroupQueries.by_admin_group.
-            Only active groups (is_active=True).
-            Fast ownership validation before group mutations.
-
-        Arguments:
-            group_id (int): Target group ID
-            user_id (int): User ID to verify as admin
-
-        Returns:
-            UserGroupModel: Active group where user is admin
-
-        Raises:
-            group_exc.ForbiddenGroupAccess: User not admin or group inactive
-
-        Example Usage:
-            group = await self._get_my_group(group_id, current_user.id)
-            group.name = "New Name"
-        """
-        group = await self._db.scalar(
-            self._group_queries.get_group(admin_id=user_id, id=group_id, is_active=True)
-        )
-
-        if not group:
-            raise group_exc.ForbiddenGroupAccess(
-                message="You are not the owner of the group"
-            )
-
-        return group
+        self._user_transaction = user_transaction
 
     async def _assert_active_current_user(self, current_user: UserModel) -> UserModel:
-        """
-        Validate that provided user is active and return it.
+        """Ensure the current user is active and log access.
+
+        Validates that the current user account is active before allowing
+        profile access or modifications. This is a security checkpoint
+        that prevents inactive users from performing operations.
 
         Args:
-            current_user: User from JWT dependency
+            current_user: The authenticated user to validate
+                Type: UserModel
 
         Returns:
-            Active user instance
+            UserModel: The validated active user
 
         Raises:
-            user_exc.UserNotFound: If user is inactive
+            user_exc.UserNotFound: When user account is inactive
+
+        Example:
+            ```python
+            user = await self._assert_active_current_user(current_user)
+            # Proceed with operations on validated user
+            ```
         """
         if not current_user.is_active:
             logger.warning(
@@ -113,252 +131,158 @@ class UserService(BaseService):
             )
             raise user_exc.UserNotFound(message="User not found")
 
-        logger.info(
-            "User accessed: user_id={user_id}",
-            user_id=current_user.id,
-        )
+        logger.info("User accessed: user_id={user_id}", user_id=current_user.id)
         return current_user
 
     async def get_my_profile(self, current_user: UserModel) -> UserRead:
-        """
-        Get current authenticated user's profile without extra DB lookup.
+        """Return the current authenticated user's profile.
 
-        Details:
-            Zero database calls optimization using JWT current_user dependency.
-            Validates user activity via _assert_active_current_user helper.
+        Retrieves and validates the current user's profile. Uses the injected
+        db session for read-only access.
 
-        Arguments:
-            current_user (UserModel): Authenticated user model from dependency.
+        Args:
+            current_user: The authenticated user requesting their profile
+                Type: UserModel
 
         Returns:
-            UserRead: Current user's profile.
+            UserRead: User profile serialized according to UserRead schema
 
         Raises:
-            user_exc.UserNotFound: If current user is inactive.
+            user_exc.UserNotFound: When user account is inactive
 
-        Example Usage:
-            return await user_svc.get_my_profile(current_user)
+        Example:
+            ```python
+            profile = await user_svc.get_my_profile(current_user)
+            ```
         """
         user = await self._assert_active_current_user(current_user)
-        USER_ACTIONS_TOTAL.labels(action="get_profile", role="user").inc()
+        METRICS.USER_ACTIONS_TOTAL.labels(
+            action="get_profile", role="user", status="success"
+        ).inc()
         return UserRead.model_validate(user)
 
     async def get_user(self, user_id: int) -> dict[str, Any]:
-        user = await self._db.scalar(
-            self._user_queries.get_user(id=user_id, is_active=True)
-        )
-        if not user:
-            raise user_exc.UserNotFound(message=f"User with id {user_id} not found")
+        """Return a public user profile together with top skills.
 
-        top_skills = await self._xp_service.get_top_skills(user_id, 3)
-        top_skills = top_skills or []
-        USER_ACTIONS_TOTAL.labels(action="get_user", role="user").inc()
+        Retrieves a user's public profile along with their top skills
+        for display in user directories or profiles.
 
-        return {**UserRead.model_validate(user).model_dump(), "top_skills": top_skills}
-
-    @user_search
-    async def search_users(
-        self,
-        search: UserSearch,
-        sort: UserSearch,
-        limit: int,
-        offset: int,
-        **kwargs: Any,
-    ) -> Select[tuple[UserModel]]:
-        """
-        Search all active users query builder.
-
-        Details:
-            Returns SQLAlchemy Select query for active users (is_active=True).
-            @user_search decorator prepares for search/filter execution.
-            Used for user autocomplete and lists.
+        Args:
+            user_id: ID of the user to retrieve
+                Type: int
+                Constraints: Must be > 0
 
         Returns:
-            Select[tuple[UserModel]]: SQLAlchemy query for active users.
-
-        Example Usage:
-            users = await user_svc.search_users()
-            results = await user_svc._db.execute(users)
-        """
-        SEARCH_QUERIES_TOTAL.labels(entity="user", status="success").inc()
-        return self._user_queries.get_user(is_active=True)
-
-    @user_search
-    async def search_users_in_group(
-        self,
-        group_id: int,
-        search: UserSearch,
-        sort: UserSearch,
-        limit: int,
-        offset: int,
-    ) -> Select[tuple[UserModel]]:
-        """
-        Search active users in specific group query.
-
-        Details:
-            Returns SQLAlchemy Select for group members (is_active=True).
-            @user_search decorator prepares filtering.
-
-        Arguments:
-            group_id (int): Target group ID.
-
-        Returns:
-            Select[tuple[UserModel]]: Group member query.
-
-        Example Usage:
-            group_users = await user_svc.search_users_in_group(group_id=123)
-        """
-        SEARCH_QUERIES_TOTAL.labels(entity="user_group", status="success").inc()
-        return self._user_queries.by_group_membership(group_id, is_active=True)
-
-    @user_search
-    async def search_users_in_tasks(
-        self,
-        task_id: int,
-        search: UserSearch,
-        sort: UserSearch,
-        limit: int,
-        offset: int,
-    ) -> Select[tuple[UserModel]]:
-        """
-        Search active task assignees query.
-
-        Details:
-            Returns SQLAlchemy Select for task assignees (is_active=True).
-            @user_search decorator prepares filtering.
-
-        Arguments:
-            task_id (int): Target task ID.
-
-        Returns:
-            Select[tuple[UserModel]]: Task assignee query.
-
-        Example Usage:
-            task_users = await user_svc.search_users_in_tasks(task_id=456)
-        """
-        SEARCH_QUERIES_TOTAL.labels(entity="user_task", status="success").inc()
-        return self._user_queries.by_task_assignee(task_id, is_active=True)
-
-    async def update_my_profile(
-        self, current_user: UserModel, user_in: UserUpdate
-    ) -> UserRead:
-        """
-        Update current authenticated user's profile.
-
-        Details:
-            Updates only changed fields via model_dump(exclude_unset=True).
-            Separate conflict checks for email/username with dedicated exceptions.
-            Automatic cache invalidation for "users" namespace.
-
-        Arguments:
-            current_user (UserModel): Authenticated user model from dependency.
-            user_in (UserUpdate): Update payload.
-
-        Returns:
-            UserSchema: Updated profile.
+            dict[str, Any]: Dictionary containing UserRead data plus top_skills list
 
         Raises:
-            user_exc.UserNotFound: If user is inactive.
-            user_exc.UserEmailConflict: If email is already used.
-            user_exc.UserUsernameConflict: If username is already used.
-        Example Usage:
-            user_update = UserUpdate(email="new@example.com")
-            updated = await user_svc.update_my_profile(current_user, user_update)
+            user_exc.UserNotFound: When user not found or inactive
+
+        Example:
+            ```python
+            profile = await user_svc.get_user(user_id=123)
+            # Returns: {"id": 123, "username": "john", "top_skills": [...], ...}
+            ```
         """
-        user = await self._assert_active_current_user(current_user)
-        update_data = user_in.model_dump(exclude_unset=True)
+        user = await self._user_repo.get(id=user_id, is_active=True)
+        if user is None:
+            raise user_exc.UserNotFound(message=f"User with id {user_id} not found")
 
-        email = update_data.get("email")
-        username = update_data.get("username")
+        top_skills = await self._xp_service.get_top_skills(user_id, 3) or []
+        METRICS.USER_ACTIONS_TOTAL.labels(
+            action="get_user", role="user", status="success"
+        ).inc()
 
-        if email:
-            email_conflict = await self._db.scalar(
-                self._user_queries.get_user(email=email, is_active=True).where(
-                    UserModel.id != user.id
-                )
-            )
-            if email_conflict:
-                logger.warning(
-                    "Profile update failed: duplicate email {email} for user {user_id}",
-                    email=email,
-                    user_id=user.id,
-                )
-                raise user_exc.UserEmailConflict(
-                    message="User with this email already exists"
-                )
-
-        if username:
-            username_conflict = await self._db.scalar(
-                self._user_queries.get_user(username=username, is_active=True).where(
-                    UserModel.id != user.id,
-                )
-            )
-            if username_conflict:
-                logger.warning(
-                    "Profile update failed: duplicate username {username} \
-                        for user {user_id}",
-                    username=username,
-                    user_id=user.id,
-                )
-                raise user_exc.UserUsernameConflict(
-                    message="User with this username already exists"
-                )
-
-        for field, value in update_data.items():
-            setattr(user, field, value)
-
-        outbox_service = OutboxService(self._db)
-        await outbox_service.publish(
-            event_type=OutboxEventType.UPDATED,
-            entity_type="user",
-            entity_id=user.id,
+        logger.info(
+            "User profile retrieved: user_id={user_id}, top_skills_count={count}",
+            user_id=user_id,
+            count=len(top_skills),
         )
 
-        await self._db.commit()
-        USER_ACTIONS_TOTAL.labels(action="update_profile", role="user").inc()
-        await self._db.refresh(user)
+        return {
+            **UserRead.model_validate(user).model_dump(),
+            "top_skills": top_skills,
+        }
+
+    async def update_my_profile(
+        self,
+        current_user: UserModel,
+        user_in: UserUpdate,
+    ) -> UserRead:
+        """Update the current user's profile inside a unit of work.
+
+        Uses the UnitOfWork context to ensure all changes to the user
+        and related entities are applied atomically. Validates email
+        and username uniqueness before applying updates.
+
+        Args:
+            current_user: The authenticated user updating their profile
+                Type: UserModel
+            user_in: Updated profile data
+                Type: UserUpdate
+
+        Returns:
+            UserRead: Updated user profile serialized according to UserRead schema
+
+        Raises:
+            user_exc.UserNotFound: When user not found
+            user_exc.UserEmailConflict: When email already in use
+            user_exc.UserUsernameConflict: When username already in use
+
+        Example:
+            ```python
+            updated = await user_svc.update_my_profile(
+                current_user,
+                UserUpdate(email="new@example.com")
+            )
+            ```
+        """
+        user = await self._assert_active_current_user(current_user)
+        user_update = user_in.model_dump(exclude_unset=True)
+        db_user = await self._user_transaction.update_my_profile(user, user_update)
+
+        METRICS.USER_ACTIONS_TOTAL.labels(
+            action="update_profile", role="user", status="success"
+        ).inc()
         await self._indexer.index(user)
         await self._invalidate("auth")
 
         logger.info(
             "Profile updated: user_id={user_id}, fields={fields}",
-            user_id=user.id,
-            fields=list(update_data.keys()),
+            user_id=db_user.id,
+            fields=list(user_update.keys()),
         )
-
-        return UserRead.model_validate(user)
+        return UserRead.model_validate(db_user)
 
     async def delete_my_profile(self, current_user: UserModel) -> None:
-        """
-        Soft-delete current authenticated user.
+        """Soft-delete the current authenticated user inside a unit of work.
 
-        Details:
-            Sets user.is_active = False (soft delete pattern).
-            Automatic cache invalidation for "auth" namespace.
+        Performs a soft delete by setting is_active=False, preserving
+        user data while preventing future authentication. Uses UnitOfWork
+        for transactional integrity.
 
-        Arguments:
-            current_user (UserModel): Authenticated user model from dependency.
+        Args:
+            current_user: The authenticated user deleting their profile
+                Type: UserModel
+
+        Returns:
+            None
 
         Raises:
-            user_exc.UserNotFound: If user is inactive.
+            user_exc.UserNotFound: When user not found
 
-        Example Usage:
+        Example:
             ```python
             await user_svc.delete_my_profile(current_user)
-        ```
+            ```
         """
         user = await self._assert_active_current_user(current_user)
-        user.is_active = False
+        await self._user_transaction.delete_my_profile(user)
 
-        outbox_service = OutboxService(self._db)
-        await outbox_service.publish(
-            event_type=OutboxEventType.DELETED,
-            entity_type="user",
-            entity_id=user.id,
-        )
+        METRICS.USER_ACTIONS_TOTAL.labels(
+            action="delete_profile", role="user", status="success"
+        ).inc()
 
-        await self._db.commit()
-        USER_ACTIONS_TOTAL.labels(action="delete_profile", role="user").inc()
         await self._indexer.delete({"type": "user", "id": current_user.id})
         await self._invalidate("users")
         await self._invalidate("auth")
@@ -369,63 +293,77 @@ class UserService(BaseService):
         )
 
     async def get_group_admin(self, group_id: int) -> UserRead:
-        """
-        Retrieve group administrator profile.
+        """Return the active administrator of a group.
 
-        Details:
-            Only group members can access admin profile.
-            Uses direct admin_id from UserGroup model.
-            Returns active admin only.
+        Retrieves the user who is the admin (owner) of a specific group.
 
-        Arguments:
-            group_id (int): Target group ID
-            current_user (UserModel): Authenticated user (must be group member)
+        Args:
+            group_id: ID of the group
+                Type: int
+                Constraints: Must be > 0
 
         Returns:
-            UserRead: Group admin profile
+            UserRead: Admin user profile serialized according to UserRead schema
 
         Raises:
-            user_exc.UserNotFound: Admin not found or inactive.
+            user_exc.UserNotFound: When admin not found
 
-        Example Usage:
-            admin = await user_svc.get_group_admin(group_id=123, current_user)
+        Example:
+            ```python
+            admin = await user_svc.get_group_admin(group_id=123)
+            ```
         """
-        admin = await self._db.scalar(
-            self._user_queries.get_admin_group(group_id=group_id, is_active=True)
-        )
-        USER_ACTIONS_TOTAL.labels(action="get_group_admin", role="admin").inc()
+        admin = await self._user_repo.get_admin_group(group_id=group_id, is_active=True)
+
+        METRICS.USER_ACTIONS_TOTAL.labels(
+            action="get_group_admin", role="admin", status="success"
+        ).inc()
         if not admin:
             raise user_exc.UserNotFound(message="Not found admin")
+
+        logger.info(
+            "Group admin retrieved: group_id={group_id}, admin_id={user_id}",
+            group_id=group_id,
+            user_id=admin.id,
+        )
+
         return UserRead.model_validate(admin)
 
-    async def get_owner_task(
-        self,
-        task_id: int,
-    ) -> UserRead:
-        """
-        Get task owner (group admin) profile.
+    async def get_owner_task(self, task_id: int) -> UserRead:
+        """Return the active owner of a task.
 
-        Details:
-            Retrieves task → group → owner chain.
-            Returns active owner only.
+        Retrieves the group admin who owns the group that contains
+        the specified task.
 
-        Arguments:
-            task_id (int): Task ID
-            current_user (UserModel): Authenticated user
+        Args:
+            task_id: ID of the task
+                Type: int
+                Constraints: Must be > 0
 
         Returns:
-            UserRead: Task owner profile
+            UserRead: Owner user profile serialized according to UserRead schema
 
-        Example Usage:
-            owner = await user_svc.get_owner_task(task_id=456, current_user)
+        Raises:
+            user_exc.UserNotFound: When owner not found
+
+        Example:
+            ```python
+            owner = await user_svc.get_owner_task(task_id=123)
+            ```
         """
-
-        owner = await self._db.scalar(
-            self._user_queries.by_owner_task(task_id=task_id, is_active=True)
-        )
-        USER_ACTIONS_TOTAL.labels(action="get_owner_task", role="owner").inc()
+        owner = await self._user_repo.by_owner_task(task_id=task_id, is_active=True)
+        METRICS.USER_ACTIONS_TOTAL.labels(
+            action="get_owner_task", role="owner", status="success"
+        ).inc()
         if not owner:
             raise user_exc.UserNotFound(message="Task owner not found")
+
+        logger.info(
+            "Task owner retrieved: task_id={task_id}, owner_id={user_id}",
+            task_id=task_id,
+            user_id=owner.id,
+        )
+
         return UserRead.model_validate(owner)
 
 
@@ -433,38 +371,39 @@ def get_user_service(
     db: AsyncSession = Depends(db_helper.get_session),
     indexer: ElasticsearchIndexer = Depends(get_es_indexer),
     xp_service: XPService = Depends(get_xp_service),
+    user_transaction: UserTransaction = Depends(get_user_transaction),
 ) -> UserService:
-    """
-    FastAPI dependency factory for UserService injection.
+    """Create UserService instance with dependency injection.
 
-    Details:
-        Dependency injection helper for FastAPI routes.
-        Automatically creates UserService instance with database session.
-        Follows FastAPI dependency pattern for service layer isolation.
+    Factory function for FastAPI dependency injection that creates and configures
+    a UserService instance with all required dependencies.
 
-        Usage in routers:
-            @router.get("/profile")
-            async def get_profile(
-                user_service: UserService = Depends(get_user_service),
-                current_user: UserModel = Depends(get_current_user)
-            ):
-                return await user_service.get_my_profile(current_user)
-
-    Arguments:
-        db (AsyncSession): Database session from db_helper.get_session
-        es (AsyncElasticsearch): Elasticsearch client from es_helper.get_client
+    Args:
+        db: Database session from FastAPI dependency injection.
+            Type: AsyncSession.
+        indexer: Elasticsearch client from FastAPI dependency injection.
+            Type: ElasticsearchIndexer.
+        xp_service: XP service from FastAPI dependency injection.
+            Type: XPService.
+        uow: Unit of work from FastAPI dependency injection.
+            Type: UnitOfWork.
 
     Returns:
-        UserService: Fresh UserService instance with injected DB and ES sessions
+        UserService: Configured user service instance
 
-    Example Usage:
-        @app.get("/users/search")
-        async def search_users(
-            user_service: UserService = Depends(get_user_service)
+    Example:
+        ```python
+        @router.get("/users/me")
+        async def get_my_profile(
+            user_svc: UserService = Depends(get_user_service),
+            current_user: User = Depends(get_current_user)
         ):
+            return await user_svc.get_my_profile(current_user)
+        ```
     """
     return UserService(
         db=db,
         indexer=indexer,
         xp_service=xp_service,
+        user_transaction=user_transaction,
     )

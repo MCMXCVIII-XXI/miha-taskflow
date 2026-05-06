@@ -87,7 +87,7 @@ class SearchParameters(Generic[ModelT]):
             ```python
             @user_search
             async def search_users(self):
-                return self._user_queries.all()
+                return self._user_repo.all_select(is_active=True)
             ```
         """
 
@@ -102,7 +102,6 @@ class SearchParameters(Generic[ModelT]):
             offset_param = kwargs.pop("offset", 0)
             current_user = kwargs.pop("current_user", None)
 
-            # Some endpoints pass current_user as positional arg
             if current_user is None and args:
                 current_user = args[0]
                 args = args[1:]
@@ -132,7 +131,6 @@ class SearchParameters(Generic[ModelT]):
             result = await service._db.scalars(query)
             models = result.all()
 
-            # MyPy: SchemaT variance between __init__ and decorated_function contexts
             return [self.schema_class.model_validate(model) for model in models]  # type: ignore[misc]
 
         decorated_function.__name__ = function.__name__

@@ -1,16 +1,48 @@
-from typing import Any, Literal
+"""Group service for group management and membership operations.
+
+This module provides the GroupService class for managing groups,
+including creation, updates, membership, and join requests.
+
+**Key Components:**
+* `GroupService`: Main service class for group operations;
+* `get_group_service`: FastAPI dependency injection factory.
+
+**Dependencies:**
+* `GroupRepository`: Group data access layer;
+* `GroupMembershipRepository`: Membership data access layer;
+* `JoinRequestRepository`: Join request data access layer;
+* `UnitOfWork`: Transaction management (via BaseService);
+* `NotificationService`: Notification service for notifications;
+* `TaskService`: Task service for task-related operations;
+* `ElasticsearchIndexer`: Search index management.
+
+**Usage Example:**
+    ```python
+    from app.service.group import get_group_service
+
+    @router.post("/groups")
+    async def create_group(
+        group_data: UserGroupCreate,
+        group_svc: GroupService = Depends(get_group_service),
+        current_user: User = Depends(get_current_user)
+    ):
+        return await group_svc.create_my_group(current_user, group_data)
+    ```
+
+**Notes:**
+- Groups support hierarchical structure (parent groups);
+- Membership can be open (auto-join) or require approval;
+- Soft delete is used (is_active=False) rather than hard deletion;
+- RBAC roles are managed automatically (MEMBER, GROUP_ADMIN).
+"""
 
 from fastapi import Depends
-from sqlalchemy import Select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import logging
-from app.core.metrics import GROUP_ACTIONS_TOTAL
+from app.core.metrics import METRICS
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
-from app.models import (
-    JoinRequest as JoinRequestModel,
-)
 from app.models import User as UserModel
 from app.models import UserGroup as UserGroupModel
 from app.models import (
@@ -21,47 +53,38 @@ from app.schemas import (
     NotificationRead,
     UserGroupCreate,
     UserGroupRead,
-    UserGroupSearch,
     UserGroupUpdate,
 )
 from app.schemas.enum import (
-    JoinPolicy,
     JoinRequestStatus,
-    OutboxEventType,
 )
 
 from .base import GroupTaskBaseService
-from .exceptions import group_exc, join_request_exc
+from .exceptions import group_exc
 from .notification import NotificationService, get_notification_service
-from .outbox import OutboxService
-from .search import group_search
 from .task import TaskService, get_task_service
+from .transactions.group import GroupTransaction, get_group_transaction
 from .utils import Indexer
 
 logger = logging.get_logger(__name__)
 
 
 class GroupService(GroupTaskBaseService):
-    """
-    Group lifecycle management service with membership operations.
+    """Service for group management and membership operations.
 
-    Complete group CRUD for group admins, membership management (add/remove/exit),
-    advanced search via @group_search decorator, name conflict validation,
-    soft-delete pattern (is_active=False), owner validation.
-
-    Args:
-        db: SQLAlchemy async database session
-        indexer: Elasticsearch indexer instance
-        notification_service: Notification service instance
-        group_queries: Group-specific optimized query builders
-        task_service: Task service instance
+    Handles complete group lifecycle including creation, updates, and deletion.
+    Provides membership management (add/remove/exit), join request handling,
+    and role management. Uses soft delete pattern (is_active=False).
 
     Attributes:
-        _db: SQLAlchemy async database session
-        _group_queries: Group-specific optimized query builders
-        _indexer: Elasticsearch indexer wrapper
-        _notification: Notification service instance
-        _task_svc: Task service instance
+        _db (AsyncSession): SQLAlchemy async session for database operations
+        _group_repo (GroupRepository): Repository for group data operations
+        _group_membership_repo (GroupMembershipRepository):
+                Repository for membership ops
+        _join_repo (JoinRequestRepository): Repository for join request ops
+        _task_service (TaskService): Service for task operations
+        _notification (NotificationService): Service for notifications
+        _indexer (Indexer): Elasticsearch indexer wrapper
 
     Raises:
         group_exc.ForbiddenGroupAccess: When user is not authorized
@@ -77,11 +100,13 @@ class GroupService(GroupTaskBaseService):
         indexer: ElasticsearchIndexer,
         notification_service: NotificationService,
         task_service: TaskService,
+        group_transaction: GroupTransaction,
     ) -> None:
         super().__init__(db)
         self._task_service = task_service
         self._notification = notification_service
         self._indexer = Indexer(indexer)
+        self._group_transaction = group_transaction
 
     async def _get_my_group(self, group_id: int, user_id: int) -> UserGroupModel:
         """
@@ -97,8 +122,8 @@ class GroupService(GroupTaskBaseService):
         Raises:
             group_exc.ForbiddenGroupAccess: Not owner or inactive group
         """
-        group = await self._db.scalar(
-            self._group_queries.get_group(admin_id=user_id, id=group_id, is_active=True)
+        group = await self._group_repo.get(
+            admin_id=user_id, id=group_id, is_active=True
         )
 
         if not group:
@@ -144,91 +169,6 @@ class GroupService(GroupTaskBaseService):
         group = await self._get_my_group(group_id, current_user.id)
         return UserGroupRead.model_validate(group)
 
-    @group_search
-    async def search_groups(
-        self,
-        search: UserGroupSearch,
-        sort: UserGroupSearch,
-        limit: int,
-        offset: int,
-        **kwargs: Any,
-    ) -> Select[tuple[UserGroupModel]]:
-        """
-        Base query for all active groups search/filter/sort.
-
-        Details:
-            @group_search decorator applies UserGroupSearch filters.
-            Only active groups (is_active=True).
-
-        Returns:
-            Select[tuple[UserGroupModel]]: Base query for search
-
-        Example Usage:
-            ```python
-            @router.get("/groups/")
-            async def search_groups(
-                search: UserGroupSearch = Depends(),
-                group_svc: GroupService = Depends(get_group_service)
-            ):
-                return await group_svc.search_groups(search=search)
-            ```
-        """
-        return self._group_queries.get_group(is_active=True)
-
-    @group_search
-    async def search_my_groups(
-        self,
-        search: UserGroupSearch,
-        sort: UserGroupSearch,
-        limit: int,
-        offset: int,
-        current_user: UserModel,
-    ) -> Select[tuple[UserGroupModel]]:
-        """
-        Search groups owned by current user (admin).
-
-        Details:
-            Filters by current_user.id as admin_id.
-            @group_search applies additional filters.
-
-        Arguments:
-            current_user (UserModel): Group owner
-
-        Returns:
-            Select[tuple[UserGroupModel]]: Owned groups query
-
-        Example Usage:
-            my_groups = await group_svc.search_my_groups(current_user)
-        """
-        return self._group_queries.get_group(admin_id=current_user.id, is_active=True)
-
-    @group_search
-    async def search_member_groups(
-        self,
-        search: UserGroupSearch,
-        sort: UserGroupSearch,
-        limit: int,
-        offset: int,
-        current_user: UserModel,
-    ) -> Select[tuple[UserGroupModel]]:
-        """
-        Search groups where user is member.
-
-        Details:
-            Via UserGroupMembership relationship.
-            @group_search decorator filtering.
-
-        Arguments:
-            current_user (UserModel): Group member
-
-        Returns:
-            Select[tuple[UserGroupModel]]: Member groups query
-
-        Example Usage:
-            member_groups = await group_svc.search_member_groups(current_user)
-        """
-        return self._group_queries.by_my_member(current_user.id, is_active=True)
-
     async def create_my_group(
         self, current_user: UserModel, group_in: UserGroupCreate
     ) -> UserGroupRead:
@@ -245,53 +185,11 @@ class GroupService(GroupTaskBaseService):
         Raises:
             group_exc.GroupNameConflict: Duplicate name
         """
-        if group_in.name:
-            name_conflict = await self._db.scalar(
-                self._group_queries.get_group(
-                    name=group_in.name, admin_id=current_user.id, is_active=True
-                )
-            )
-            if name_conflict:
-                logger.warning(
-                    "Group creation failed: duplicate name {name} for user {user_id}",
-                    name=group_in.name,
-                    user_id=current_user.id,
-                )
-                raise group_exc.GroupNameConflict(message="Name already exists")
-
-        group = UserGroupModel(
-            name=group_in.name,
-            description=group_in.description,
-            admin_id=current_user.id,
-            visibility=group_in.visibility,
-            parent_group_id=group_in.parent_group_id,
-            level=1 if group_in.parent_group_id is None else 2,
-            invite_policy=group_in.invite_policy,
-            join_policy=group_in.join_policy,
-        )
-        self._db.add(group)
-        await self._db.flush()
-
-        membership = UserGroupMembershipModel(
-            user_id=current_user.id, group_id=group.id
-        )
-        self._db.add(membership)
-
-        outbox_service = OutboxService(self._db)
-        await outbox_service.publish(
-            event_type=OutboxEventType.CREATED,
-            entity_type="group",
-            entity_id=group.id,
+        group = await self._group_transaction.create_my_group(
+            current_user=current_user, group_in=group_in
         )
 
-        await self._grant_role_if_not_exists(
-            user_id=current_user.id,
-            group_id=group.id,
-            role_name=self._role.GROUP_ADMIN.value,
-        )
-        await self._db.commit()
-        GROUP_ACTIONS_TOTAL.labels(action="create", status="success").inc()
-        await self._db.refresh(group)
+        METRICS.GROUP_ACTIONS_TOTAL.labels(action="create", status="success").inc()
         await self._indexer.index(group)
         await self._invalidate("groups")
         await self._invalidate("rbac")
@@ -321,10 +219,8 @@ class GroupService(GroupTaskBaseService):
         Raises:
             group_exc.MemberNotFound: No active membership
         """
-        membership = await self._db.scalar(
-            self._group_membership_queries.get_group_membership(
-                user_id=user_id, group_id=group_id
-            )
+        membership = await self._group_membership_repo.get(
+            user_id=user_id, group_id=group_id
         )
 
         if not membership:
@@ -341,35 +237,6 @@ class GroupService(GroupTaskBaseService):
             user_id=user_id,
         )
         return membership
-
-    async def _get_remaining_group_or_member(
-        self, user_id: int, role: Literal["MEMBER", "GROUP_ADMIN"]
-    ) -> UserGroupModel | UserGroupMembershipModel:
-        if role == "MEMBER":
-            return await self._db.scalar(
-                self._group_membership_queries.get_group_membership(
-                    user_id=user_id
-                ).limit(1)
-            )
-        elif role == "GROUP_ADMIN":
-            return await self._db.scalar(
-                self._group_queries.get_group(admin_id=user_id, is_active=True).limit(1)
-            )
-
-    async def _cleanup_role_if_no_groups(
-        self, user_id: int, role: Literal["MEMBER", "GROUP_ADMIN"]
-    ) -> None:
-        remaining = await self._get_remaining_group_or_member(user_id, role)
-        if not remaining:
-            role_id = await self._get_role_id(role)
-            if role_id:
-                user_role = await self._db.scalar(
-                    self._user_role_queries.get_user_role(
-                        user_id=user_id, role_id=role_id
-                    )
-                )
-                if user_role:
-                    await self._db.delete(user_role)
 
     async def add_member_to_group(
         self, group_id: int, user_id: int, current_user: UserModel
@@ -393,36 +260,12 @@ class GroupService(GroupTaskBaseService):
         Example Usage:
             group = await group_svc.add_member_to_group(123, 456, current_user)
         """
-        await self._get_my_group(group_id, current_user.id)
-
-        membership = await self._db.scalar(
-            self._group_membership_queries.get_group_membership(
-                user_id=user_id, group_id=group_id
-            )
+        await self._group_transaction.add_member_to_group(
+            current_user=current_user, group_id=group_id, user_id=user_id
         )
-        if membership:
-            logger.warning(
-                "Add member failed: user {user_id} already member of group {group_id}",
-                user_id=user_id,
-                group_id=group_id,
-            )
-            raise group_exc.MemberAlreadyExists(message="Member already exists")
 
-        membership_create = UserGroupMembershipModel(group_id=group_id, user_id=user_id)
-        self._db.add(membership_create)
-        await self._db.commit()
-        GROUP_ACTIONS_TOTAL.labels(action="add_member").inc()
-        await self._db.refresh(membership_create)
+        METRICS.GROUP_ACTIONS_TOTAL.labels(action="add_member", status="success").inc()
         await self._invalidate("groups")
-
-        if self._notification:
-            group = await self._get_my_group(group_id, current_user.id)
-            await self._notification.notify_group_invite(
-                inviter_id=current_user.id,
-                invitee_id=user_id,
-                group_id=group_id,
-                group_name=group.name,
-            )
 
         logger.info(
             "Member added to group: group_id={group_id}, user_id={added_by}",
@@ -451,14 +294,13 @@ class GroupService(GroupTaskBaseService):
         Example Usage:
             await group_svc.remove_member_from_group(123, 456, current_user)
         """
-        await self._get_my_group(group_id, current_user.id)
+        await self._group_transaction.remove_member_from_group(
+            current_user=current_user, group_id=group_id, user_id=user_id
+        )
 
-        membership = await self._get_active_group_member(group_id, user_id)
-        await self._db.delete(membership)
-        await self._cleanup_role_if_no_groups(user_id, self._role.MEMBER.value)
-        await self._db.commit()
-        GROUP_ACTIONS_TOTAL.labels(action="remove_member").inc()
-
+        METRICS.GROUP_ACTIONS_TOTAL.labels(
+            action="remove_member", status="success"
+        ).inc()
         logger.info(
             "Member removed from group: group_id={group_id}, user_id={removed_user}",
             group_id=group_id,
@@ -466,20 +308,12 @@ class GroupService(GroupTaskBaseService):
         )
 
     async def create_join_request(self, group_id: int, user_id: int) -> None:
-        join_request = await self._db.scalar(
-            self._join_queries.get_join_request(group_id=group_id, user_id=user_id)
+        await self._group_transaction.create_join_request(
+            group_id=group_id, user_id=user_id
         )
-        if join_request:
-            raise join_request_exc.JoinRequestAlreadyExists(
-                message="Join request already exists."
-            )
-
-        join_request = JoinRequestModel(
-            group_id=group_id,
-            user_id=user_id,
-        )
-        self._db.add(join_request)
-        await self._db.commit()
+        METRICS.GROUP_ACTIONS_TOTAL.labels(
+            action="join_request_created", status="success"
+        ).inc()
 
     async def update_my_group(
         self, group_id: int, current_user: UserModel, group_in: UserGroupUpdate
@@ -507,49 +341,18 @@ class GroupService(GroupTaskBaseService):
         Example Usage:
             updated = await group_svc.update_my_group(123, current_user, group_update)
         """
-        group = await self._get_my_group(group_id, current_user.id)
-        group_update = group_in.model_dump(exclude_unset=True)
-
-        name = group_update.get("name")
-
-        if not group:
-            raise group_exc.GroupNotFound(message="Group not found")
-
-        if name:
-            name_conflict = await self._db.scalar(
-                self._group_queries.get_group(name=name, is_active=True).where(
-                    UserGroupModel.id != group_id
-                )
-            )
-            if name_conflict:
-                logger.warning(
-                    "Group update failed: duplicate name {name} \
-                        for group_id {group_id}",
-                    name=name,
-                    group_id=group_id,
-                )
-                raise group_exc.GroupNameConflict(message="Group name already exists")
-
-        for key, value in group_update.items():
-            setattr(group, key, value)
-
-        outbox_service = OutboxService(self._db)
-        await outbox_service.publish(
-            event_type=OutboxEventType.UPDATED,
-            entity_type="group",
-            entity_id=group.id,
+        group = await self._group_transaction.update_my_group(
+            group_id=group_id, current_user=current_user, group_in=group_in
         )
 
-        await self._db.commit()
-        GROUP_ACTIONS_TOTAL.labels(action="update").inc()
-        await self._db.refresh(group)
+        METRICS.GROUP_ACTIONS_TOTAL.labels(action="update", status="success").inc()
         await self._indexer.index(group)
         await self._invalidate("groups")
 
         logger.info(
             "Group updated: group_id={group_id}, fields={fields}",
             group_id=group_id,
-            fields=list(group_update.keys()),
+            fields=list(group_in.model_dump().keys()),
         )
 
         return UserGroupRead.model_validate(group)
@@ -572,32 +375,11 @@ class GroupService(GroupTaskBaseService):
         Example Usage:
             await group_svc.delete_my_group(123, current_user)
         """
-        group = await self._get_my_group(group_id, current_user.id)
-        role_id = await self._get_role_id(self._role.GROUP_ADMIN.value)
-        user_role = await self._db.scalar(
-            self._user_role_queries.get_user_role(
-                user_id=current_user.id, role_id=role_id, group_id=group_id
-            )
+        await self._group_transaction.delete_my_group(
+            group_id=group_id, current_user=current_user
         )
 
-        if not user_role:
-            raise group_exc.GroupNotFound(message="Group not found")
-
-        group.is_active = False
-
-        outbox_service = OutboxService(self._db)
-        await outbox_service.publish(
-            event_type=OutboxEventType.DELETED,
-            entity_type="group",
-            entity_id=group.id,
-        )
-
-        await self._db.delete(user_role)
-        await self._cleanup_role_if_no_groups(
-            current_user.id, self._role.GROUP_ADMIN.value
-        )
-        await self._db.commit()
-        GROUP_ACTIONS_TOTAL.labels(action="delete").inc()
+        METRICS.GROUP_ACTIONS_TOTAL.labels(action="delete", status="success").inc()
         await self._indexer.delete({"type": "group", "id": group_id})
         await self._invalidate("groups")
 
@@ -607,143 +389,77 @@ class GroupService(GroupTaskBaseService):
             user_id=current_user.id,
         )
 
-    async def _handle_task_join_after_approval(
-        self, request: JoinRequestModel, current_user: UserModel
-    ) -> None:
-        task = await self._db.scalar(
-            self._task_queries.get_task(id=request.task_id, is_active=True)
-        )
-        if not task:
-            return
-
-        is_member = await self._db.scalar(
-            self._group_membership_queries.get_group_membership(
-                user_id=request.user_id, group_id=task.group_id
-            )
-        )
-
-        if not is_member:
-            membership = UserGroupMembershipModel(
-                user_id=request.user_id, group_id=task.group_id
-            )
-            self._db.add(membership)
-            await self._db.commit()
-
-            if self._notification:
-                group = await self._db.scalar(
-                    self._group_queries.get_group(id=task.group_id, is_active=True)
-                )
-                if group:
-                    await self._notification.notify_group_join(
-                        requester_id=request.user_id,
-                        user_id=request.user_id,
-                        group_id=group.id,
-                        group_name=group.name,
-                    )
-
-        if request.task_id is not None:
-            await self._task_service.add_user_to_task(
-                task_id=request.task_id,
-                user_id=request.user_id,
-                current_user=current_user,
-            )
-
     async def reject_join_request(
         self, request_id: int, current_user: UserModel
-    ) -> None:
-        request = await self._db.scalar(
-            self._join_queries.get_join_request(id=request_id)
+    ) -> NotificationRead | None:
+        """Reject a join request.
+
+        Details:
+            Marks the join request as rejected and deletes it.
+            Returns a notification to the user.
+
+        Args:
+            request_id (int): ID of the join request to reject
+            current_user (UserModel): User rejecting the request
+
+        Raises:
+            group_exc.MemberNotFound: When request does not exist
+
+        Example Usage:
+            await group_svc.reject_join_request(123, current_user)
+        """
+        notifications = await self._group_transaction.reject_join_request(
+            request_id=request_id, current_user=current_user
         )
-        if not request:
-            raise group_exc.JoinRequestNotFound(message="Join request not found")
-
-        group = await self._db.scalar(
-            self._group_queries.get_group(id=request.group_id, is_active=True)
-        )
-
-        if not group:
-            raise group_exc.GroupNotFound(message=f"Group {request.group_id} not found")
-
-        if group.admin_id != current_user.id:
-            raise group_exc.MemberNotAdmin(
-                message="Only group admin can reject join requests"
-            )
-
-        request.status = JoinRequestStatus.REJECTED
-        await self._db.commit()
-
-        if self._notification and group:
-            await self._notification.notify_join_request_rejected(
-                admin_id=current_user.id,
-                user_id=request.user_id,
-                group_id=group.id,
-                group_name=group.name,
-            )
+        METRICS.GROUP_ACTIONS_TOTAL.labels(action="join_reject", status="success").inc()
+        if notifications:
+            return NotificationRead.model_validate(notifications[0])
+        return None
 
     async def approve_join_request(
         self, group_id: int, request_id: int, current_user: UserModel
     ) -> NotificationRead:
-        request = await self._db.scalar(
-            self._join_queries.get_join_request(id=request_id)
+        """Approve a join request.
+
+        Details:
+            Marks the join request as approved and deletes it.
+            Returns a notification to the user.
+
+        Args:
+            group_id (int): ID of the group to approve the request for
+            request_id (int): ID of the join request to approve
+            current_user (UserModel): User approving the request
+
+        Example Usage:
+            await group_svc.approve_join_request(123, 456, current_user)
+        """
+        notifications = await self._group_transaction.approve_join_request(
+            group_id=group_id, request_id=request_id, current_user=current_user
         )
-        if not request:
-            raise group_exc.JoinRequestNotFound(message="Join request not found")
-
-        if request.group_id != group_id:
-            raise group_exc.JoinRequestNotFound(
-                message="Join request does not belong to this group"
-            )
-
-        group = await self._db.scalar(
-            self._group_queries.get_group(id=request.group_id, is_active=True)
-        )
-
-        if not group:
-            raise group_exc.GroupNotFound("Group not found")
-
-        if group.admin_id != current_user.id:
-            raise group_exc.MemberNotAdmin(
-                message="Only group admin can approve join requests"
-            )
-
-        if request.status != JoinRequestStatus.PENDING:
-            raise group_exc.JoinRequestAlreadyHandled(
-                message="Join request already processed"
-            )
-
-        request.status = JoinRequestStatus.APPROVED
-        await self._db.commit()
-
-        membership = UserGroupMembershipModel(
-            user_id=request.user_id, group_id=request.group_id
-        )
-        self._db.add(membership)
-        await self._db.commit()
-
-        await self._grant_role_if_not_exists(
-            group_id=request.group_id,
-            user_id=request.user_id,
-            role_name=self._role.MEMBER.value,
-        )
-        await self._db.commit()
-
-        if request.task_id:
-            await self._handle_task_join_after_approval(request, current_user)
-
-        notification = await self._notification.notify_join_request_approved(
-            admin_id=current_user.id,
-            user_id=request.user_id,
-            group_id=group.id,
-            group_name=group.name,
-        )
-        return notification
+        METRICS.GROUP_ACTIONS_TOTAL.labels(
+            action="join_approve", status="success"
+        ).inc()
+        if notifications:
+            return NotificationRead.model_validate(notifications[0])
+        raise group_exc.JoinRequestNotFound(message="Notification not created")
 
     async def get_join_requests(
         self, group_id: int, current_user: UserModel
     ) -> list[JoinRequestRead]:
-        group = await self._db.scalar(
-            self._group_queries.get_group(id=group_id, is_active=True)
-        )
+        """Get all join requests for a group.
+
+        Details:
+            Returns all join requests for a group, including
+            the request status and the user who created it.
+
+        Args:
+            group_id (int): ID of the group to get join requests for
+            current_user (UserModel): User requesting the join requests
+
+        Example Usage:
+            requests = await group_svc.get_join_requests(123, current_user)
+        """
+        group = await self._group_repo.get(id=group_id, is_active=True)
         if not group:
             raise group_exc.GroupNotFound(message="Group not found")
 
@@ -752,81 +468,33 @@ class GroupService(GroupTaskBaseService):
                 message="Only group admin can view join requests"
             )
 
-        result = await self._db.scalars(
-            self._join_queries.get_join_request(
-                group_id=group_id,
-                status=JoinRequestStatus.PENDING,
-            )
+        requests = await self._join_repo.find_many(
+            group_id=group_id,
+            status=JoinRequestStatus.PENDING,
         )
-        return [JoinRequestRead.model_validate(req) for req in result.all()]
+        return [JoinRequestRead.model_validate(req) for req in requests]
 
     async def join_group(self, group_id: int, current_user: UserModel) -> None:
-        user_group_membership = await self._db.scalar(
-            self._group_membership_queries.get_group_membership(
-                group_id=group_id, user_id=current_user.id
-            )
-        )
-        if user_group_membership:
-            raise group_exc.MemberAlreadyExists(
-                message="User is already a member of this group"
-            )
-        group = await self._db.scalar(
-            self._group_queries.get_group(id=group_id, is_active=True)
-        )
-        if not group:
-            raise group_exc.GroupNotFound(message="Group not found")
+        """Join a group.
 
-        existing_request = await self._db.scalar(
-            self._join_queries.get_join_request(
-                group_id=group_id,
-                user_id=current_user.id,
-                status=JoinRequestStatus.PENDING,
-            )
+        Details:
+            Marks the user as a member of the group and
+            creates a join request if the group is open.
+
+        Args:
+            group_id (int): ID of the group to join
+            current_user (UserModel): User joining the group
+
+        Example Usage:
+            await group_svc.join_group(123, current_user)
+        """
+        await self._group_transaction.join_group(
+            group_id=group_id, current_user=current_user
         )
-        if existing_request:
-            raise group_exc.JoinRequestAlreadyExists(
-                message="Join request already exists"
-            )
-        if group.join_policy == JoinPolicy.OPEN:
-            membership = UserGroupMembershipModel(
-                user_id=current_user.id, group_id=group_id
-            )
-            self._db.add(membership)
-            await self._db.commit()
-            GROUP_ACTIONS_TOTAL.labels(action="join_open").inc()
-            await self._grant_role_if_not_exists(
-                group_id=group_id,
-                user_id=current_user.id,
-                role_name=self._role.MEMBER.value,
-            )
-            await self._db.commit()
-            await self._invalidate("groups")
-            await self._invalidate("rbac")
 
-            if self._notification:
-                await self._notification.notify_group_join(
-                    requester_id=current_user.id,
-                    user_id=current_user.id,
-                    group_id=group_id,
-                    group_name=group.name,
-                )
-        else:
-            request = JoinRequestModel(
-                user_id=current_user.id,
-                group_id=group_id,
-                task_id=None,
-                status=JoinRequestStatus.PENDING,
-            )
-            self._db.add(request)
-            await self._db.commit()
-
-            if self._notification:
-                await self._notification.notify_join_request_created(
-                    requester_id=current_user.id,
-                    admin_id=group.admin_id,
-                    group_id=group_id,
-                    group_name=group.name,
-                )
+        METRICS.GROUP_ACTIONS_TOTAL.labels(action="join_open", status="success").inc()
+        await self._invalidate("groups")
+        await self._invalidate("rbac")
 
         logger.info(
             "User joined group: user_id={user_id}, group_id={group_id}",
@@ -845,17 +513,14 @@ class GroupService(GroupTaskBaseService):
             group_id (int): Target group ID
             current_user (UserModel): User exiting group
 
-        Raises:
-            group_exc.MemberNotFound: Not a member
-
         Example Usage:
             await group_svc.exit_group(123, current_user)
         """
-        membership = await self._get_active_group_member(group_id, current_user.id)
-        await self._db.delete(membership)
-        await self._cleanup_role_if_no_groups(current_user.id, self._role.MEMBER.value)
-        await self._db.commit()
-        GROUP_ACTIONS_TOTAL.labels(action="exit").inc()
+        await self._group_transaction.exit_group(
+            group_id=group_id,
+            current_user=current_user,
+        )
+        METRICS.GROUP_ACTIONS_TOTAL.labels(action="exit", status="success").inc()
         await self._invalidate("groups")
 
         logger.info(
@@ -870,25 +535,29 @@ def get_group_service(
     indexer: ElasticsearchIndexer = Depends(get_es_indexer),
     notification_service: NotificationService = Depends(get_notification_service),
     task_service: TaskService = Depends(get_task_service),
+    group_transaction: GroupTransaction = Depends(get_group_transaction),
 ) -> GroupService:
-    """
-    FastAPI dependency factory for GroupService injection.
+    """Create GroupService instance with dependency injection.
 
-    Details:
-        Creates GroupService with database session.
-        Service layer isolation pattern.
+    Factory function for FastAPI dependency injection that creates and configures
+    a GroupService instance with all required dependencies.
 
-    Arguments:
-        db (AsyncSession): Database session
+    Args:
+        db: Database session from FastAPI dependency injection.
+            Type: AsyncSession.
+        indexer: Elasticsearch client from FastAPI dependency injection.
+            Type: ElasticsearchIndexer.
+        notification_service: Notification service from FastAPI dependency injection.
+            Type: NotificationService.
+        task_service: Task service from FastAPI dependency injection.
+            Type: TaskService.
 
-    Returns:
-        GroupService: Fresh service instance
-
-    Example Usage:
+    Example:
         ```python
         @router.get("/groups/my")
         async def get_my_groups(
-            group_svc: GroupService = Depends(get_group_service)
+            group_svc: GroupService = Depends(get_group_service),
+            current_user: User = Depends(get_current_user)
         ):
             return await group_svc.search_my_groups(current_user)
         ```
@@ -899,4 +568,5 @@ def get_group_service(
         indexer=indexer,
         notification_service=notification_service,
         task_service=task_service,
+        group_transaction=group_transaction,
     )

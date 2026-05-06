@@ -1,19 +1,55 @@
+"""XP (Experience Points) service for user leveling and skill tracking.
+
+This module provides the XPService class for managing user experience points,
+skill spheres, and leveling progression.
+
+**Key Components:**
+* `XPService`: Main service class for XP operations;
+* `get_xp_service`: FastAPI dependency injection factory.
+
+**Dependencies:**
+* `TaskRepository`: Task data access layer (via BaseService);
+* `UserSkillRepository`: User skills data access layer;
+* `UserRepository`: User data access layer.
+
+**Usage Example:**
+    ```python
+    from app.service.xp import get_xp_service
+
+    @router.post("/users/{user_id}/xp")
+    async def add_xp(
+        user_id: int,
+        sphere: TaskSphere,
+        xp: int,
+        xp_svc: XPService = Depends(get_xp_service)
+    ):
+        return await xp_svc.add_sphere_xp(user_id, sphere, xp)
+    ```
+
+**Notes:**
+- XP is earned by completing tasks with different difficulty levels;
+- Daily XP cap of 500 points applies;
+- Streak bonuses for consecutive days (5+ days = 1.2x, 10+ days = 1.5x);
+- Time bonuses for early completion (0.5x - 2x multiplier);
+- Skills can be frozen after 60 days of inactivity.
+"""
+
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import Depends
-from sqlalchemy import ScalarResult
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.log import logging
-from app.core.metrics import SEARCH_QUERIES_TOTAL, XP_CHANGES_TOTAL
+from app.core.metrics import METRICS
 from app.db import db_helper
 from app.models import UserSkill
 from app.schemas import UserSkillWithTitle
 from app.schemas.enum import TaskSphere
 
 from .base import XPBaseService
+from .transactions.xp import XPTransaction, get_xp_transaction
 
 logger = logging.get_logger(__name__)
 
@@ -32,31 +68,66 @@ class XPService(XPBaseService):
 
     Attributes:
         _db (AsyncSession): SQLAlchemy async database session
+        _task_repo: Repository for task data operations
+        _user_repo: Repository for user data operations
+        _user_skill_repo: Repository for user skills operations
         _spheres (TaskSphere): Available task spheres enumeration
         _base_rank (BaseRank): Base ranking system
         _xp_thresholds (XPThreshold): XP thresholds for level progression
         _task_difficulty (TaskDifficulty): Task difficulty levels
         _max_daily_xp (int): Maximum XP that can be earned per day (500)
         _frozen_days (int): Number of days skills remain frozen (60)
+
+    Example:
+        ```python
+        xp_service = XPService(db_session)
+        leveled_up, new_level = await xp_service.add_sphere_xp(
+            user_id=123,
+            sphere=TaskSphere.BACKEND,
+            xp=100
+        )
+        ```
     """
 
     def __init__(
         self,
         db: AsyncSession,
+        xp_transaction: XPTransaction,
     ) -> None:
-        logger.debug("Initializing XPService with db session", db_session_id=id(db))
+        """Initialize XPService with database session.
+
+        Args:
+            db: SQLAlchemy async database session
+        """
         super().__init__(db)
+        self._xp_transaction = xp_transaction
 
     def _calculate_base_xp(self, story_points: int) -> int:
-        """
-        Calculate the base XP from story points.
+        """Calculate base XP from story points (10 XP per point).
+
+        Args:
+            story_points: Number of story points for the task
+                Type: int
+
+        Returns:
+            int: Base XP (story_points * 10)
         """
         logger.debug("Calculating base XP from story points", story_points=story_points)
         return story_points * 10
 
     def _calculate_time_bonus(self, deadline_days: int, actual_days: int) -> float:
-        """
-        Calculate the time bonus based on the deadline and actual days completed.
+        """Calculate time bonus multiplier based on deadline adherence.
+
+        Faster completion results in higher bonus (0.5x - 2x range).
+
+        Args:
+            deadline_days: Days allocated for the task
+                Type: int
+            actual_days: Days actually taken to complete
+                Type: int
+
+        Returns:
+            float: Multiplier between 0.5 and 2.0
         """
         logger.debug(
             "Calculating time bonus",
@@ -69,21 +140,65 @@ class XPService(XPBaseService):
         return max(0.5, min(bonus, 2.0))
 
     def _calculate_streak_bonus(self, streak: int) -> float:
-        """
-        Calculate the streak bonus based on the number of consecutive days completed.
+        """Calculate streak bonus multiplier based on consecutive days.
+
+        5+ days = 1.2x, 10+ days = 1.5x.
+
+        Args:
+            streak: Number of consecutive days
+                Type: int
+
+        Returns:
+            float: Multiplier (1.0, 1.2, or 1.5)
         """
         logger.debug("Calculating streak bonus", streak=streak)
+
         if streak >= 10:
             return 1.5
         if streak >= 5:
             return 1.2
         return 1.0
 
+    async def get_or_create_skill(self, user_id: int, sphere: TaskSphere) -> UserSkill:
+        """Get or create user skill."""
+        logger.info(
+            "User skill not found, creating new one", user_id=user_id, sphere=sphere
+        )
+        skill = await self._xp_transaction.get_or_create_skill(
+            user_id=user_id, sphere=sphere
+        )
+        logger.debug(
+            "User skill retrieved", user_id=user_id, skill_id=skill.id, sphere=sphere
+        )
+        return skill
+
     def _distribute_xp(
         self, spheres: list[dict[str, Any]], base_xp: int, multiplier: float
     ) -> dict[str, int]:
-        """
-        Distribute the base XP across the given spheres with a multiplier.
+        """Distribute total XP across spheres by weight.
+
+        Args:
+            spheres: List of sphere configurations with weights
+                Type: list[dict[str, Any]]
+                Example: [{"sphere": "BACKEND", "weight": 0.7}]
+            base_xp: Base XP before distribution
+                Type: int
+            multiplier: Overall multiplier
+                Type: float
+
+        Returns:
+            dict[str, int]: Dictionary mapping sphere names to XP amounts
+
+        Example:
+            ```python
+            xp_dist = self._distribute_xp(
+                [{"sphere": "BACKEND", "weight": 0.5},
+                 {"sphere": "FRONTEND", "weight": 0.5}],
+                100,
+                1.2
+            )
+            # Returns: {"BACKEND": 60, "FRONTEND": 60}
+            ```
         """
         logger.debug(
             "Starting XP distribution across spheres",
@@ -101,15 +216,47 @@ class XPService(XPBaseService):
 
     def calculate_task_xp(
         self,
-        spheres: list[dict[str, Any]],  # [{"sphere": "BACKEND", "weight": 0.7}]
+        spheres: list[dict[str, Any]],
         story_points: int = 1,
         deadline_days: int = 7,
         actual_days: int = 7,
         streak: int = 0,
     ) -> dict[str, int]:
-        """
-        Calculate the XP for a task based on story \
-            points, deadline, actual days, and streak.
+        """Calculate XP distribution across spheres for a task.
+
+        Combines base XP, time bonus, and streak bonus to calculate
+        final XP distribution across multiple spheres.
+
+        Args:
+            spheres: List of sphere configurations with weights
+                Type: list[dict[str, Any]]
+                Example: [{"sphere": "BACKEND", "weight": 0.7}]
+            story_points: Number of story points for the task
+                Type: int
+                Defaults to 1
+            deadline_days: Days allocated for the task
+                Type: int
+                Defaults to 7
+            actual_days: Days actually taken to complete
+                Type: int
+                Defaults to 7
+            streak: Number of consecutive days
+                Type: int
+                Defaults to 0
+
+        Returns:
+            dict[str, int]: Dictionary mapping sphere names to XP amounts
+
+        Example:
+            ```python
+            xp_dist = await xp_svc.calculate_task_xp(
+                [{"sphere": "BACKEND", "weight": 1.0}],
+                story_points=3,
+                deadline_days=7,
+                actual_days=5,
+                streak=3
+            )
+            # Returns: {"BACKEND": 36}
         """
         logger.debug(
             "Starting task XP calculation",
@@ -129,8 +276,20 @@ class XPService(XPBaseService):
         return result
 
     def get_level_from_xp(self, xp: int) -> int:
-        """
-        Calculate the level from the given XP.
+        """Calculate level from total XP using dynamic thresholds.
+
+        Args:
+            xp: Total XP amount
+                Type: int
+
+        Returns:
+            int: Current level (1-10)
+
+        Example:
+            ```python
+            level = xp_service.get_level_from_xp(500)
+            # Returns: 3 (or appropriate level based on thresholds)
+            ```
         """
         logger.debug("Calculating level from XP", xp=xp)
         xp_thresholds = self._get_xp_thresholds()
@@ -144,8 +303,21 @@ class XPService(XPBaseService):
     async def _get_leaderboard(
         self, skills: list[UserSkill], limit: int
     ) -> list[dict[str, Any]]:
-        """
-        Internal method to fetch the leaderboard from a list of skills.
+        """Build leaderboard data from user skills.
+
+        Args:
+            skills: List of UserSkill records
+                Type: list[UserSkill]
+            limit: Maximum number of entries
+                Type: int
+
+        Returns:
+            list[dict[str, Any]]: Leaderboard entries with user data
+
+        Example:
+            ```python
+            leaderboard = await self._get_leaderboard(skills, 10)
+            ```
         """
         if not skills:
             logger.debug("No skills, returning empty leaderboard", limit=limit)
@@ -154,9 +326,7 @@ class XPService(XPBaseService):
         user_ids = [skill.user_id for skill in skills]
 
         logger.debug("Fetching leaderboard users", user_ids=user_ids, limit=limit)
-        users_result = await self._db.scalars(
-            self._user_queries.get_user(id__in=user_ids, is_active=True)
-        )
+        users_result = await self._user_repo.find_many(id_in=user_ids, is_active=True)
         users_map = {user.id: user for user in users_result}
 
         leaderboard = []
@@ -179,38 +349,87 @@ class XPService(XPBaseService):
     async def get_leaderboard(
         self, sphere: str | None, limit: int = 10
     ) -> list[dict[str, Any]]:
-        """
-        Fetch the leaderboard for a given sphere, sorted by XP total.
+        """Get leaderboard for a specific sphere or all spheres.
+
+        Args:
+            sphere: Optional sphere name to filter by
+                Type: str | None
+                Defaults to None (all spheres)
+            limit: Maximum number of entries
+                Type: int
+                Defaults to 10
+
+        Returns:
+            list[dict[str, Any]]: Leaderboard entries sorted by XP
+
+        Raises:
+            None
+
+        Example:
+            ```python
+            leaderboard = await xp_svc.get_leaderboard("BACKEND", 10)
+            ```
         """
         logger.info("Starting leaderboard fetch", sphere=sphere, limit=limit)
-        SEARCH_QUERIES_TOTAL.labels(entity="xp_leaderboard", status="success").inc()
+        METRICS.SEARCH_QUERIES_TOTAL.labels(
+            entity="xp_leaderboard", status="success"
+        ).inc()
         if sphere:
             task_sphere = TaskSphere(sphere)
-            logger.debug(
-                "Querying skills for specific sphere", sphere=sphere, limit=limit
+            result = await self._user_skill_repo.get_user_skill_select(
+                sphere=task_sphere, limit=limit
             )
-            result: ScalarResult[UserSkill] = await self._db.scalars(
-                self._user_skill_queries.get_user_skill(sphere=task_sphere).limit(limit)
-            )
-            skills: list[UserSkill] = list(result)
+            skills = list(result)
             leaderboard = await self._get_leaderboard(skills, limit)
+
             logger.info(
-                "Leaderboard fetched for sphere", sphere=sphere, count=len(leaderboard)
+                "Leaderboard retrieved: sphere={sphere}, count={count}",
+                sphere=sphere,
+                count=len(leaderboard),
             )
+
             return leaderboard
         logger.debug("No sphere, returning empty leaderboard", limit=limit)
         return []
 
     def get_title(self, sphere: TaskSphere, level: int) -> str:
-        """Get the title for a given sphere and level."""
+        """Get dynamic title for a sphere at a given level.
+
+        Args:
+            sphere: The task sphere
+                Type: TaskSphere
+            level: Current level
+                Type: int
+
+        Returns:
+            str: Title string or "Level {level}" if no title defined
+
+        Example:
+            ```python
+            title = xp_service.get_title(TaskSphere.BACKEND, 5)
+            # Returns: "Senior Developer" or similar
+        """
         logger.debug("Getting title for sphere and level", sphere=sphere, level=level)
         sphere_titles = self._get_sphere_titles()
         titles = sphere_titles.get(sphere.value, {})
         return titles.get(level, f"Level {level}")
 
     def get_xp_to_next_level(self, xp: int, level: int) -> int:
-        """
-        Calculate the XP required to reach the next level based on current XP and level.
+        """Get the XP required to reach the next level.
+
+        Args:
+            xp: Current XP amount
+                Type: int
+            level: Current level
+                Type: int
+
+        Returns:
+            int: XP needed for next level (0 if at max level)
+
+        Example:
+            ```python
+            needed = xp_service.get_xp_to_next_level(500, 3)
+            # Returns: 150 (or appropriate threshold difference)
         """
         logger.debug("Calculating XP to next level", xp=xp, level=level)
         xp_thresholds = self._get_xp_thresholds()
@@ -219,9 +438,21 @@ class XPService(XPBaseService):
         return max(0, next_threshold - xp)
 
     def get_progress_percent(self, xp: int, level: int) -> int:
-        """
-        Calculate the progress percent to the next level based \
-            on current XP and level.
+        """Get the progress percentage towards the next level.
+
+        Args:
+            xp: Current XP amount
+                Type: int
+            level: Current level
+                Type: int
+
+        Returns:
+            int: Progress percentage (0-100)
+
+        Example:
+            ```python
+            progress = xp_service.get_progress_percent(500, 3)
+            # Returns: 75 (75% towards next level)
         """
         logger.debug("Calculating progress percent to next level", xp=xp, level=level)
         xp_thresholds = self._get_xp_thresholds()
@@ -231,36 +462,18 @@ class XPService(XPBaseService):
         level_range = next_threshold - current
         return min(100, int((level_xp / level_range * 100) if level_range > 0 else 100))
 
-    async def get_or_create_skill(self, user_id: int, sphere: TaskSphere) -> UserSkill:
-        """Fetch an existing user skill or create a new one if not found."""
-        logger.debug("Fetching or creating user skill", user_id=user_id, sphere=sphere)
-        skill = await self._db.scalar(
-            self._user_skill_queries.get_user_skill(sphere=sphere, user_id=user_id)
-        )
-
-        if not skill:
-            logger.info(
-                "User skill not found, creating new one", user_id=user_id, sphere=sphere
-            )
-            skill = UserSkill(user_id=user_id, sphere=sphere)
-            self._db.add(skill)
-            await self._db.commit()
-            XP_CHANGES_TOTAL.labels(direction="skill_create").inc()
-            await self._db.refresh(skill)
-            logger.info(
-                "New user skill created",
-                user_id=user_id,
-                skill_id=skill.id,
-                sphere=sphere,
-            )
-
-        logger.debug(
-            "User skill retrieved", user_id=user_id, skill_id=skill.id, sphere=sphere
-        )
-        return skill
-
     async def _check_daily_cap(self, skill: UserSkill, xp_to_add: int) -> int:
-        """Check if the daily XP cap has been reached and return the XP to add."""
+        """Check and enforce daily XP cap.
+
+        Args:
+            skill: User skill to check.
+                Type: UserSkill
+            xp_to_add: Amount of XP trying to add.
+                Type: int
+
+        Returns:
+            int: Actual XP that can be added (may be less than requested due to cap).
+        """
         logger.debug(
             "Checking daily XP cap",
             user_id=skill.user_id,
@@ -290,9 +503,11 @@ class XPService(XPBaseService):
         return xp_to_add
 
     def _reset_daily_xp(self, skill: UserSkill) -> None:
-        """
-        Reset the daily XP counter if the current date differs \
-            from the last XP date.
+        """Reset daily XP counter if new day.
+
+        Args:
+            skill: User skill to reset.
+                Type: UserSkill
         """
         logger.debug(
             "Resetting daily XP counter if new day",
@@ -307,7 +522,14 @@ class XPService(XPBaseService):
             skill.xp_today = 0
 
     def _update_xp(self, skill: UserSkill, xp: int) -> None:
-        """Update the XP total with daily cap and record the last XP date."""
+        """Update XP total with daily cap.
+
+        Args:
+            skill: User skill to update.
+                Type: UserSkill
+            xp: XP amount to add.
+                Type: int
+        """
         logger.debug(
             "Updating XP total with daily cap",
             user_id=skill.user_id,
@@ -320,7 +542,12 @@ class XPService(XPBaseService):
         skill.last_xp_date = datetime.now(UTC)
 
     def _update_level(self, skill: UserSkill) -> None:
-        """Recalculate the level from the current XP total and update the skill."""
+        """Recalculate level from current XP.
+
+        Args:
+            skill: User skill to update.
+                Type: UserSkill
+        """
         logger.debug(
             "Recalculating level from current XP",
             user_id=skill.user_id,
@@ -338,7 +565,12 @@ class XPService(XPBaseService):
         skill.level = new_level
 
     def _update_streak(self, skill: UserSkill) -> None:
-        """Update the daily streak counter for a skill."""
+        """Update daily streak counter.
+
+        Args:
+            skill: User skill to update.
+                Type: UserSkill
+        """
         logger.debug(
             "Updating daily streak counter",
             user_id=skill.user_id,
@@ -369,69 +601,94 @@ class XPService(XPBaseService):
     async def add_sphere_xp(
         self, user_id: int, sphere: TaskSphere, xp: int
     ) -> tuple[bool, int]:
-        """Add XP to a user's sphere and return the result along with the new level."""
+        """Add XP to user sphere and handle leveling/streaks.
+
+        Applies XP to the user's skill in the specified sphere,
+        handling streak updates, level recalculations, and daily caps.
+
+        Args:
+            user_id: ID of the user
+                Type: int
+            sphere: The sphere to add XP to
+                Type: TaskSphere
+            xp: Amount of XP to add
+                Type: int
+
+        Returns:
+            tuple[bool, int]: Tuple of (leveled_up boolean, new_level int)
+        """
         logger.info("Adding XP to user sphere", user_id=user_id, sphere=sphere, xp=xp)
+
         skill = await self.get_or_create_skill(user_id, sphere)
 
         if skill.is_frozen:
-            logger.info(
-                "User skill is frozen, skipping XP addition",
-                user_id=user_id,
-                sphere=sphere,
-                xp=xp,
-            )
+            logger.info("User skill is frozen, skipping XP addition", ...)
             return False, skill.level
 
         self._reset_daily_xp(skill)
         xp_allowed = await self._check_daily_cap(skill, xp)
         if xp_allowed == 0:
-            logger.info(
-                "Daily XP cap reached, no XP added",
-                user_id=user_id,
-                sphere=sphere,
-                requested_xp=xp,
-                allowed_xp=0,
-            )
+            logger.info("Daily XP cap reached, no XP added", ...)
+            return False, skill.level
+
+        logger.debug("Committing XP changes to DB", ...)
+
+        _, new_level = await self._xp_transaction.add_sphere_xp(
+            user_id=user_id,
+            sphere=sphere,
+            xp=xp_allowed,
+        )
+
+        self._reset_daily_xp(skill)
+        xp_allowed = await self._check_daily_cap(skill=skill, xp_to_add=xp)
+        if xp_allowed == 0:
+            METRICS.XP_CHANGES_TOTAL.labels(
+                direction="add", status="failure", sphere=sphere
+            ).inc()
             return False, skill.level
 
         self._update_xp(skill, xp_allowed)
         self._update_level(skill)
         self._update_streak(skill)
 
-        logger.debug(
-            "Committing XP changes to DB",
-            user_id=user_id,
-            skill_id=skill.id,
-            sphere=sphere,
-            xp_allowed=xp_allowed,
-        )
-        await self._db.commit()
-        XP_CHANGES_TOTAL.labels(direction="gain").inc()
-
-        leveled_up = skill.level > skill._old_level  # type: ignore[attr-defined]
+        leveled_up = new_level > skill.level
         logger.info(
-            "XP added to user skill",
+            "XP added: user_id={user_id}, sphere={sphere}, \
+                xp={xp}, new_level={level}, leveled_up={leveled_up}",
             user_id=user_id,
-            sphere=sphere,
-            old_level=skill._old_level,  # type: ignore[attr-defined]
-            new_level=skill.level,
-            xp=xp_allowed,
+            sphere=sphere.value,
+            xp=xp,
+            level=new_level,
             leveled_up=leveled_up,
         )
-        return leveled_up, skill.level
+        METRICS.XP_CHANGES_TOTAL.labels(
+            direction="add", status="success", sphere=sphere.value
+        ).inc()
+        return leveled_up, new_level
 
     async def _get_user_skills_raw(self, user_id: int) -> Sequence[UserSkill]:
-        """Fetch raw user skills from the database without any enrichment."""
-        logger.debug("Fetching raw user skills from DB", user_id=user_id)
-        result = await self._db.scalars(
-            self._user_skill_queries.get_user_skill(user_id=user_id)
-        )
-        skills = result.all()
-        logger.debug("Raw user skills fetched", user_id=user_id, count=len(skills))
-        return skills
+        """Fetch raw UserSkill records from DB.
+
+        Args:
+            user_id: ID of the user
+                Type: int
+
+        Returns:
+            Sequence[UserSkill]: User skill records
+        """
+        logger.debug("Raw user skills fetched", user_id=user_id)
+        return await self._user_skill_repo.by_user(user_id=user_id)
 
     def _enrich_skill_with_progress(self, skill: UserSkill) -> UserSkillWithTitle:
-        """Enrich a UserSkill with progress information and title."""
+        """Add title, progress, and XP to next level.
+
+        Args:
+            skill: User skill to enrich
+                Type: UserSkill
+
+        Returns:
+            UserSkillWithTitle: Enriched skill with additional fields
+        """
         logger.debug(
             "Enriching user skill with progress and title",
             user_id=skill.user_id,
@@ -463,8 +720,23 @@ class XPService(XPBaseService):
         return enriched
 
     async def get_user_skills(self, user_id: int) -> list[UserSkillWithTitle]:
-        """Get all skills for a user, enriched with progress information."""
-        SEARCH_QUERIES_TOTAL.labels(entity="user_skills", status="success").inc()
+        """Get all user skills with progress and titles.
+
+        Args:
+            user_id: ID of the user
+                Type: int
+
+        Returns:
+            list[UserSkillWithTitle]: User skills with enriched data
+
+        Example:
+            ```python
+            skills = await xp_svc.get_user_skills(123)
+            ```
+        """
+        METRICS.SEARCH_QUERIES_TOTAL.labels(
+            entity="user_skills", status="success"
+        ).inc()
         logger.info("Starting fetch of user skills", user_id=user_id)
         skills = await self._get_user_skills_raw(user_id)
         enriched = [self._enrich_skill_with_progress(skill) for skill in skills]
@@ -476,8 +748,24 @@ class XPService(XPBaseService):
     async def get_top_skills(
         self, user_id: int, limit: int = 3
     ) -> list[UserSkillWithTitle]:
-        """Get the top skills for a user based on their XP total."""
-        SEARCH_QUERIES_TOTAL.labels(entity="top_skills", status="success").inc()
+        """Get top N skills for a user by XP.
+
+        Args:
+            user_id: ID of the user
+                Type: int
+            limit: Maximum number of skills to return
+                Type: int
+                Defaults to 3
+
+        Returns:
+            list[UserSkillWithTitle]: Top skills sorted by XP
+
+        Example:
+            ```python
+            top_skills = await xp_svc.get_top_skills(123, 5)
+            ```
+        """
+        METRICS.SEARCH_QUERIES_TOTAL.labels(entity="top_skills", status="success").inc()
         logger.info("Fetching top skills for user", user_id=user_id, limit=limit)
         skills = await self.get_user_skills(user_id)
         top_skills = sorted(skills, key=lambda s: s.xp_total, reverse=True)[:limit]
@@ -487,9 +775,35 @@ class XPService(XPBaseService):
         return top_skills
 
 
-def get_xp_service(db: AsyncSession = Depends(db_helper.get_session)) -> XPService:
-    """Dependency function to provide XPService instance."""
-    logger.debug("Dependency get_xp_service creating XPService instance")
+def get_xp_service(
+    db: AsyncSession = Depends(db_helper.get_session),
+    xp_transaction: XPTransaction = Depends(get_xp_transaction),
+) -> XPService:
+    """Create XPService instance with dependency injection.
+
+    Factory function for FastAPI dependency injection that creates and configures
+    an XPService instance with all required dependencies.
+
+    Args:
+        db: Database session from FastAPI dependency injection.
+            Type: AsyncSession.
+
+    Returns:
+        XPService: Configured XP service instance
+
+    Example:
+        ```python
+        @router.post("/users/{user_id}/xp")
+        async def add_xp(
+            user_id: int,
+            sphere: TaskSphere,
+            xp: int,
+            xp_svc: XPService = Depends(get_xp_service)
+        ):
+            return await xp_svc.add_sphere_xp(user_id, sphere, xp)
+        ```
+    """
     return XPService(
         db=db,
+        xp_transaction=xp_transaction,
     )
