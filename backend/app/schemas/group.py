@@ -63,8 +63,8 @@ class UserGroupUpdate(BaseModel):
         None, max_length=255, description="Group description"
     )
     visibility: GroupVisibility | None = Field(None, description="Group visibility")
-    invite_policy: InvitePolicy | None = Field(None, description="Invite policy")
     join_policy: JoinPolicy | None = Field(None, description="Join policy")
+    invite_policy: InvitePolicy | None = Field(None, description="Invite policy")
 
 
 class UserGroupMembership(BaseModel):
