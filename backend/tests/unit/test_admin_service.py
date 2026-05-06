@@ -8,82 +8,102 @@ from app.service.exceptions import user_exc
 
 
 class TestDeleteUser:
-    async def test_delete_self_raises_error(self, mock_db: AsyncMock, mock_indexer):
-        """Test that admin cannot delete themselves."""
-        svc = AdminService(mock_db, mock_indexer)
+    async def test_delete_self_raises_error(
+        self,
+        mock_db: AsyncMock,
+        mock_indexer,
+    ):
+        mock_transaction = MagicMock()
+        mock_transaction.delete_user = AsyncMock()
+
+        svc = AdminService(mock_db, mock_indexer, admin_transaction=mock_transaction)
 
         with pytest.raises(user_exc.UserSelfDeleteError):
             await svc.delete_user(user_id=1, admin_id=1)
 
     async def test_delete_nonexistent_raises_error(
-        self, mock_db: AsyncMock, mock_indexer
+        self,
+        mock_db: AsyncMock,
+        mock_indexer,
     ):
-        """Test that deleting nonexistent user raises error."""
-        mock_db.scalar = AsyncMock(return_value=None)
-        svc = AdminService(mock_db, mock_indexer)
+        mock_transaction = MagicMock()
+        mock_transaction.delete_user = AsyncMock(
+            side_effect=user_exc.UserNotFound(message="")
+        )
+
+        svc = AdminService(mock_db, mock_indexer, admin_transaction=mock_transaction)
 
         with pytest.raises(user_exc.UserNotFound):
             await svc.delete_user(user_id=999, admin_id=1)
 
     async def test_delete_last_admin_raises_error(
-        self, mock_db: AsyncMock, mock_indexer
+        self,
+        mock_db: AsyncMock,
+        mock_indexer,
     ):
-        """Test that cannot delete the last admin."""
-        mock_user = MagicMock()
-        mock_user.role = GlobalUserRole.ADMIN
-
-        mock_db.scalar = AsyncMock(
-            side_effect=[
-                mock_user,  # First call: get_user
-                1,  # Second call: get_count_user
-            ]
+        mock_transaction = MagicMock()
+        mock_transaction.delete_user = AsyncMock(
+            side_effect=user_exc.CannotDeleteLastAdmin(message="")
         )
 
-        svc = AdminService(mock_db, mock_indexer)
+        svc = AdminService(mock_db, mock_indexer, admin_transaction=mock_transaction)
 
         with pytest.raises(user_exc.CannotDeleteLastAdmin):
             await svc.delete_user(user_id=2, admin_id=1)
 
-    async def test_delete_regular_user_success(self, mock_db: AsyncMock, mock_indexer):
-        """Test successful deletion of regular user."""
+    async def test_delete_regular_user_success(
+        self,
+        mock_db: AsyncMock,
+        mock_indexer,
+    ):
         mock_user = MagicMock()
         mock_user.role = GlobalUserRole.USER
+        mock_user.is_active = True
 
-        mock_db.scalar = AsyncMock(return_value=mock_user)
+        mock_transaction = MagicMock()
+        mock_transaction.delete_user = AsyncMock()
 
-        svc = AdminService(mock_db, mock_indexer)
+        svc = AdminService(mock_db, mock_indexer, admin_transaction=mock_transaction)
 
         await svc.delete_user(user_id=2, admin_id=1)
 
-        assert mock_user.is_active is False
-        mock_db.commit.assert_awaited_once()
+        mock_transaction.delete_user.assert_called_once()
 
 
 class TestGetStats:
     async def test_get_stats_returns_dict_structure(
-        self, mock_db: AsyncMock, mock_indexer
+        self,
+        mock_db: AsyncMock,
+        mock_indexer,
     ):
-        """Test that get_stats returns dict with expected keys."""
+        mock_user_result = MagicMock()
+        mock_user_result.mappings.return_value.first.return_value = {
+            "total": 10,
+            "active": 8,
+            "not_active": 2,
+            "admins": 1,
+        }
 
-        async def mock_scalar(query):
-            mock_result = MagicMock()
-            mock_result._mapping = {}
-            return mock_result
+        mock_group_result = MagicMock()
+        mock_group_result.mappings.return_value.first.return_value = {
+            "total": 5,
+            "active": 4,
+            "not_active": 1,
+        }
 
-        async def mock_execute(query):
-            mock_result = MagicMock()
-            mock_result._mapping = {
-                "total": 10,
-                "active": 8,
-                "not_active": 2,
-                "admins": 1,
-            }
-            return mock_result
+        mock_task_result = MagicMock()
+        mock_task_result.mappings.return_value.first.return_value = {
+            "total": 20,
+            "active": 15,
+            "not_active": 5,
+        }
 
-        mock_db.scalar = AsyncMock(side_effect=mock_scalar)
-        mock_db.execute = AsyncMock(side_effect=mock_execute)
+        mock_db.execute = AsyncMock(
+            side_effect=[mock_user_result, mock_group_result, mock_task_result]
+        )
 
-        svc = AdminService(mock_db, mock_indexer)
+        mock_transaction = MagicMock()
+        svc = AdminService(mock_db, mock_indexer, admin_transaction=mock_transaction)
 
         result = await svc.get_stats()
 
@@ -91,3 +111,9 @@ class TestGetStats:
         assert "users" in result
         assert "groups" in result
         assert "tasks" in result
+
+        user_stats = result["users"]
+        assert user_stats["total"] == 10
+        assert user_stats["active"] == 8
+        assert user_stats["not_active"] == 2
+        assert user_stats["admins"] == 1
