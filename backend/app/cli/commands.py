@@ -5,8 +5,8 @@ from typing import TYPE_CHECKING
 from app.cli.manage import app
 from app.core.log import get_logger
 from app.db import Base, db_helper
+from app.documents import CommentDoc, NotificationDoc, TaskDoc, UserDoc, UserGroupDoc
 from app.es import get_es_indexer
-from app.indexes import CommentDoc, NotificationDoc, TaskDoc, UserDoc, UserGroupDoc
 from app.models import Comment, Notification, Task, User, UserGroup
 
 from .reindex import ReindexService

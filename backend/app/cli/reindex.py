@@ -35,7 +35,6 @@ class ReindexService:
         """Reindex all instances of a model to Elasticsearch."""
         logger.info(f"Starting reindex of {model_class.__name__}")
 
-        # Step 1: count
         total_count = await self._count_records(model_class)
 
         logger.info(f"Total {model_class.__name__} records: {total_count}")
@@ -43,23 +42,19 @@ class ReindexService:
             logger.info(f"No {model_class.__name__} records to index")
             return
 
-        # Process in batches
         offset = 0
         processed = 0
 
         while offset < total_count:
-            # Step 2: fetch batch
             instances = await self._fetch_batch(model_class, offset, batch_size)
             if not instances:
                 break
 
-            # Step 3: create documents
             docs = self._create_docs(model_class, doc_class, instances)
             if not docs:
                 offset += batch_size
                 continue
 
-            # Step 4: index batch
             indexed_count = await self._index_batch(
                 model_class, doc_class, docs, instances, offset, batch_size
             )
@@ -106,9 +101,8 @@ class ReindexService:
                 .limit(batch_size)
             )
         else:
-            # явно кастим тип stmt, чтобы mypy не видел выражение как tuple[Base]
             stmt = cast(
-                Any,  # mypy: здесь тип Select[tuple[Base]] уже не мешаем
+                Any,
                 select(model_class).offset(offset).limit(batch_size),
             )
 
