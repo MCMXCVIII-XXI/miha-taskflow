@@ -73,7 +73,6 @@ class KeyBuilder:
     LIFETIME = "temp"
     PREFIX = "taskflow"
     VERSION = "v1"
-    # Valid values for each position
     LAYERS = ("api", "service", "es", "db")
     AREAS = ("search", "rbac", "auth", "xp", "notification", "rating")
     ENTITIES = (
@@ -112,13 +111,10 @@ class KeyBuilder:
         for key, value in sorted(params.items()):
             key = key.lower()
             value = str(value).lower()
-            # Replace separators
             value = value.replace("=", "_").replace("&", "|")
-            # URL encode special characters
             value = quote(value, safe="")
             normalized[key] = value
         param_str = "|".join(f"{k}_{v}" for k, v in normalized.items())
-        # Hash if too long
         if len(param_str) > 50:
             hash_val = hashlib.sha256(param_str.encode()).hexdigest()[:16]
             return f"hash_{hash_val}"
@@ -175,7 +171,6 @@ class KeyBuilder:
         ) -> str:
             call_args = kwargs.get("args", ())
             call_kwargs = kwargs.get("kwargs", {})
-            # Extract ID value
             value = call_kwargs.get(id_field)
             if value is None and call_args:
                 value = call_args[0]
@@ -183,7 +178,6 @@ class KeyBuilder:
                 value = request.path_params.get(id_field)
             if not value:
                 raise cache_exc.CacheNotFoundError(f"{id_field} not found")
-            # Determine layer and area from function
             env = self._infer_env(request)
             layer = self._infer_layer(func.__module__)
             area = self._infer_area(func.__module__)
@@ -207,10 +201,8 @@ class KeyBuilder:
         """Search query-based key builder"""
         if not request:
             raise cache_exc.CacheNotFoundError("request not found")
-        # Extract search parameters
         allowed_params = ("q", "sort", "page", "size", "status", "group_id")
         params = {k: v for k, v in request.query_params.items() if k in allowed_params}
-        # Determine layer and area
         env = self._infer_env(request)
         layer = self._infer_layer(func.__module__)
         area = "search"
@@ -279,9 +271,7 @@ class KeyBuilder:
             return "task"
 
 
-# Pre-configured instances
 kb = KeyBuilder()
-# Ready-to-use key builders
 rbac_key = kb.id_key_builder("user_id")
 item_key = kb.id_key_builder("item_id")
 search_key = kb.search_key_builder

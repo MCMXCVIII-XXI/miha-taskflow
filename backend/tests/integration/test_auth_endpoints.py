@@ -13,7 +13,7 @@ class TestRegister:
                 "last_name": "User",
             },
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         assert "access_token" in resp.json()
         assert "refresh_token" in resp.json()
 

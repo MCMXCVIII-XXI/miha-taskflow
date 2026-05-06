@@ -1,3 +1,36 @@
+"""Authentication and authorization service for user management.
+
+This module provides the AuthenticationService class for handling user
+registration, login, token refresh, and session management.
+
+**Key Components:**
+* `AuthenticationService`: Main service class for authentication operations;
+* `get_authentication_service`: FastAPI dependency injection factory.
+
+**Dependencies:**
+* `UserRepository`: User data access layer;
+* `UnitOfWork`: Transaction management;
+* `ElasticsearchIndexer`: Search index management;
+* JWT utilities: Token creation and validation.
+
+**Usage Example:**
+    ```python
+    from app.service.auth import get_authentication_service
+
+    @router.post("/auth/register")
+    async def register(
+        auth_svc: AuthenticationService = Depends(get_authentication_service),
+        user_data: UserCreate
+    ):
+        return await auth_svc.register(user_data)
+    ```
+
+**Notes:**
+- All operations require active user status unless explicitly stated;
+- Tokens are JWT-based with configurable expiration;
+- Refresh tokens support rotation for security.
+"""
+
 from datetime import datetime
 
 import jwt
@@ -8,50 +41,53 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.exceptions import security_exc
 from app.core.log import logging
 from app.core.log.mask import _mask_email
+from app.core.metrics import METRICS
 from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
-    get_password_hash,
     verify_password,
 )
 from app.db import db_helper
 from app.es import ElasticsearchIndexer, get_es_indexer
 from app.models import User as UserModel
 from app.schemas import RefreshTokenRequest, TokenResponse, UserCreate
-from app.schemas.enum import OutboxEventType, TokenType
+from app.schemas.enum import TokenType
 
 from .base import BaseService
 from .exceptions import user_exc
-from .outbox import OutboxService
+from .transactions.auth import AuthTransaction, get_auth_transaction
 from .utils import Indexer
 
 logger = logging.get_logger(__name__)
 
 
 class AuthenticationService(BaseService):
-    """Authentication service implementing JWT-based authentication flow.
+    """Service for user authentication and authorization operations.
 
-    This service handles user registration, authentication, and token management
-    using JSON Web Tokens (JWT). It supports both access and refresh tokens
-    with automatic rotation and validation.
-
-    Features:
-    - User registration with password hashing
-    - Username/email authentication
-    - Access and refresh token generation
-    - Token validation with expiration checks
-    - Token refresh and rotation mechanisms
+    Handles user registration, login, token generation, and token refresh
+    operations. Provides JWT-based authentication with support for both
+    access and refresh tokens.
 
     Attributes:
-        _db (AsyncSession): SQLAlchemy async database session
+        _db (AsyncSession): SQLAlchemy async session for database operations
+        _user_repository (UserRepository): Repository for user data operations
+        _uow (UnitOfWork): Unit of work for transaction management
+        _indexer (Indexer): Elasticsearch indexer wrapper for search operations
+        REFRESH_TOKEN_TYPE (str): Token type identifier for refresh tokens
+        ACCESS_TOKEN_TYPE (str): Token type identifier for access tokens
+        BOTH_TOKEN_TYPE (str): Token type identifier for both token types
 
-    Raises:
-        user_exc.UserAlreadyExists: When trying to register with existing email/username
-        user_exc.UserNotFound: When user credentials are invalid
-        security_exc.SecurityCouldNotVerify: When authentication fails
-        security_exc.SecurityExpired: When token has expired
-        security_exc.SecurityRefreshTokenError: When refresh token is invalid
+    Example:
+        ```python
+        auth_service = AuthenticationService(
+            db=session,
+            uow=uow,
+            indexer=indexer,
+            user_repository=user_repo
+        )
+        tokens = await auth_service.login(OAuth2PasswordRequestForm(...))
+        ```
     """
 
     REFRESH_TOKEN_TYPE = TokenType.REFRESH.value
@@ -62,31 +98,49 @@ class AuthenticationService(BaseService):
         self,
         db: AsyncSession,
         indexer: ElasticsearchIndexer,
+        auth_transaction: AuthTransaction,
     ) -> None:
-        super().__init__(db)
+        """Initialize authentication service with dependencies.
+
+        Args:
+            db: SQLAlchemy async session for database operations
+            uow: Unit of work for transaction management
+            indexer: Elasticsearch client for indexing operations
+            user_repository: Repository for user database operations
+        """
+        super().__init__(db=db)
         self._indexer = Indexer(indexer)
+        self._auth_transaction = auth_transaction
 
     def _create_token_response(
         self,
         user: UserModel,
         options: str = BOTH_TOKEN_TYPE,
     ) -> TokenResponse:
-        """
-        Create TokenResponse with access/refresh tokens.
+        """Create TokenResponse with access/refresh tokens.
 
-        Details:
-            Builds JWT payload from user data (id, username, email, role).
-            Supports access/refresh/both token generation.
+        Builds JWT payload from user data (id, username, email, role) and
+        generates appropriate token(s) based on the options parameter.
 
-        Arguments:
-            user (UserModel): Authenticated user
-            options (TokenType): Token type
+        Args:
+            user: Authenticated user instance
+                Type: UserModel
+            options: Token type to generate.
+                Type: str
+                Values: "access", "refresh", "both"
+                Defaults to "both".
 
         Returns:
-            TokenResponse: Token(s) response
+            TokenResponse: Token(s) response containing access and/or refresh tokens
 
-        Example Usage:
-            tokens = self._create_token_response(user, TokenType.BOTH)
+        Raises:
+            security_exc.SecurityInvalidTokenType: When invalid token type specified
+
+        Example:
+            ```python
+            tokens = self._create_token_response(user, options="both")
+            # Returns: TokenResponse(access_token="...", refresh_token="...")
+            ```
         """
         data: dict[str, str | datetime] = {
             "sub": str(user.id),
@@ -113,64 +167,42 @@ class AuthenticationService(BaseService):
         self,
         user_in: UserCreate,
     ) -> TokenResponse:
-        """
-        Register new user with immediate token issuance.
+        """Register new user with immediate token issuance.
 
-        Details:
-            Email/username conflict check + password hashing.
-            Creates user + returns both access/refresh tokens.
+        Validates email and username are unique, hashes password, creates
+        new user record, indexes in Elasticsearch, and returns both
+        access and refresh tokens.
 
-        Arguments:
-            user_in (UserCreate): Registration data
+        Args:
+            user_in: User registration data
+                Type: UserCreate
+                Contains: username, email, password, first_name, last_name, patronymic
 
         Returns:
-            TokenResponse: Access + refresh tokens
+            TokenResponse: Access and refresh tokens for immediate authentication
 
         Raises:
-            user_exc.UserAlreadyExists: Email/username collision
+            user_exc.UserAlreadyExists: When email or username already in use
 
-        Example Usage:
-            tokens = await auth_svc.register(UserCreate(username="john", ...))
+        Example:
+            ```python
+            tokens = await auth_svc.register(
+                UserCreate(
+                    username="john",
+                    email="john@example.com",
+                    password="secure123",
+                    first_name="John",
+                    last_name="Doe"
+                )
+            )
+            ```
         """
-        result = await self._db.scalars(
-            self._user_queries.get_by_email_or_username(
-                email=user_in.email, username=user_in.username, is_active=None
-            )
-        )
-        user = result.first()
-        if user:
-            logger.warning(
-                "Registration failed: duplicate email {email} or username {username}",
-                email=_mask_email(user_in.email),
-                username=user_in.username,
-            )
-            raise user_exc.UserAlreadyExists(
-                message="User with this email or username already exists"
-            )
-        user = UserModel(
-            username=user_in.username,
-            email=user_in.email,
-            first_name=user_in.first_name,
-            last_name=user_in.last_name,
-            patronymic=user_in.patronymic,
-            hashed_password=get_password_hash(
-                user_in.hashed_password.get_secret_value()
-            ),
-        )
-
-        self._db.add(user)
-        await self._db.flush()
-
-        outbox_service = OutboxService(self._db)
-        await outbox_service.publish(
-            event_type=OutboxEventType.CREATED,
-            entity_type="user",
-            entity_id=user.id,
-        )
-
-        await self._db.commit()
-        await self._db.refresh(user)
+        user = await self._auth_transaction.register(user_in=user_in)
         await self._indexer.index(user)
+
+        METRICS.USER_ACTIONS_TOTAL.labels(
+            action="auth_register", role="guest", status="success"
+        ).inc()
 
         logger.info(
             "User registered: user_id={user_id}, username={username}, email={email}",
@@ -185,40 +217,48 @@ class AuthenticationService(BaseService):
         self,
         form_data: OAuth2PasswordRequestForm,
     ) -> TokenResponse:
-        """
-        Authenticate user by email/username + password.
+        """Authenticate user by email/username and password.
 
-        Details:
-            Dual-field lookup (email OR username) + password verification.
-            Returns both access/refresh tokens on success.
+        Performs dual-field lookup (email OR username) with password verification.
+        Returns both access and refresh tokens on successful authentication.
 
-        Arguments:
-            form_data (OAuth2PasswordRequestForm): Login credentials
+        Args:
+            form_data: Login credentials containing username and password
+                Type: OAuth2PasswordRequestForm
+                Fields: username (email or username), password
 
         Returns:
-            TokenResponse: Access + refresh tokens
+            TokenResponse: Access and refresh tokens for authenticated session
 
         Raises:
-            user_exc.UserNotFound: User inactive/not found
-            security_exc.SecurityCouldNotVerify: Invalid password
+            user_exc.UserNotFound: When user not found or inactive
+            security_exc.SecurityCouldNotVerify: When password is invalid
 
-        Example Usage:
-            tokens = await auth_svc.login(OAuth2PasswordRequestForm(...))
-        """
-
-        result = await self._db.scalars(
-            self._user_queries.get_by_email_or_username(
-                username=form_data.username, email=form_data.username, is_active=True
+        Example:
+            ```python
+            tokens = await auth_svc.login(
+                OAuth2PasswordRequestForm(username="john", password="secure123")
             )
+            ```
+        """
+        user = await self._user_repo.get_by_email_or_username(
+            username=form_data.username,
+            email=form_data.username,
+            is_active=True,
         )
-        user = result.first()
         if not user:
+            METRICS.USER_ACTIONS_TOTAL.labels(
+                action="auth_login_fail", role="guest", status="failure"
+            )
             logger.warning(
                 "Login failed: user not found or inactive: {username}",
                 username=form_data.username,
             )
             raise user_exc.UserNotFound(message="User not found or inactive")
         if not verify_password(form_data.password, user.hashed_password):
+            METRICS.USER_ACTIONS_TOTAL.labels(
+                action="auth_login_fail", role="guest", status="failure"
+            ).inc()
             logger.warning(
                 "Login failed: invalid password for user {user_id} ({username})",
                 user_id=user.id,
@@ -227,7 +267,9 @@ class AuthenticationService(BaseService):
             raise security_exc.SecurityCouldNotVerify(
                 message="Could not verify credentials"
             )
-
+        METRICS.USER_ACTIONS_TOTAL.labels(
+            action="auth_login_success", role="user", status="success"
+        ).inc()
         logger.info(
             "User logged in: user_id={user_id}, username={username}",
             user_id=user.id,
@@ -237,25 +279,26 @@ class AuthenticationService(BaseService):
         return self._create_token_response(user)
 
     async def _get_user_from_refresh_token(self, refresh_token: str) -> UserModel:
-        """
-        Validate refresh token + return bound active user.
+        """Validate refresh token and return bound active user.
 
-        Details:
-            4-step validation: JWT decode → payload check → DB lookup → email match.
-            Ensures token-user consistency + activity.
+        Performs 4-step validation: JWT decode → payload check → database lookup
+        → email match. Ensures token-user consistency and user activity.
 
-        Arguments:
-            refresh_token (str): Client refresh token
+        Args:
+            refresh_token: Client refresh token to validate
+                Type: str
 
         Returns:
-            UserModel: Validated active user
+            UserModel: Validated active user instance
 
         Raises:
-            security_exc.SecurityExpired: Token expired
-            security_exc.SecurityRefreshTokenError: Invalid payload/DB mismatch
+            security_exc.SecurityExpired: When token has expired
+            security_exc.SecurityRefreshTokenError: When token validation fails
 
-        Example Usage:
+        Example:
+            ```python
             user = await self._get_user_from_refresh_token(token)
+            ```
         """
         try:
             payload = decode_token(refresh_token)
@@ -270,13 +313,11 @@ class AuthenticationService(BaseService):
         email = payload.get("email")
         token_type = payload.get("token_type")
 
-        # Bandit S105: JWT standard token_type validation
         if user_id_str is None or token_type != self.REFRESH_TOKEN_TYPE:
             raise security_exc.SecurityRefreshTokenError(
                 message="Could not validate refresh token"
             )
 
-        # Convert user_id to integer for database query
         if not isinstance(user_id_str, (str, int)):
             raise security_exc.SecurityRefreshTokenError(
                 message="Invalid user_id type in token"
@@ -289,10 +330,10 @@ class AuthenticationService(BaseService):
                 message="Could not validate refresh token"
             ) from e
 
-        result = await self._db.scalars(
-            self._user_queries.get_user(id=user_id, is_active=True)
+        user = await self._user_repo.get(
+            id=user_id,
+            is_active=True,
         )
-        user = result.first()
 
         if user is None or user.email != email:
             raise security_exc.SecurityRefreshTokenError(
@@ -302,75 +343,105 @@ class AuthenticationService(BaseService):
         return user
 
     async def access_token(self, body: RefreshTokenRequest) -> TokenResponse:
-        """
-        Issue new access token from valid refresh token.
+        """Issue new access token from valid refresh token.
 
-        Details:
-            Refresh → access token rotation (refresh stays valid).
+        Validates refresh token and issues a new access token while keeping
+        the refresh token valid (non-rotating refresh).
 
-        Arguments:
-            body (RefreshTokenRequest): Refresh token payload
+        Args:
+            body: Refresh token request containing the refresh token
+                Type: RefreshTokenRequest
+                Fields: refresh_token
 
         Returns:
             TokenResponse: New access token
 
         Raises:
-            security_exc.SecurityRefreshTokenError: Invalid/expired refresh
+            security_exc.SecurityRefreshTokenError: /
+                When refresh token is invalid or expired
 
-        Example Usage:
-            new_access = await auth_svc.access_token({"refresh_token": token})
+        Example:
+            ```python
+            tokens = await auth_svc.access_token(
+                RefreshTokenRequest(refresh_token="eyJ...")
+            )
+            ```
         """
         user = await self._get_user_from_refresh_token(body.refresh_token)
+        METRICS.USER_ACTIONS_TOTAL.labels(
+            action="auth_refresh_access", role="user", status="success"
+        ).inc()
         return self._create_token_response(user, options=self.ACCESS_TOKEN_TYPE)
 
     async def refresh_token(
         self,
         body: RefreshTokenRequest,
     ) -> TokenResponse:
-        """
-        Rotate refresh token (security best practice).
+        """Rotate refresh token (security best practice).
 
-        Details:
-            Refresh → new refresh token (old becomes invalid).
+        Validates old refresh token and issues a new refresh token while
+        invalidating the old one. This is the recommended security practice
+        to limit token lifetime and prevent token reuse attacks.
 
-        Arguments:
-            body (RefreshTokenRequest): Old refresh token
+        Args:
+            body: Old refresh token to rotate
+                Type: RefreshTokenRequest
+                Fields: refresh_token
 
         Returns:
             TokenResponse: New refresh token
 
         Raises:
-            security_exc.SecurityRefreshTokenError: Invalid/expired refresh
+            security_exc.SecurityRefreshTokenError:
+                When refresh token is invalid or expired
 
-        Example Usage:
-            new_refresh = await auth_svc.refresh_token({"refresh_token": token})
+        Example:
+            ```python
+            tokens = await auth_svc.refresh_token(
+                RefreshTokenRequest(refresh_token="eyJ...")
+            )
+            ```
         """
         user = await self._get_user_from_refresh_token(body.refresh_token)
+        METRICS.USER_ACTIONS_TOTAL.labels(
+            action="auth_refresh_access", role="user", status="success"
+        ).inc()
         return self._create_token_response(user, options=self.REFRESH_TOKEN_TYPE)
 
 
 def get_authentication_service(
     db: AsyncSession = Depends(db_helper.get_session),
     indexer: ElasticsearchIndexer = Depends(get_es_indexer),
+    auth_transaction: AuthTransaction = Depends(get_auth_transaction),
 ) -> AuthenticationService:
-    """
-    FastAPI dependency factory for AuthenticationService.
+    """Create AuthenticationService instance with dependency injection.
 
-    Details:
-        Creates AuthenticationService with DB session.
-        Used in auth routes (register/login/refresh).
+    Factory function for FastAPI dependency injection that creates and configures
+    an AuthenticationService instance with all required dependencies.
 
-    Arguments:
-        db (AsyncSession): Database session
+    Args:
+        db: Database session from FastAPI dependency injection.
+            Type: AsyncSession.
+        uow: Unit of work from FastAPI dependency injection.
+            Type: UnitOfWork.
+        indexer: Elasticsearch client from FastAPI dependency injection.
+            Type: ElasticsearchIndexer.
+        user_repository: User repository from FastAPI dependency injection.
+            Type: UserRepository.
 
     Returns:
-        AuthenticationService: Fresh auth service instance
+        AuthenticationService: Configured authentication service instance
 
-    Example Usage:
-        @router.post("/register")
+    Example:
+        ```python
+        @router.post("/auth/register")
         async def register(
-            auth_svc: AuthenticationService = Depends(get_authentication_service)
+            auth_svc: AuthenticationService = Depends(get_authentication_service),
+            user_data: UserCreate
         ):
-            return await auth_svc.register(user_in)
+            return await auth_svc.register(user_data)
+        ```
     """
-    return AuthenticationService(db=db, indexer=indexer)
+    return AuthenticationService(
+        db=db, indexer=indexer, auth_transaction=auth_transaction
+    )

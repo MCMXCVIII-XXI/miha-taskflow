@@ -1,5 +1,6 @@
 from app.models import Permission, Role
 
+# ROLES
 ROLES = [
     Role(name="USER", description="Basic user"),
     Role(name="MEMBER", description="Group member"),
@@ -8,6 +9,7 @@ ROLES = [
     Role(name="ADMIN", description="Application administrator"),
 ]
 
+# USER
 PERM_USER = [
     Permission.create(
         resource="user", action="view", context="any", description="View any users"

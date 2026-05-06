@@ -26,6 +26,7 @@ from app.cache import init_cache
 from app.core.exceptions.rbac_exc import BaseRBACError
 from app.core.exceptions.security_exc import BaseSecurityError
 from app.core.log import get_logger, setup_logging
+from app.core.metrics import METRICS
 from app.core.middleware import http_logging_middleware
 from app.core.permission import init_rbac
 from app.core.sse import sse_manager
@@ -171,6 +172,9 @@ app.include_router(api_router)
 @app.exception_handler(BaseRatingError)
 def rating_exception_handler(request: Request, exc: BaseRatingError) -> JSONResponse:
     """Handle rating-related exceptions with appropriate logging and response."""
+    METRICS.SOCIAL_ACTIONS_TOTAL.labels(
+        type="rating", action="operation", status="error"
+    ).inc()
     logger.error(
         "Rating error: {message} | {method} {url}",
         message=exc.message,
@@ -186,6 +190,9 @@ def rating_exception_handler(request: Request, exc: BaseRatingError) -> JSONResp
 @app.exception_handler(BaseCommentError)
 def comment_exception_handler(request: Request, exc: BaseCommentError) -> JSONResponse:
     """Handle comment-related exceptions with appropriate logging and response."""
+    METRICS.SOCIAL_ACTIONS_TOTAL.labels(
+        type="comment", action="operation", status="error"
+    ).inc()
     logger.error(
         "Comment error: {message} | {method} {url}",
         message=exc.message,
@@ -201,6 +208,7 @@ def comment_exception_handler(request: Request, exc: BaseCommentError) -> JSONRe
 @app.exception_handler(BaseSearchError)
 def search_exception_handler(request: Request, exc: BaseSearchError) -> JSONResponse:
     """Handle search-related exceptions with appropriate logging and response."""
+    METRICS.SEARCH_QUERIES_TOTAL.labels(entity="search", status="error").inc()
     logger.error(
         "Search error: {message} | {method} {url}",
         message=exc.message,
@@ -216,6 +224,9 @@ def search_exception_handler(request: Request, exc: BaseSearchError) -> JSONResp
 @app.exception_handler(BaseRBACError)
 def rbac_exception_handler(request: Request, exc: BaseRBACError) -> JSONResponse:
     """Handle Role-Based Access Control exceptions with warning level logging."""
+    METRICS.USER_ACTIONS_TOTAL.labels(
+        action="rbac_check", role="unknown", status="error"
+    ).inc()
     logger.warning(
         "RBAC error: {message} | {method} {url}",
         message=exc.message,
@@ -233,6 +244,9 @@ def security_exception_handler(
     request: Request, exc: BaseSecurityError
 ) -> JSONResponse:
     """Handle security-related exceptions with warning level logging."""
+    METRICS.USER_ACTIONS_TOTAL.labels(
+        action="security_check", role="unknown", status="error"
+    ).inc()
     logger.warning(
         "Security error: {message} | {method} {url}",
         message=exc.message,
@@ -248,6 +262,7 @@ def security_exception_handler(
 @app.exception_handler(BaseGroupError)
 def group_exception_handler(request: Request, exc: BaseGroupError) -> JSONResponse:
     """Handle group-related exceptions with error level logging."""
+    METRICS.GROUP_ACTIONS_TOTAL.labels(action="group_operation", status="error").inc()
     logger.error(
         "Group error: {message} | {method} {url}",
         message=exc.message,
@@ -265,6 +280,9 @@ def group_membership_exception_handler(
     request: Request, exc: BaseGroupMembershipError
 ) -> JSONResponse:
     """Handle group membership exceptions with warning level logging."""
+    METRICS.GROUP_ACTIONS_TOTAL.labels(
+        action="membership_operation", status="error"
+    ).inc()
     logger.warning(
         "Group membership error: {message} | {method} {url}",
         message=exc.message,
@@ -280,6 +298,9 @@ def group_membership_exception_handler(
 @app.exception_handler(BaseTaskError)
 def task_exception_handler(request: Request, exc: BaseTaskError) -> JSONResponse:
     """Handle task-related exceptions with error level logging."""
+    METRICS.TASKS_TOTAL.labels(
+        action="task_operation", status="error", sphere="general"
+    ).inc()
     logger.error(
         "Task error: {message} | {method} {url}",
         message=exc.message,
@@ -295,6 +316,9 @@ def task_exception_handler(request: Request, exc: BaseTaskError) -> JSONResponse
 @app.exception_handler(BaseUserError)
 def user_exception_handler(request: Request, exc: BaseUserError) -> JSONResponse:
     """Handle user-related exceptions with error level logging."""
+    METRICS.USER_ACTIONS_TOTAL.labels(
+        action="user_operation", role="user", status="error"
+    ).inc()
     logger.error(
         "User error: {message} | {method} {url}",
         message=exc.message,
@@ -312,6 +336,9 @@ def notification_exception_handler(
     request: Request, exc: BaseNotificationError
 ) -> JSONResponse:
     """Handle notification-related exceptions with error level logging."""
+    METRICS.NOTIFICATION_SENT_TOTAL.labels(
+        type="notification_failure", status="error"
+    ).inc()
     logger.error(
         "Notification error: {message} | {method} {url}",
         message=exc.message,

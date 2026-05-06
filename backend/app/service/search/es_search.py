@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import Depends
 
 from app.core.log import logging
-from app.core.metrics import SEARCH_LATENCY_SECONDS, SEARCH_QUERIES_TOTAL
+from app.core.metrics import METRICS
 from app.es import ElasticsearchSearch, get_es_search
 from app.models import User as UserModel
 
@@ -43,16 +43,18 @@ class ESSearchService:
         Raises:
             Exception: If the search operation fails
         """
-        SEARCH_QUERIES_TOTAL.labels(entity=entity).inc()
+        METRICS.SEARCH_QUERIES_TOTAL.labels(entity=entity, status="success").inc()
         try:
-            with SEARCH_LATENCY_SECONDS.labels(entity=entity).time():
-                result = await search_call()  # ← ТВОЙ ES вызов!
-            SEARCH_QUERIES_TOTAL.labels(entity=entity, status="success").inc()
+            with METRICS.SEARCH_LATENCY_SECONDS.labels(
+                entity=entity, status="success"
+            ).time():
+                result = await search_call()
+            METRICS.SEARCH_QUERIES_TOTAL.labels(entity=entity, status="success").inc()
             logger.info("_instrumented_search success: %s", entity)
             return result
         except Exception:
             logger.error("_instrumented_search failed: %s", entity)
-            SEARCH_QUERIES_TOTAL.labels(entity=entity, status="error").inc()
+            METRICS.SEARCH_QUERIES_TOTAL.labels(entity=entity, status="error").inc()
             raise
 
     async def search_tasks(

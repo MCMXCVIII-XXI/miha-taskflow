@@ -1,0 +1,15 @@
+variable "name" { type = string }
+variable "hostname" { type = string }
+variable "platform_id" { type = string }
+variable "zone" { type = string }
+variable "cores" { type = number }
+variable "memory" { type = number }
+variable "core_fraction" { type = number }
+variable "image_id" { type = string }
+variable "disk_size" { type = number }
+variable "disk_type" { type = string }
+variable "subnet_id" { type = string }
+variable "nat" { type = bool }
+variable "security_group_ids" { type = list(string) }
+variable "ssh_public_key" { type = string }
+variable "user_data" { type = string }

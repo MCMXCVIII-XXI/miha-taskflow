@@ -2,10 +2,9 @@
 
 import logging
 import uuid
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import jwt
-from fastapi import Depends
 from fastapi_cache import FastAPICache
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select, text
@@ -89,21 +88,12 @@ async def create_test_client(session_factory) -> AsyncClient:
     app.dependency_overrides[db_helper.get_session] = override_session_factory(
         session_factory
     )
+    db_helper.session_factory = session_factory
 
     from app.es import ElasticsearchIndexer, es_helper, get_es_search
-    from app.service.notification import (
-        NotificationService,
-        get_notification_service,
-    )
-
-    def override_get_notification_service(
-        db: AsyncSession = Depends(db_helper.get_session),
-        indexer: ElasticsearchIndexer = Depends(get_es_indexer),
-    ) -> NotificationService:
-        return NotificationService(db, indexer)
 
     def override_get_es_indexer() -> ElasticsearchIndexer:
-        from unittest.mock import AsyncMock, MagicMock
+        from unittest.mock import AsyncMock
 
         mock_indexer = MagicMock()
         mock_indexer.index_task = AsyncMock()
@@ -119,7 +109,7 @@ async def create_test_client(session_factory) -> AsyncClient:
         return mock_indexer
 
     def override_es_helper_get_client():
-        from unittest.mock import AsyncMock, MagicMock
+        from unittest.mock import AsyncMock
 
         mock_client = MagicMock()
         mock_client.ping = AsyncMock(return_value=True)
@@ -132,7 +122,7 @@ async def create_test_client(session_factory) -> AsyncClient:
         return mock_client
 
     def override_get_es_search():
-        from unittest.mock import AsyncMock, MagicMock
+        from unittest.mock import AsyncMock
 
         mock_search = MagicMock()
         mock_search.search_tasks = AsyncMock(return_value=[])
@@ -227,9 +217,6 @@ async def create_test_client(session_factory) -> AsyncClient:
         )
         return mock_search
 
-    app.dependency_overrides[get_notification_service] = (
-        override_get_notification_service
-    )
     app.dependency_overrides[get_es_indexer] = override_get_es_indexer
     app.dependency_overrides[es_helper.get_client] = override_es_helper_get_client
     app.dependency_overrides[get_es_search] = override_get_es_search

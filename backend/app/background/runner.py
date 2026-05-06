@@ -40,7 +40,7 @@ class AsyncRunner:
         self._loop: asyncio.AbstractEventLoop | None = None
         self._thread: Thread | None = None
         self._stopped = False
-        self._lock = Lock()  # Thread safety
+        self._lock = Lock()
         self._timeout = timeout
 
     def _run_loop(self) -> None:
@@ -76,7 +76,6 @@ class AsyncRunner:
                 self._thread = Thread(target=self._run_loop, daemon=True)
                 self._thread.start()
 
-                # Wait for loop startup (max 10s)
                 for _ in range(1000):
                     if self._loop and self._loop.is_running():
                         return self._loop
@@ -122,7 +121,6 @@ class AsyncRunner:
             self._thread.join(timeout=5.0)
 
 
-# Global singleton for convenience
 async_runner = AsyncRunner()
 
 

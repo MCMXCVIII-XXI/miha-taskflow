@@ -28,7 +28,6 @@ class ESSettings(BaseSettings):
     )
     RETRY_ON_TIMEOUT: bool = Field(default=True, description="Retry on timeout")
 
-    # Cluster discovery
     SNIFF_ON_START: bool = Field(default=True, description="Sniff on start")
     SNIFF_ON_CONNECTION_FAIL: bool = Field(
         default=True, description="Sniff on connection fail"

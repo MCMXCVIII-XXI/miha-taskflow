@@ -1,0 +1,12 @@
+app_name: taskflow
+app_user: taskflow
+app_group: taskflow
+app_dir: /opt/taskflow
+app_repo_dir: /opt/taskflow/app
+app_env_file: /opt/taskflow/.env
+app_service_name: taskflow-backend
+app_port: 8000
+app_host: 0.0.0.0
+app_venv_dir: /opt/taskflow/venv
+app_python: /opt/taskflow/venv/bin/python
+app_exec_start: /opt/taskflow/venv/bin/uvicorn app.main:app --host 0.0.0.0 --port 8000

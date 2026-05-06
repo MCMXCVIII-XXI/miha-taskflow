@@ -1,0 +1,11 @@
+- name: Create redis compose file
+  ansible.builtin.template:
+    src: docker-compose.redis.yml.j2
+    dest: "{{ compose_project_dir }}/docker-compose-redis.yml"
+    mode: "0644"
+
+- name: Start redis stack
+  ansible.builtin.command:
+    cmd: docker compose -f docker-compose-redis.yml up -d --remove-orphans
+    chdir: "{{ compose_project_dir }}"
+  changed_when: true

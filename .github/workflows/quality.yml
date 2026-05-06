@@ -1,4 +1,4 @@
-name: TaskFlow-Lint
+name: Miha-TaskFlow-Quality
 
 on:
   workflow_call:

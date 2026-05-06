@@ -1,0 +1,6 @@
+galaxy_info:
+  role_name: common
+  author: you
+  description: Base OS setup
+  license: MIT
+dependencies: []

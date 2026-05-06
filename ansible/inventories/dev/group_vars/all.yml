@@ -1,0 +1,12 @@
+compose_project_dir: /opt/taskflow
+docker_registry: docker.io
+docker_repo: yourdockerhub/taskflow
+app_image_tag: latest
+backend_image: "{{ docker_repo }}/backend:{{ app_image_tag }}"
+worker_image: "{{ docker_repo }}/worker:{{ app_image_tag }}"
+nginx_image: nginx:stable
+postgres_image: postgres:16
+redis_image: redis:7
+elasticsearch_image: docker.elastic.co/elasticsearch/elasticsearch:8.13.4
+prometheus_image: prom/prometheus:latest
+node_exporter_image: prom/node-exporter:latest

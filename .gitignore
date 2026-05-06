@@ -33,6 +33,7 @@ ENV/
 ehthumbs.db
 Thumbs.db
 .ropeproject
+*.ignore
 
 # AI / Dev Tools
 .continue/

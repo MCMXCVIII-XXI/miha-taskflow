@@ -85,7 +85,7 @@ class TestTaskNotFound:
     ):
         """Update status of non-existent task returns 404."""
         resp = await test_client.patch(
-            "/tasks/999999/status", json={"status": "done"}, headers=auth_headers
+            "/tasks/999999/status?new_status=done", headers=auth_headers
         )
         assert resp.status_code in [403, 404]
 
@@ -142,7 +142,7 @@ class TestTaskValidation:
 
         resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": "a" * 201, "priority": "medium"},
+            json={"title": "a" * 201, "priority": "medium", "group_id": group_id},
             headers=auth_headers,
         )
         assert resp.status_code == 422
@@ -160,7 +160,7 @@ class TestTaskValidation:
 
         resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": "Valid Title", "priority": "invalid"},
+            json={"title": "Valid Title", "priority": "invalid", "group_id": group_id},
             headers=auth_headers,
         )
         assert resp.status_code == 422
@@ -173,7 +173,6 @@ class TestNotificationValidation:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """Respond to notification with invalid response type returns 422."""
-        # Create a notification via group invite
         other_headers = await register_user(test_client)
         other_user_id = int(
             (await test_client.get("/users/me", headers=other_headers)).json()["id"]
@@ -216,7 +215,6 @@ class TestCrossUserAccess:
         self, test_client: AsyncClient, auth_headers: dict
     ):
         """User cannot access another user's notifications directly."""
-        # Create notification for other user
         other_headers = await register_user(test_client)
         other_user_id = int(
             (await test_client.get("/users/me", headers=other_headers)).json()["id"]
@@ -234,19 +232,16 @@ class TestCrossUserAccess:
             headers=auth_headers,
         )
 
-        # Get notification for other user
         notif_resp = await test_client.get("/notifications", headers=other_headers)
         notifications = notif_resp.json()
 
         if notifications:
             notification_id = notifications[0]["id"]
 
-            # Try to access with different user's auth
             resp = await test_client.get(
                 f"/notifications/{notification_id}",
                 headers=auth_headers,
             )
-            # Should be 403 or 404 (not found for this user)
             assert resp.status_code in [403, 404]
 
 
@@ -312,10 +307,8 @@ class TestIdempotency:
         )
         group_id = group_resp.json()["id"]
 
-        # First delete
         await test_client.delete(f"/groups/{group_id}", headers=auth_headers)
 
-        # Second delete should return 403 or 404
         resp = await test_client.delete(f"/groups/{group_id}", headers=auth_headers)
         assert resp.status_code in [403, 404]
 
@@ -325,9 +318,7 @@ class TestIdempotency:
         """Delete already deleted user returns 401."""
         headers = await register_user(test_client, "delme", "delme@test.com")
 
-        # First delete
         await test_client.delete("/users/me", headers=headers)
 
-        # Second delete should return 401 (token invalid)
         resp = await test_client.delete("/users/me", headers=headers)
         assert resp.status_code == 401

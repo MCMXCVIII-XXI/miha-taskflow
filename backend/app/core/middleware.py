@@ -39,7 +39,6 @@ async def http_logging_middleware(request: Request, call_next: Any) -> Any:
     """
     start_time = time.time()
 
-    # Log request
     logger.info(
         "HTTP Request: {method} {url}",
         method=request.method,
@@ -47,13 +46,15 @@ async def http_logging_middleware(request: Request, call_next: Any) -> Any:
         client_ip=request.client.host if request.client else None,
     )
 
-    # Process request
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+        status = "success" if response.status_code < 400 else "error"
+    except Exception:
+        status = "error"
+        raise
 
-    # Calculate processing time
     process_time = time.time() - start_time
 
-    # Log response
     logger.info(
         "HTTP Response: {method} {url} - {status_code} ({time:.3f}s)",
         method=request.method,
@@ -62,7 +63,6 @@ async def http_logging_middleware(request: Request, call_next: Any) -> Any:
         time=process_time,
     )
 
-    # Log slow queries
     if process_time > SLOW_QUERY_THRESHOLD:
         logger.warning(
             "Slow request: {method} {url} took {time:.3f}s",
@@ -71,12 +71,12 @@ async def http_logging_middleware(request: Request, call_next: Any) -> Any:
             time=process_time,
         )
 
-    # Prometheus metrics
     endpoint = request.url.path
     http_requests_total.labels(
         method=request.method,
-        endpoint=endpoint,
-        status_code=response.status_code,
+        endpoint=request.url.path,
+        status_code=str(response.status_code),
+        status=status,
     ).inc()
     http_request_duration_seconds.labels(
         method=request.method,

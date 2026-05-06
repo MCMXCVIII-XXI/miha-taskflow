@@ -5,8 +5,8 @@ from elasticsearch.dsl import AsyncSearch
 from fastapi import Depends
 
 from app.core.log import logging
+from app.documents import CommentDoc, NotificationDoc, TaskDoc, UserDoc, UserGroupDoc
 from app.es.exceptions import es_exc
-from app.indexes import CommentDoc, NotificationDoc, TaskDoc, UserDoc, UserGroupDoc
 from app.schemas import CommentRead, NotificationRead, TaskRead, UserGroupRead, UserRead
 
 from .client import es_helper
@@ -243,11 +243,11 @@ class ElasticsearchSearch:
         group_ids: set[int] = set()
         if scope is None or "admin" in scope:
             group_ids.update(
-                gid for gid in (user_doc.admin_group_ids or []) if gid is not None
+                int(gid) for gid in (user_doc.admin_group_ids or []) if gid is not None
             )
         if scope is None or "member" in scope:
             group_ids.update(
-                gid for gid in (user_doc.member_group_ids or []) if gid is not None
+                int(gid) for gid in (user_doc.member_group_ids or []) if gid is not None
             )
         return group_ids
 
@@ -352,12 +352,14 @@ class ElasticsearchSearch:
         task_ids: set[int] = set()
         if scope is None or "assigned" in scope:
             task_ids.update(
-                tid for tid in (user_doc.assigned_task_ids or []) if tid is not None
+                int(tid)
+                for tid in (user_doc.assigned_task_ids or [])
+                if tid is not None
             )
 
         if scope is None or "created" in scope:
             task_ids.update(
-                tid
+                int(tid)
                 for tid in (getattr(user_doc, "created_task_ids", []) or [])
                 if tid is not None
             )

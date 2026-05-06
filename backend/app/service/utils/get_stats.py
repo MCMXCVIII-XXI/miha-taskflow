@@ -24,6 +24,10 @@ class AbstractStatsModel(ABC):
         pass
 
 
+# Added type ignore for "is_active" lines
+# Mypy doesn't accept "not" in case()
+# Ruff doesn't accept "== False"
+# Chose to keep "not Model.is_active" + type: ignore[arg-type]
 class StatsUsers:
     def __init__(self, db: AsyncSession) -> None:
         self._db = db
@@ -43,7 +47,7 @@ class StatsUsers:
         query = select(
             func.count(UserModel.id).label("total"),
             func.count(case((UserModel.is_active, 1))).label("active"),
-            func.count(case((UserModel.is_active == False, 1))).label("not_active"),  # noqa: E712
+            func.count(case((not UserModel.is_active, 1))).label("not_active"),  # type: ignore[arg-type]
             func.count(case((UserModel.role == GlobalUserRole.ADMIN, 1))).label(
                 "admins"
             ),
@@ -70,9 +74,7 @@ class StatsGroups:
         query = select(
             func.count(UserGroupModel.id).label("total"),
             func.count(case((UserGroupModel.is_active, 1))).label("active"),
-            func.count(case((UserGroupModel.is_active == False, 1))).label(  # noqa: E712
-                "not_active"
-            ),
+            func.count(case((not UserGroupModel.is_active, 1))).label("not_active"),  # type: ignore[arg-type]
         )
         result = await self._db.execute(query)
         return await self._convert_result(result)
@@ -112,7 +114,7 @@ class StatsTasks:
         query = select(
             func.count(TaskModel.id).label("total"),
             func.count(case((TaskModel.is_active, 1))).label("active"),
-            func.count(case((TaskModel.is_active == False, 1))).label("not_active"),  # noqa: E712
+            func.count(case((not TaskModel.is_active, 1))).label("not_active"),  # type: ignore[arg-type]
             func.count(case((TaskModel.status == TaskStatus.PENDING, 1))).label(
                 "pending"
             ),

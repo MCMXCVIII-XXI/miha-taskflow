@@ -1,0 +1,6 @@
+search_host: 127.0.0.1
+search_port: 9200
+search_cluster_name: taskflow
+search_node_name: taskflow-es
+search_data_dir: /var/lib/elasticsearch
+search_log_dir: /var/log/elasticsearch

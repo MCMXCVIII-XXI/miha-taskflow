@@ -1,0 +1,7 @@
+galaxy_info:
+  role_name: app
+  author: you
+  description: TaskFlow backend app role
+  license: MIT
+dependencies:
+  - common

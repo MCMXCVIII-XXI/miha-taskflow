@@ -58,7 +58,7 @@ def on_task_failure(
     logger.error(
         "Celery task failed",
         extra=extra,
-        exc_info=True,  # Full traceback in logs
+        exc_info=True,
     )
 
 

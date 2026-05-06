@@ -50,9 +50,7 @@ class Task(Base, IdPkMixin):
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
-    group_id: Mapped[int | None] = mapped_column(
-        ForeignKey("user_groups.id"), index=True
-    )
+    group_id: Mapped[int] = mapped_column(ForeignKey("user_groups.id"), index=True)
 
     assignees: Mapped[list["TaskAssignee"]] = relationship(
         "TaskAssignee", back_populates="task", cascade="all, delete-orphan"

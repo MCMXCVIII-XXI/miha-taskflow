@@ -190,3 +190,20 @@ class GroupMissingContextIdError(BaseGroupError):
             headers=headers,
             details=details,
         )
+
+
+class GroupRuntimeError(BaseGroupError):
+    """Group runtime error."""
+
+    def __init__(
+        self,
+        message: str,
+        headers: dict[str, str] | None = None,
+        details: dict[str, Any] | None = None,
+    ) -> None:
+        super().__init__(
+            code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            message=message,
+            headers=headers,
+            details=details,
+        )

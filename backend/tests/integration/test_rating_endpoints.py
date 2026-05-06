@@ -22,6 +22,7 @@ class TestCreateTaskRating:
                 "title": f"Rating Task_{unique_id}",
                 "description": "Test",
                 "priority": "medium",
+                "group_id": group_id,
             },
             headers=admin_auth_headers,
         )
@@ -66,7 +67,12 @@ class TestCreateTaskRating:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Incomplete Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Incomplete Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -103,7 +109,12 @@ class TestCreateTaskRating:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Duplicate Rating Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Duplicate Rating Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -143,7 +154,12 @@ class TestGetTaskRating:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Get Rating Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Get Rating Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -295,7 +311,12 @@ class TestDeleteRating:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Delete Rating Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Delete Rating Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -324,7 +345,6 @@ class TestDeleteRating:
         """Delete other's rating — returns 403."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group and task
         group_resp = await test_client.post(
             "/groups",
             json={
@@ -340,19 +360,19 @@ class TestDeleteRating:
             json={
                 "title": f"Delete Others Rating Task_{unique_id}",
                 "description": "Test",
+                "priority": "medium",
+                "group_id": group_id,
             },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
 
-        # Mark task as done
         await test_client.patch(
             f"/tasks/{task_id}",
             json={"status": "done"},
             headers=admin_auth_headers,
         )
 
-        # Admin creates rating
         rating_resp = await test_client.post(
             f"/tasks/{task_id}/ratings",
             json={"score": 5},
@@ -360,7 +380,6 @@ class TestDeleteRating:
         )
         rating_id = rating_resp.json()["id"]
 
-        # Create second user (regular USER)
         user2_resp = await test_client.post(
             "/auth",
             json={
@@ -374,7 +393,6 @@ class TestDeleteRating:
         user2_token = user2_resp.json()["access_token"]
         user2_headers = {"Authorization": f"Bearer {user2_token}"}
 
-        # User2 tries to delete admin's rating - should return 403
         response = await test_client.delete(
             f"/ratings/{rating_id}", headers=user2_headers
         )
@@ -405,7 +423,12 @@ class TestRatingEdgeCases:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Low Score Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Low Score Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -437,7 +460,12 @@ class TestRatingEdgeCases:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"High Score Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"High Score Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
@@ -491,7 +519,6 @@ class TestRatingPermissions:
         """USER cannot rate task they are not assigned to."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group and task
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Rate Perm Group_{unique_id}", "description": "Test"},
@@ -501,19 +528,22 @@ class TestRatingPermissions:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Rate Perm Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Rate Perm Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
 
-        # Mark task as done
         await test_client.patch(
             f"/tasks/{task_id}",
             json={"status": "done"},
             headers=admin_auth_headers,
         )
 
-        # Create regular user (not member of group)
         user_resp = await test_client.post(
             "/auth",
             json={
@@ -527,13 +557,11 @@ class TestRatingPermissions:
         user_token = user_resp.json()["access_token"]
         user_headers = {"Authorization": f"Bearer {user_token}"}
 
-        # User tries to rate task - depends on permissions
         response = await test_client.post(
             f"/tasks/{task_id}/ratings",
             json={"score": 5},
             headers=user_headers,
         )
-        # USER has "task:view:any" so might pass, but rating requires being assignee
         assert response.status_code in [201, 403]
 
     async def test_user_cannot_delete_others_rating(
@@ -542,7 +570,6 @@ class TestRatingPermissions:
         """USER cannot delete another user's rating."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group and task
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Delete Rate Perm Group_{unique_id}", "description": "Test"},
@@ -552,19 +579,22 @@ class TestRatingPermissions:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Delete Rate Perm Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Delete Rate Perm Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
 
-        # Mark task as done
         await test_client.patch(
             f"/tasks/{task_id}",
             json={"status": "done"},
             headers=admin_auth_headers,
         )
 
-        # Admin creates rating
         rating_resp = await test_client.post(
             f"/tasks/{task_id}/ratings",
             json={"score": 5},
@@ -572,7 +602,6 @@ class TestRatingPermissions:
         )
         rating_id = rating_resp.json()["id"]
 
-        # Create second user
         user2_resp = await test_client.post(
             "/auth",
             json={
@@ -586,7 +615,6 @@ class TestRatingPermissions:
         user2_token = user2_resp.json()["access_token"]
         user2_headers = {"Authorization": f"Bearer {user2_token}"}
 
-        # User2 tries to delete admin's rating - should return 403
         response = await test_client.delete(
             f"/ratings/{rating_id}", headers=user2_headers
         )
@@ -598,7 +626,6 @@ class TestRatingPermissions:
         """User cannot rate the same task twice."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group and task
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Duplicate Rate Group_{unique_id}", "description": "Test"},
@@ -608,26 +635,28 @@ class TestRatingPermissions:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Duplicate Rate Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Duplicate Rate Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
 
-        # Mark task as done
         await test_client.patch(
             f"/tasks/{task_id}",
             json={"status": "done"},
             headers=admin_auth_headers,
         )
 
-        # Admin creates first rating
         await test_client.post(
             f"/tasks/{task_id}/ratings",
             json={"score": 5},
             headers=admin_auth_headers,
         )
 
-        # Admin tries to create second rating - should return 409
         response = await test_client.post(
             f"/tasks/{task_id}/ratings",
             json={"score": 7},
@@ -641,7 +670,6 @@ class TestRatingPermissions:
         """User cannot rate task that is not completed."""
         unique_id = str(uuid.uuid4())[:8]
 
-        # Admin creates group and task
         group_resp = await test_client.post(
             "/groups",
             json={"name": f"Active Rate Group_{unique_id}", "description": "Test"},
@@ -651,14 +679,16 @@ class TestRatingPermissions:
 
         task_resp = await test_client.post(
             f"/tasks/groups/{group_id}",
-            json={"title": f"Active Rate Task_{unique_id}", "description": "Test"},
+            json={
+                "title": f"Active Rate Task_{unique_id}",
+                "description": "Test",
+                "group_id": group_id,
+                "priority": "medium",
+            },
             headers=admin_auth_headers,
         )
         task_id = task_resp.json()["id"]
 
-        # Task is not done (default status is "new" or "todo")
-
-        # Admin tries to rate - should return 404
         response = await test_client.post(
             f"/tasks/{task_id}/ratings",
             json={"score": 5},

@@ -4,7 +4,7 @@ from elasticsearch import AsyncElasticsearch, exceptions
 from elasticsearch.dsl import AsyncDocument
 
 from app.core.config import es_settings
-from app.indexes import (
+from app.documents import (
     CommentDoc,
     NotificationDoc,
     TaskDoc,

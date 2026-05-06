@@ -42,7 +42,7 @@ class RBAC:
         self._seed = seed
         self._setup = setup
 
-    async def __clear(self) -> None:
+    async def _clear(self) -> None:
         """Clear only RolePermission bindings, keep Role and Permission data."""
         try:
             # Role↔Permission
@@ -61,7 +61,7 @@ class RBAC:
         """
         # Clear tables and binds ###########
         async with self.db.begin():
-            await self.__clear()
+            await self._clear()
         # Adding data ######################
         async with self.db.begin():
             await self._seed.seed()

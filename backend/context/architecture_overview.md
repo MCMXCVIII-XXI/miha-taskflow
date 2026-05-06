@@ -1,79 +1,78 @@
-# architecture_overview.md
+# Architecture Overview
 
 ## 1. Overall Architecture
 
 The TaskFlow application follows a layered architecture pattern that separates concerns and promotes maintainability. The architecture consists of several interconnected layers, each with distinct responsibilities:
 
-- **Presentation Layer** (`app/api/`) - Handles HTTP requests and responses
-- **Application Layer** (`app/service/`) - Implements business logic and coordinates operations
-- **Exception Layer** (`app/service/exceptions/`) - Defines domain-specific error conditions and handling
-- **Data Access Layer** (`app/db/`, `app/es/`) - Manages database and search engine interactions
-- **Caching Layer** (`app/cache/`) - Provides performance optimization through in-memory storage
-- **Model Layer** (`app/models/`, `app/schemas/`, `app/indexes/`) - Defines data structures and validation
-- **Infrastructure Layer** (`app/core/`) - Provides core utilities, configuration, and cross-cutting concerns
+- **Presentation Layer** (`app/api/`) - Handles HTTP requests and responses via FastAPI routers.
+- **Application Layer** (`app/service/`) - Implements business logic and coordinates operations.
+- **Exception Layer** (`app/service/exceptions/`, `app/core/exceptions/`, `app/es/exceptions/`, `app/cache/exceptions/`, `app/db/exceptions/`, `app/background/exceptions/`) - Defines domain-specific and infrastructure error conditions.
+- **Data Access Layer** (`app/db/`, `app/es/`, `app/repositories/`) - Manages database and search engine interactions.
+- **Caching Layer** (`app/cache/`) - Provides performance optimization through Redis storage.
+- **Model Layer** (`app/models/`, `app/schemas/`, `app/documents/`) - Defines data structures and validation.
+- **Infrastructure Layer** (`app/core/`, `app/background/`) - Provides core utilities, configuration, and cross-cutting concerns.
 
 ## 2. Data Flow Through Layers
 
 A typical request flows through the application as follows:
 
-1. **HTTP Request** arrives at FastAPI router in `app/api/`
-2. **Request Validation** occurs using Pydantic schemas from `app/schemas/`
-3. **Authentication & Authorization** handled by components in `app/core/security/`
-4. **Business Logic Execution** in service classes from `app/service/`
-5. **Data Access** through models in `app/models/` and helpers in `app/db/`
-6. **Search Operations** using Elasticsearch integration from `app/es/`
-7. **Caching** managed by utilities in `app/cache/`
-8. **Response Serialization** using schemas from `app/schemas/`
-9. **HTTP Response** returned to client
-10. **Error Handling** using domain-specific exceptions from `app/service/exceptions/`
+1.  **HTTP Request** arrives at FastAPI router in `app/api/`.
+2.  **Request Validation** occurs using Pydantic schemas from `app/schemas/`.
+3.  **Authentication & Authorization** handled by components in `app/core/security/`.
+4.  **Business Logic Execution** in service classes from `app/service/`.
+5.  **Data Access** through repositories in `app/repositories/` and models in `app/db/`.
+6.  **Search Operations** using Elasticsearch integration from `app/es/`.
+7.  **Caching** managed by utilities in `app/cache/`.
+8.  **Response Serialization** using schemas from `app/schemas/`.
+9.  **HTTP Response** returned to client.
+10. **Error Handling** using exceptions from `app/service/exceptions/` or `app/core/exceptions/`.
 
 ## 3. Key Integration Points
 
 ### Service Layer Integrations
 Services in `app/service/` coordinate between multiple layers:
-- Use database models from `app/models/` for data persistence
-- Leverage Elasticsearch documents from `app/indexes/` for search functionality
-- Implement caching strategies using `app/cache/`
-- Validate data with schemas from `app/schemas/`
-- Handle errors with domain-specific exceptions from `app/service/exceptions/`
+- Use database repositories from `app/repositories/` for data persistence.
+- Leverage Elasticsearch documents from `app/documents/` for search functionality.
+- Implement caching strategies using `app/cache/`.
+- Validate data with schemas from `app/schemas/`.
+- Handle errors with domain-specific exceptions from `app/service/exceptions/`.
 
 ### Database and Search Integration
 The application maintains data consistency between relational database and Elasticsearch:
-- Database models in `app/models/` define primary data storage
-- Elasticsearch documents in `app/indexes/` provide full-text search capabilities
-- Indexer in `app/es/indexer.py` synchronizes data between database and search engine
-- Services coordinate updates to both systems when data changes
+- Database models in `app/models/` define primary data storage.
+- Elasticsearch documents in `app/documents/` provide full-text search capabilities.
+- Indexer in `app/es/indexer.py` synchronizes data between database and search engine.
+- Services coordinate updates to both systems when data changes.
 
 ### Caching Strategy
 Caching improves performance across the application:
-- Services use caching utilities from `app/cache/` to store frequently accessed data
-- Cache keys are generated by utilities in `app/cache/name_key.py`
-- Cache invalidation occurs when data changes to maintain consistency
-- FastAPI-Cache integration provides automatic caching for decorated methods
+- Services use caching utilities from `app/cache/` to store frequently accessed data.
+- Cache keys are generated by utilities in `app/cache/key_builder.py`.
+- Cache invalidation occurs when data changes to maintain consistency.
+- FastAPI-Cache integration provides automatic caching for decorated methods.
 
 ## 4. Component Relationships
 
 ### Core Utilities
 The `app/core/` directory provides foundational services:
-- Configuration management (`app/core/config.py`)
-- Logging (`app/core/log.py`)
+- Configuration management (`app/core/config/`)
+- Logging (`app/core/log/`)
 - Security and authentication (`app/core/security/`)
-- Middleware (`app/core/middleware/`)
+- Middleware (`app/core/middleware.py`)
 - Exception handling (`app/core/exceptions/`)
-- Permissions and RBAC (`app/core/permission.py`)
+- Permissions and RBAC (`app/core/permission/`)
 
 ### Data Models
 Three types of models define the application's data:
-- Database models (`app/models/`) - SQLAlchemy ORM models for relational data
-- API Schemas (`app/schemas/`) - Pydantic models for request/response validation
-- Search Documents (`app/indexes/`) - Elasticsearch document definitions
-- Domain Exceptions (`app/service/exceptions/`) - Custom exception classes for business logic errors
+- Database models (`app/models/`) - SQLAlchemy ORM models for relational data.
+- API Schemas (`app/schemas/`) - Pydantic models for request/response validation.
+- Search Documents (`app/documents/`) - Elasticsearch document definitions.
+- Domain Exceptions (`app/service/exceptions/`) - Custom exception classes for business logic errors.
 
 ### Query Builders
 Specialized query builders optimize data access:
-- Database queries constructed by classes in `app/service/query_db/`
-- Search queries built by components in `app/es/search.py`
+- Database queries constructed by classes in `app/repositories/` (e.g., `repositories/task.py`).
+- Search queries built by components in `app/es/search.py`.
 
 ## 5. Summary
-
 The TaskFlow application architecture promotes separation of concerns, maintainability, and scalability through its layered design. Each directory has a specific responsibility and integrates with others through well-defined interfaces. The architecture supports both relational data storage and full-text search capabilities while providing performance optimization through caching. Business logic is centralized in the service layer, which coordinates interactions between data access, search, and caching components to deliver a robust task management system.

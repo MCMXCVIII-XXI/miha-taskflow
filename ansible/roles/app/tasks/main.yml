@@ -1,0 +1,30 @@
+- name: Create app directory
+  ansible.builtin.file:
+    path: "{{ compose_project_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Create compose file
+  ansible.builtin.template:
+    src: docker-compose.app.yml.j2
+    dest: "{{ compose_project_dir }}/docker-compose.yml"
+    mode: "0644"
+
+- name: Login to registry
+  community.docker.docker_login:
+    registry_url: "{{ docker_registry }}"
+    username: "{{ docker_registry_username | default(omit) }}"
+    password: "{{ docker_registry_password | default(omit) }}"
+  when: docker_registry_username is defined and docker_registry_password is defined
+
+- name: Pull backend image
+  ansible.builtin.command:
+    cmd: docker compose pull backend
+    chdir: "{{ compose_project_dir }}"
+  changed_when: true
+
+- name: Start backend stack
+  ansible.builtin.command:
+    cmd: docker compose up -d --remove-orphans backend
+    chdir: "{{ compose_project_dir }}"
+  changed_when: true

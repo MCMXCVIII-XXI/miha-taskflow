@@ -1,0 +1,7 @@
+galaxy_info:
+  role_name: edge
+  author: you
+  description: Nginx reverse proxy
+  license: MIT
+dependencies:
+  - common

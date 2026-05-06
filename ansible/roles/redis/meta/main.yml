@@ -1,0 +1,7 @@
+galaxy_info:
+  role_name: redis
+  author: you
+  description: Redis role
+  license: MIT
+dependencies:
+  - common

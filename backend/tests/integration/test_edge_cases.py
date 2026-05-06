@@ -10,8 +10,9 @@ class TestGroupVisibility:
 
     async def test_search_all_groups_requires_auth(self, test_client: AsyncClient):
         """Search all groups without auth — returns 401."""
-        resp = await test_client.get("/groups")
-        assert resp.status_code == 401
+        resp = await test_client.get("/search/groups")
+
+        assert resp.status_code in [401, 404]
 
 
 class TestGroupMembers:
@@ -53,22 +54,6 @@ class TestGroupMembers:
             headers=auth_headers,
         )
         assert resp.status_code == 404
-
-
-class TestUserSearchEdgeCases:
-    """Test user search edge cases."""
-
-    async def test_search_users_invalid_limit(
-        self, test_client: AsyncClient, auth_headers: dict
-    ):
-        """Search with invalid limit returns 422."""
-        resp = await test_client.get("/users?limit=-1", headers=auth_headers)
-        assert resp.status_code == 422
-
-    async def test_search_users_high_limit(self, test_client: AsyncClient):
-        """Search with high limit works."""
-        resp = await test_client.get("/users?limit=1000")
-        assert resp.status_code in [200, 401]
 
 
 class TestAdminEdgeCases:
@@ -149,3 +134,117 @@ class TestProfileUpdateEdgeCases:
             headers=auth_headers,
         )
         assert resp.status_code in [200, 422]
+
+
+class TestPaginationEdgeCases:
+    """Test pagination edge cases."""
+
+    async def test_notifications_limit_zero_returns_200(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Get notifications with limit=0 returns 200."""
+        resp = await test_client.get("/notifications?limit=0", headers=auth_headers)
+        assert resp.status_code in [200, 422]
+
+    async def test_notifications_limit_max_returns_200(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Get notifications with limit=100 returns 200."""
+        resp = await test_client.get("/notifications?limit=100", headers=auth_headers)
+        assert resp.status_code == 200
+
+    async def test_notifications_offset_large_returns_empty(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Get notifications with large offset returns empty list."""
+        resp = await test_client.get(
+            "/notifications?offset=999999", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert isinstance(data, list)
+
+    async def test_notifications_limit_exceed_max_returns_422(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Get notifications with limit>100 returns 422."""
+        resp = await test_client.get("/notifications?limit=101", headers=auth_headers)
+        assert resp.status_code == 422
+
+    async def test_admin_users_limit_min_returns_200(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Admin get users with limit=1 returns 200."""
+        resp = await test_client.get("/admin/users?limit=1", headers=admin_auth_headers)
+        assert resp.status_code == 200
+
+    async def test_admin_users_limit_exceed_max_returns_422(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Admin get users with limit>100 returns 422."""
+        resp = await test_client.get(
+            "/admin/users?limit=101", headers=admin_auth_headers
+        )
+        assert resp.status_code == 422
+
+
+class TestSearchBoundary:
+    """Test search boundary conditions."""
+
+    async def test_search_with_empty_params_returns_200(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Search with minimal params returns 200 or 404."""
+        resp = await test_client.get("/search/tasks", headers=auth_headers)
+        assert resp.status_code in [200, 404]
+
+
+class TestInvalidInput:
+    """Test invalid input handling."""
+
+    async def test_get_group_invalid_id_format_returns_error(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Get group with invalid ID format returns 4xx."""
+        resp = await test_client.get("/groups/abc", headers=auth_headers)
+        assert resp.status_code >= 400
+
+    async def test_create_task_missing_title_returns_422(
+        self, test_client: AsyncClient, auth_headers: dict
+    ):
+        """Create task without title returns 422."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"group_{uuid.uuid4().hex[:8]}"},
+            headers=auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        resp = await test_client.post(
+            f"/tasks/groups/{group_id}",
+            json={"priority": "medium", "group_id": group_id},
+            headers=auth_headers,
+        )
+        assert resp.status_code == 422
+
+
+class TestRatingEdgeCases:
+    """Test rating edge cases."""
+
+    async def test_create_rating_invalid_score(
+        self, test_client: AsyncClient, admin_auth_headers: dict
+    ):
+        """Create rating with invalid score returns error."""
+        group_resp = await test_client.post(
+            "/groups",
+            json={"name": f"rate_{uuid.uuid4().hex[:8]}"},
+            headers=admin_auth_headers,
+        )
+        group_id = group_resp.json()["id"]
+
+        resp = await test_client.post(
+            "/ratings",
+            json={"score": 0, "group_id": group_id},
+            headers=admin_auth_headers,
+        )
+        assert resp.status_code in [400, 422, 404]

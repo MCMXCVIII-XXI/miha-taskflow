@@ -6,14 +6,14 @@ from elasticsearch.exceptions import BadRequestError
 from fastapi import Depends
 
 from app.core.log import get_logger
-from app.es import es_helper
-from app.indexes import (
+from app.documents import (
     CommentDoc,
     NotificationDoc,
     TaskDoc,
     UserDoc,
     UserGroupDoc,
 )
+from app.es import es_helper
 from app.models import Comment as CommentModel
 from app.models import Notification as NotificationModel
 from app.models import Task as TaskModel
@@ -62,7 +62,7 @@ class ElasticsearchIndexer:
             TaskDoc: Indexed Elasticsearch document
         """
         doc = TaskDoc.from_orm(task)
-        await doc.save(using=self._client)
+        await doc.save(using=self._client, refresh=True)
         return doc
 
     async def index_user(self, user: UserModel) -> UserDoc:
@@ -78,7 +78,7 @@ class ElasticsearchIndexer:
             UserDoc: Indexed Elasticsearch document
         """
         doc = UserDoc.from_orm(user)
-        await doc.save(using=self._client)
+        await doc.save(using=self._client, refresh=True)
         return doc
 
     async def index_group(self, group: UserGroupModel) -> UserGroupDoc:
@@ -94,7 +94,7 @@ class ElasticsearchIndexer:
             UserGroupDoc: Indexed Elasticsearch document
         """
         doc = UserGroupDoc.from_orm(group)
-        await doc.save(using=self._client)
+        await doc.save(using=self._client, refresh=True)
         return doc
 
     async def index_comment(self, comment: CommentModel) -> CommentDoc:
@@ -110,7 +110,7 @@ class ElasticsearchIndexer:
             CommentDoc: Indexed Elasticsearch document
         """
         doc = CommentDoc.from_orm(comment)
-        await doc.save(using=self._client)
+        await doc.save(using=self._client, refresh=True)
         return doc
 
     async def bulk_index_tasks(self, tasks: list[TaskModel]) -> dict[str, Any]:
@@ -206,7 +206,7 @@ class ElasticsearchIndexer:
     ) -> NotificationDoc:
         """Notification → NotificationDoc.save()"""
         doc = NotificationDoc.from_orm(notification)
-        await doc.save(using=self._client)
+        await doc.save(using=self._client, refresh=True)
         return doc
 
     async def delete_task(self, task_id: int) -> bool:

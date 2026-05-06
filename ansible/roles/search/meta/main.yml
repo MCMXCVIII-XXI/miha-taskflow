@@ -1,0 +1,7 @@
+galaxy_info:
+  role_name: search
+  author: you
+  description: Elasticsearch role
+  license: MIT
+dependencies:
+  - common
