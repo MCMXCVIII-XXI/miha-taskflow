@@ -45,8 +45,7 @@ tests/
     ├── test_full_user_flow.py              # User journey
     ├── test_es_search_cache.py             # ES + Redis caching
     ├── test_background_tasks.py            # Celery + outbox
-    ├── test_auth_sessions.py               # Auth + sessions
-    └── test_cli.py                         # CLI commands (create-admin, reindex)
+    └── test_auth_sessions.py               # Auth + sessions
 ```
 
 ---
@@ -291,17 +290,6 @@ Full stack tests with real external services (PostgreSQL + Redis + ES + Celery).
 | Tests | Description |
 |------|-------------|
 | 4 | Auth + sessions + token validation |
-
-### test_cli.py (15 tests)
-
-| Class | Tests | Description |
-|-------|-------|-------------|
-| `TestCreateAdmin` | 3 | CLI create-admin command |
-| `TestReindexAll` | 2 | reindex-all command |
-| `TestReindexTasks` | 1 | reindex-tasks command |
-| `TestReindexUsers` | 1 | reindex-users command |
-| `TestReindexServiceE2E` | 5 | ReindexService with real DB + ES |
-| `TestCliEdgeCases` | 3 | Edge cases |
 
 Run E2E tests:
 ```bash
