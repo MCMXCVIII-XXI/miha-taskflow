@@ -4,14 +4,14 @@
 The `app/api/v1/endpoints/` directory serves as the HTTP endpoint implementation layer of the TaskFlow application. It contains individual endpoint handler modules that define the REST API operations for each domain entity. This directory represents the interface layer that translates HTTP requests into service calls and formats responses for clients.
 
 ## 2. Typical contents
-- `task.py` - Task-related endpoint handlers (create, update, search, delete)
+- `task.py` - Task-related endpoint handlers (create, update, search, delete, join request)
 - `user.py` - User-related endpoint handlers (profile, search, update)
-- `group.py` - Group-related endpoint handlers (create, manage members, search)
-- `auth.py` - Authentication and authorization endpoint handlers
+- `group.py` - Group-related endpoint handlers (create, manage members, join request)
+- `auth.py` - Authentication and authorization endpoint handlers (register, login, token)
 - `notification.py` - Notification and SSE endpoint handlers
 - `comment.py` - Comment-related endpoint handlers
-- `search.py` - Global search endpoint handlers
-- `admin.py` - Administrative endpoint handlers
+- `search.py` - Global search endpoint handlers (tasks, users, groups, comments)
+- `admin.py` - Administrative endpoint handlers (users, stats)
 - `rating.py` - Rating and feedback endpoint handlers
 - `xp.py` - Experience points and leveling endpoint handlers
 

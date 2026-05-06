@@ -15,7 +15,7 @@ The `app/models/` directory serves as the data model layer of the TaskFlow appli
   - Input: Database table schemas, relationship definitions
   - Output: Python objects representing database records
   - What it does: Defines the structure and relationships of data entities
-  - How it interacts with other layers: Used by services in `service/` for database operations, converted to schemas in `schemas/` for API responses, indexed as documents in `indexes/` for search
+  - How it interacts with other layers: Used by services in `service/` for database operations, converted to schemas in `schemas/` for API responses, indexed as documents in `documents/` for search
 
 - Relationship definitions:
   - Input: Foreign key relationships, join conditions
