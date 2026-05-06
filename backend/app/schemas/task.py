@@ -82,7 +82,7 @@ class TaskCreate(BaseModel):
     spheres: list[TaskSphereWeight] | None = Field(
         None, description="Task spheres (1-3)"
     )
-    group_id: int | None = Field(None, description="Put task in group")
+    group_id: int = Field(description="Put task in group")
     deadline: datetime | None = Field(None, description="Task deadline")
 
     @field_validator("title", mode="before")
