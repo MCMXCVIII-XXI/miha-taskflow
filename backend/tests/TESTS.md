@@ -3,9 +3,9 @@
 ## Quick Start
 
 ```bash
-make test-unit           # Unit tests (159 tests)
-make test-integration    # Integration tests (pytest tests/integration/)
-make test-e2e            # E2E tests with real external services
+make test-unit           
+make test-integration    
+make test-e2e            
 ```
 
 ---
@@ -26,6 +26,7 @@ tests/
 │   ├── test_schemas.py                     # Schema validation
 │   ├── test_es_indexer.py                  # ElasticsearchIndexer
 │   ├── test_es_search.py                   # ElasticsearchSearch
+│   ├── test_celery_tasks.py               # Celery task tests
 │   └── test_*_service.py                   # Service tests
 ├── integration/                            # API endpoint tests (~447 tests)
 │   ├── test_auth_endpoints.py              # Auth: register, login, token refresh
@@ -35,6 +36,7 @@ tests/
 │   ├── test_user_endpoints.py              # Users: profile, search, groups
 │   ├── test_notification_endpoints.py      # Notifications: get, read, mark
 │   ├── test_xp_endpoints.py                # XP: get, level, title, progress
+│   ├── test_cache.py                       # Cache behavior tests
 │   ├── test_edge_cases.py                  # Edge cases: validation
 │   ├── test_comprehensive_edge_cases.py    # Full edge cases
 │   └── test_migrations.py                  # DB migrations
@@ -187,6 +189,12 @@ Requires `POSTGRES_DB=1` env var set.
 | `TestGetProgress` | 3 | Progress to next level |
 | `TestXPEdgeCases` | 5 | Edge cases |
 
+### test_cache.py
+
+| Tests | Description |
+|-------|-------------|
+| ~69 | Cache behavior, invalidation, Redis integration |
+
 ---
 
 ## Unit Tests (159 tests)
@@ -249,7 +257,7 @@ Requires `POSTGRES_DB=1` env var set.
 | `test_admin_service.py` | 5 | Admin operations |
 | `test_auth_service.py` | 2 | Auth operations |
 | `test_base_service.py` | 6 | Base operations |
-| `test_group_service.py` | 6 | Group operations |
+| `test_celery_tasks.py` | ~10 | Celery task tests |
 
 ---
 
@@ -308,7 +316,7 @@ POSTGRES_DB=1 python -m pytest tests/e2e/ -m celery_real -v
 
 | Category | Tests | Description |
 |----------|-------|-------------|
-| Integration | 411 | API endpoints |
+| Integration | ~411 | API endpoints |
 | Unit | 159 | Services |
 | E2E | 30 | Full stack |
 | **Total** | **600** | |
