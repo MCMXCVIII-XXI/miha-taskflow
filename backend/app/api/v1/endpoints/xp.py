@@ -43,7 +43,7 @@ async def get_top_user_skills(
     "/leaderboard", response_model=list[dict[str, Any]], status_code=status.HTTP_200_OK
 )
 async def get_leaderboard(
-    sphere: str | None = None,  # filter by sphere
+    sphere: str | None = None,
     limit: int = 10,
     current_user: UserModel = Depends(require_permissions_db("user:view:any")),
     xp_service: XPService = Depends(get_xp_service),

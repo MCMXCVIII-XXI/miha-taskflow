@@ -1,12 +1,12 @@
 from typing import Any
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, status
 from fastapi_cache.decorator import cache
 
 from app.cache import kb
 from app.core.permission import require_permissions_db
 from app.models import User as UserModel
-from app.schemas import UserRead, UserSearch, UserUpdate
+from app.schemas import UserRead, UserUpdate
 from app.service import UserService, get_user_service
 
 router = APIRouter()
@@ -31,60 +31,6 @@ async def get_user(
 ) -> dict[str, Any]:
     """Get specific user's public profile information with top skills."""
     return await svc.get_user(user_id)
-
-
-@router.get("", response_model=list[UserRead], status_code=status.HTTP_200_OK)
-@cache(expire=600, key_builder=kb.search_key_builder)
-async def search_users(
-    search: UserSearch = Depends(),
-    sort: UserSearch = Depends(),
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("user:view:any")),
-    svc: UserService = Depends(get_user_service),
-) -> list[UserRead]:
-    """Search and filter users with pagination and sorting."""
-    return await svc.search_users(search=search, sort=sort, limit=limit, offset=offset)
-
-
-@router.get(
-    "/groups/{group_id}/members",
-    response_model=list[UserRead],
-    status_code=status.HTTP_200_OK,
-)
-async def search_users_in_group(
-    group_id: int,
-    search: UserSearch = Depends(),
-    sort: UserSearch = Depends(),
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("group:view:group")),
-    svc: UserService = Depends(get_user_service),
-) -> list[UserRead]:
-    """Get members of a specific group with search and filtering."""
-    return await svc.search_users_in_group(
-        group_id=group_id, search=search, sort=sort, limit=limit, offset=offset
-    )
-
-
-@router.get(
-    "/tasks/{task_id}/members",
-    response_model=list[UserRead],
-    status_code=status.HTTP_200_OK,
-)
-async def search_users_in_task(
-    task_id: int,
-    search: UserSearch = Depends(),
-    sort: UserSearch = Depends(),
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("task:view:group")),
-    svc: UserService = Depends(get_user_service),
-) -> list[UserRead]:
-    """Get users assigned to a specific task with search and filtering."""
-    return await svc.search_users_in_tasks(
-        task_id=task_id, search=search, sort=sort, limit=limit, offset=offset
-    )
 
 
 @router.patch("/me", response_model=UserRead, status_code=status.HTTP_200_OK)

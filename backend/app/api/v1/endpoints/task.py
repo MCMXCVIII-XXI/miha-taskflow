@@ -1,7 +1,5 @@
-from fastapi import APIRouter, Depends, Query, status
-from fastapi_cache.decorator import cache
+from fastapi import APIRouter, Depends, status
 
-from app.cache import kb
 from app.core.permission import require_permissions_db
 from app.models import User as UserModel
 from app.schemas import (
@@ -9,7 +7,6 @@ from app.schemas import (
     NotificationRead,
     TaskCreate,
     TaskRead,
-    TaskSearch,
     TaskUpdate,
 )
 from app.schemas.enum import (
@@ -37,36 +34,6 @@ async def create_task_for_group(
     )
 
 
-@router.get("", response_model=list[TaskRead], status_code=status.HTTP_200_OK)
-@cache(expire=600, key_builder=kb.search_key_builder)
-async def search_tasks(
-    search: TaskSearch = Depends(),
-    sort: TaskSearch = Depends(),
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("task:view:any")),
-    svc: TaskService = Depends(get_task_service),
-) -> list[TaskRead]:
-    """Search and filter tasks across all groups with pagination."""
-    return await svc.search_tasks(search=search, sort=sort, limit=limit, offset=offset)
-
-
-@router.get("/me", response_model=list[TaskRead], status_code=status.HTTP_200_OK)
-@cache(expire=600, key_builder=kb.search_key_builder)
-async def search_my_tasks(
-    search: TaskSearch = Depends(),
-    sort: TaskSearch = Depends(),
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("task:view:own")),
-    svc: TaskService = Depends(get_task_service),
-) -> list[TaskRead]:
-    """Search and filter own tasks with pagination."""
-    return await svc.search_my_tasks(
-        search=search, sort=sort, limit=limit, offset=offset, current_user=current_user
-    )
-
-
 @router.get(
     "/{task_id}/join-requests",
     response_model=list[JoinRequestRead],
@@ -87,7 +54,6 @@ async def get_task_join_requests(
     status_code=status.HTTP_200_OK,
 )
 async def approve_task_join_request(
-    task_id: int,
     request_id: int,
     current_user: UserModel = Depends(require_permissions_db("task:update:own")),
     svc: TaskService = Depends(get_task_service),
@@ -109,46 +75,6 @@ async def reject_task_join_request(
 ) -> NotificationRead:
     """Reject a join request for a task."""
     return await svc.reject_task_join_request(task_id, request_id, current_user)
-
-
-@router.get(
-    "/groups/{group_id}", response_model=list[TaskRead], status_code=status.HTTP_200_OK
-)
-@cache(expire=600, key_builder=kb.search_key_builder)
-async def search_group_tasks(
-    group_id: int,
-    search: TaskSearch = Depends(),
-    sort: TaskSearch = Depends(),
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("task:view:group")),
-    svc: TaskService = Depends(get_task_service),
-) -> list[TaskRead]:
-    """Get tasks in group (GROUP_ADMIN/MEMBER)."""
-    return await svc.search_group_tasks(
-        group_id=group_id,
-        current_user=current_user,
-        search=search,
-        sort=sort,
-        limit=limit,
-        offset=offset,
-    )
-
-
-@router.get("/assigned", response_model=list[TaskRead], status_code=status.HTTP_200_OK)
-@cache(expire=600, key_builder=kb.search_key_builder)
-async def search_assigned_tasks(
-    search: TaskSearch = Depends(),
-    sort: TaskSearch = Depends(),
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("task:view:any")),
-    svc: TaskService = Depends(get_task_service),
-) -> list[TaskRead]:
-    """Get assigned tasks (TASK_LEADER/MEMBER)."""
-    return await svc.search_assigned_tasks(
-        current_user, search=search, sort=sort, limit=limit, offset=offset
-    )
 
 
 @router.patch("/{task_id}", response_model=TaskRead, status_code=status.HTTP_200_OK)

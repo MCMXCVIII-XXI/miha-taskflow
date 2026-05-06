@@ -1,7 +1,5 @@
-from fastapi import APIRouter, Depends, Query, status
-from fastapi_cache.decorator import cache
+from fastapi import APIRouter, Depends, status
 
-from app.cache import kb
 from app.core.permission import require_permissions_db
 from app.models import User as UserModel
 from app.schemas import (
@@ -9,60 +7,11 @@ from app.schemas import (
     NotificationRead,
     UserGroupCreate,
     UserGroupRead,
-    UserGroupSearch,
     UserGroupUpdate,
 )
 from app.service import GroupService, get_group_service
 
 router = APIRouter()
-
-
-@router.get("", response_model=list[UserGroupRead], status_code=status.HTTP_200_OK)
-@cache(expire=600, key_builder=kb.search_key_builder)
-async def search_groups(
-    search: UserGroupSearch = Depends(),
-    sort: UserGroupSearch = Depends(),
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("group:view:any")),
-    svc: GroupService = Depends(get_group_service),
-) -> list[UserGroupRead]:
-    """Search and filter groups with pagination and sorting."""
-    return await svc.search_groups(search=search, sort=sort, limit=limit, offset=offset)
-
-
-@router.get("/me", response_model=list[UserGroupRead], status_code=status.HTTP_200_OK)
-@cache(expire=600, key_builder=kb.search_key_builder)
-async def search_my_groups(
-    search: UserGroupSearch = Depends(),
-    sort: UserGroupSearch = Depends(),
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("group:view:own")),
-    svc: GroupService = Depends(get_group_service),
-) -> list[UserGroupRead]:
-    """Get groups owned by current user with search and filtering."""
-    return await svc.search_my_groups(
-        search=search, sort=sort, limit=limit, offset=offset, current_user=current_user
-    )
-
-
-@router.get(
-    "/members", response_model=list[UserGroupRead], status_code=status.HTTP_200_OK
-)
-@cache(expire=600, key_builder=kb.search_key_builder)
-async def search_member_groups(
-    search: UserGroupSearch = Depends(),
-    sort: UserGroupSearch = Depends(),
-    limit: int = Query(10, ge=1, le=100),
-    offset: int = Query(0, ge=0),
-    current_user: UserModel = Depends(require_permissions_db("group:view:any")),
-    svc: GroupService = Depends(get_group_service),
-) -> list[UserGroupRead]:
-    """Get groups where user is member (MEMBER+)."""
-    return await svc.search_member_groups(
-        search=search, sort=sort, limit=limit, offset=offset, current_user=current_user
-    )
 
 
 @router.post("", response_model=UserGroupRead, status_code=status.HTTP_201_CREATED)
@@ -76,7 +25,6 @@ async def create_my_group(
 
 
 @router.get("/{group_id}", response_model=UserGroupRead, status_code=status.HTTP_200_OK)
-@cache(expire=1800, key_builder=kb.id_key_builder("group_id"))
 async def get_my_group(
     group_id: int,
     current_user: UserModel = Depends(require_permissions_db("group:view:own")),
@@ -176,7 +124,7 @@ async def reject_join_request(
     request_id: int,
     current_user: UserModel = Depends(require_permissions_db("group:update:own")),
     svc: GroupService = Depends(get_group_service),
-) -> None:
+) -> NotificationRead | None:
     return await svc.reject_join_request(request_id, current_user)
 
 
