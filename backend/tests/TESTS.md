@@ -3,9 +3,9 @@
 ## Quick Start
 
 ```bash
-make test-unit           # Unit tests (159 tests)
-make test-integration    # Integration tests (pytest tests/integration/)
-make test-e2e            # E2E tests with real external services
+make test-unit           
+make test-integration    
+make test-e2e            
 ```
 
 ---
