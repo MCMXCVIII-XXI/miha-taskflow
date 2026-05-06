@@ -1,11 +1,11 @@
 """SQLite test fixtures (default for unit tests and fast integration tests)."""
 
-# Import uuid for fixtures
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import jwt
 import pytest
+import pytest_asyncio
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlalchemy.pool import StaticPool
@@ -15,17 +15,17 @@ from app.db import Base
 from app.models import User
 from app.schemas.enum import GlobalUserRole
 from main import app
-from tests.base_conftest import (
+from tests.base_conftest import (  # noqa: F401
     cleanup_db,
-    create_group_and_task,  # noqa: F401
+    create_group_and_task,
     create_mock_db,
     create_test_client,
-    register_user,  # noqa: F401
+    register_user,
     seed_rbac,
 )
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session")
 async def test_engine():
     """Create test DB engine (SQLite in-memory)."""
     engine = create_async_engine(
@@ -39,20 +39,29 @@ async def test_engine():
     await engine.dispose()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture
+def mock_uow():
+    uow_mock = MagicMock()
+    uow_mock.user = MagicMock()
+    uow_mock.commit = AsyncMock()
+    uow_mock.rollback = AsyncMock()
+    return uow_mock
+
+
+@pytest_asyncio.fixture(scope="session")
 async def session_factory(test_engine):
     """Create test session factory."""
     return async_sessionmaker(test_engine, expire_on_commit=False)
 
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest_asyncio.fixture(autouse=True, scope="session")
 async def init_rbac(session_factory):
     """Seed RBAC data matching production permission pyramid."""
     async with session_factory() as session:
         await seed_rbac(session)
 
 
-@pytest.fixture(scope="session")
+@pytest_asyncio.fixture(scope="session")
 async def test_client(session_factory):
     """HTTP client with test DB."""
 
@@ -62,12 +71,11 @@ async def test_client(session_factory):
     try:
         yield client
     finally:
-        # Restore original dependencies after session
         app.dependency_overrides.clear()
         cache_module.init_cache = original_init_cache  # type: ignore[assignment]
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def auth_headers(test_client: AsyncClient, session_factory):
     """Create unique user for each test - returns auth headers."""
 
@@ -90,7 +98,7 @@ async def auth_headers(test_client: AsyncClient, session_factory):
     }
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def admin_auth_headers(test_client: AsyncClient, session_factory):
     """Create unique admin for each test - returns auth headers."""
 
@@ -123,7 +131,7 @@ async def admin_auth_headers(test_client: AsyncClient, session_factory):
     }
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def testuser_auth_headers(test_client: AsyncClient, session_factory):
     """Fixed user 'testuser' for strict assertions."""
     resp = await test_client.post(
@@ -153,7 +161,7 @@ async def testuser_auth_headers(test_client: AsyncClient, session_factory):
     }
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def testadmin_auth_headers(test_client: AsyncClient, session_factory):
     """Fixed admin 'testadmin' for strict assertions."""
 
@@ -197,7 +205,7 @@ async def testadmin_auth_headers(test_client: AsyncClient, session_factory):
     }
 
 
-@pytest.fixture(autouse=True)
+@pytest_asyncio.fixture(autouse=True)
 async def cleanup_test_data(session_factory):
     """Clean up test data after each test."""
     yield
@@ -247,29 +255,31 @@ def mock_indexer(mock_es):
 @pytest.fixture(autouse=True)
 def mock_prometheus_metrics():
     """Mock all Prometheus metrics to avoid label errors in tests."""
-    mock_metric = MagicMock()
+
+    mock_counter = MagicMock()
     mock_labels = MagicMock()
     mock_labels.inc.return_value = None
     mock_labels.set.return_value = None
-    mock_labels.time.return_value = MagicMock()
-    mock_metric.labels.return_value = mock_labels
-    mock_metric.inc.return_value = None
-    mock_metric.set.return_value = None
+    mock_labels.observe.return_value = None
+    mock_counter.labels.return_value = mock_labels
 
-    with (
-        patch("app.service.user.USER_ACTIONS_TOTAL", mock_metric),
-        patch("app.service.admin.USER_ACTIONS_TOTAL", mock_metric),
-        patch("app.service.task.TASKS_TOTAL", mock_metric),
-        patch("app.service.task.SEARCH_QUERIES_TOTAL", mock_metric),
-        patch("app.service.group.GROUP_ACTIONS_TOTAL", mock_metric),
-        patch("app.service.comment.SOCIAL_ACTIONS_TOTAL", mock_metric),
-        patch("app.service.rating.SOCIAL_ACTIONS_TOTAL", mock_metric),
-        patch("app.service.notification.NOTIFICATION_SENT_TOTAL", mock_metric),
-        patch("app.service.xp.XP_CHANGES_TOTAL", mock_metric),
-        patch("app.service.xp.SEARCH_QUERIES_TOTAL", mock_metric),
-        patch("app.service.search.es_search.SEARCH_QUERIES_TOTAL", mock_metric),
-        patch("app.service.search.es_search.SEARCH_LATENCY_SECONDS", mock_metric),
-        patch("app.core.middleware.http_requests_total", mock_metric),
-        patch("app.core.middleware.http_request_duration_seconds", mock_metric),
-    ):
-        yield
+    mock_metrics = MagicMock()
+
+    metrics_list = [
+        "USER_ACTIONS_TOTAL",
+        "TASKS_TOTAL",
+        "SEARCH_QUERIES_TOTAL",
+        "GROUP_ACTIONS_TOTAL",
+        "SOCIAL_ACTIONS_TOTAL",
+        "NOTIFICATION_SENT_TOTAL",
+        "XP_CHANGES_TOTAL",
+        "SEARCH_LATENCY_SECONDS",
+        "http_requests_total",
+        "http_request_duration_seconds",
+    ]
+
+    for metric_name in metrics_list:
+        setattr(mock_metrics, metric_name, mock_counter)
+
+    with patch("app.core.metrics.METRICS", mock_metrics):
+        yield mock_metrics

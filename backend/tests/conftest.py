@@ -11,8 +11,8 @@ import os
 USE_POSTGRES = os.getenv("POSTGRES_DB") is not None
 
 if USE_POSTGRES:
-    # Import PostgreSQL fixtures from pg_conftest
+    # Integration tests with PostgreSQL
     from tests.pg_conftest import *  # noqa: F403
 else:
-    # Import SQLite fixtures from conftest_sqlite
+    # Unit tests with SQLite
     from tests.conftest_sqlite import *  # noqa: F403
