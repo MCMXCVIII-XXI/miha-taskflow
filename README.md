@@ -213,7 +213,7 @@ taskflow/
 
 ## Running the Project
 
-### Via Docker Compose (recommended)
+### Via Docker Compose 
 
 ```bash
 # Clone repository
@@ -222,12 +222,15 @@ cd taskflow
 
 # Start all services
 docker-compose up -d
+```
 
-# Apply migrations
-docker-compose exec backend alembic upgrade head
+### Make (recommended)
 
-# Reindex Elasticsearch (if needed)
-docker-compose exec backend python -m app.cli.commands reindex-all
+```bash
+git clone <repo-url>
+cd taskflow/backend
+
+make infra-up
 ```
 
 ### Local Development
