@@ -1,443 +1,504 @@
-"""PostgreSQL test fixtures (via Testcontainers + alembic migrations)."""
+"""PostgreSQL, Redis & ES test fixtures (via Testcontainers)."""
 
+import asyncio
 import os
 import subprocess
-
-# Import uuid for fixtures
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch
+from collections.abc import AsyncGenerator
+from typing import Any
+from unittest.mock import MagicMock, patch
 
-import jwt
+import elasticsearch
 import pytest
-from fastapi import Depends
+import pytest_asyncio
+import redis.asyncio as aioredis
+import sqlalchemy
+from elasticsearch import AsyncElasticsearch
 from fastapi_cache import FastAPICache
+from fastapi_cache.backends.redis import RedisBackend
 from httpx import AsyncClient
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from sqlalchemy.orm import selectinload as _selectinload
 from sqlalchemy.pool import NullPool
 from testcontainers.elasticsearch import ElasticSearchContainer
 from testcontainers.postgres import PostgresContainer
+from testcontainers.redis import RedisContainer
 
-import app.cache as cache_module
-from app.db import db_helper
-from app.es import (
-    ElasticsearchIndexer,
-    ElasticsearchSearch,
-    es_helper,
-    get_es_indexer,
-    get_es_search,
-)
 from app.models import User
 from app.schemas.enum import GlobalUserRole
-from app.service.notification import NotificationService, get_notification_service
-from main import app
-from tests.base_conftest import (
-    cleanup_db,  # noqa: F401
-    create_group_and_task,  # noqa: F401
-    create_mock_db,
+
+from .base_conftest import (  # noqa: F401
+    cleanup_db,
+    create_group_and_task,
     create_test_client,
-    register_user,  # noqa: F401
+    register_user,
     seed_rbac,
 )
-from tests.mock_cache import MockRedisBackend
+
+if not hasattr(sqlalchemy, "selectinload"):
+    sqlalchemy.selectinload = _selectinload
+
+from app.background.celery import celery_app
+from app.db import db_helper
+
+# --- Global containers ---
+_es_container = None
+
+
+def pytest_configure(config):
+    """Start ES container before app imports - set ES_URL env var."""
+    global _es_container
+    _es_container = ElasticSearchContainer(
+        "docker.elastic.co/elasticsearch/elasticsearch:9.3.3"
+    )
+    _es_container.with_env("discovery.type", "single-node")
+    _es_container.with_env("xpack.security.enabled", "false")
+    _es_container.with_env("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
+    _es_container.start()
+
+    es_port = _es_container.get_exposed_port(9200)
+    es_url = f'["http://127.0.0.1:{es_port}"]'
+    os.environ["ES_URL"] = es_url
+
+    import app.es as es_module
+    from app.core.config import es_settings
+    from app.es.client import ElasticsearchHelper
+
+    new_helper = ElasticsearchHelper(es_settings)
+    new_helper._auto_setup_dsl = False
+    es_module.es_helper = new_helper
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Stop ES container after all tests."""
+    global _es_container
+    if _es_container:
+        _es_container.stop()
+        _es_container = None
+
+
+async def override_get_session():
+    """Override for db_helper.get_session dependency."""
+    from tests.pg_conftest import _test_session_factory
+
+    if _test_session_factory:
+        async with _test_session_factory() as session:
+            yield session
+
+
+_test_session_factory = None
+
+
+# --- Infrastructure ---
+
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create event loop for session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
 
 
 @pytest.fixture(scope="session")
 def postgres_container():
-    """Start PostgreSQL container for test session."""
-    container = PostgresContainer("postgres:16-alpine")
-    container.start()
-    yield container
-    container.stop()
+    with PostgresContainer("postgres:16-alpine") as container:
+        yield container
 
 
 @pytest.fixture(scope="session")
 def es_container():
-    """Start Elasticsearch container for test session (available for manual testing)."""
-    container = ElasticSearchContainer(
-        "docker.elastic.co/elasticsearch/elasticsearch:9.3.3",
-        port=9200,
-    )
-    container.with_env("discovery.type", "single-node")
-    container.with_env("xpack.security.enabled", "false")
-    container.with_env("ES_JAVA_OPTS", "-Xms512m -Xmx512m")
-    container.start()
-    yield container
-    container.stop()
-
-
-def get_postgres_url(container: PostgresContainer | None = None):
-    """Get PostgreSQL URL from container or environment."""
-    if container:
-        # Use container's connection URL
-        db_url = container.get_connection_url().replace("psycopg2", "asyncpg")
-        return db_url
-    else:
-        # Fallback to environment variables
-        user = os.getenv("POSTGRES_USER", "user")
-        password = os.getenv("POSTGRES_PASSWORD", "pass")
-        host = os.getenv("POSTGRES_HOST", "localhost")
-        port = os.getenv("POSTGRES_PORT", "5432")
-        db = os.getenv("POSTGRES_DB", "taskflow_test")
-        return f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db}"
+    """Return ES container started in pytest_configure."""
+    return _es_container
 
 
 @pytest.fixture(scope="session")
-async def test_engine(postgres_container):
-    """Create test DB engine (PostgreSQL via Testcontainers + alembic)."""
-    db_url = get_postgres_url(postgres_container)
+def redis_container():
+    """Start Redis container."""
+    with RedisContainer("redis:8.4.2-alpine") as container:
+        yield container
 
-    # Set DATABASE_URL and DB_URL for alembic and config
+
+# --- DB & Celery ---
+
+_migrations_done = False
+
+
+@pytest_asyncio.fixture(scope="session")
+async def test_engine(postgres_container, event_loop):
+    global _migrations_done
+
+    db_url = postgres_container.get_connection_url().replace("psycopg2", "asyncpg")
     os.environ["DATABASE_URL"] = db_url
     os.environ["DB_URL"] = db_url
 
-    engine = create_async_engine(
-        db_url,
-        poolclass=NullPool,
-        echo=False,
-    )
+    if not _migrations_done:
+        result = subprocess.run(
+            ["uv", "run", "alembic", "upgrade", "head"],  # noqa: S607
+            capture_output=True,
+            text=True,
+            env={**os.environ, "DATABASE_URL": db_url, "DB_URL": db_url},
+        )
+        if result.returncode != 0:
+            pytest.fail(f"Alembic migration failed: {result.stderr}")
+        _migrations_done = True
 
-    # Run alembic migrations
-    result = subprocess.run(
-        ["uv", "run", "alembic", "upgrade", "head"],  # noqa: S607
-        capture_output=True,
-        text=True,
-        env={**os.environ, "DATABASE_URL": db_url, "DB_URL": db_url},
-    )
-    if result.returncode != 0:
-        pytest.fail(f"Alembic migration failed: {result.stderr}")
-
+    engine = create_async_engine(db_url, poolclass=NullPool, echo=False)
     yield engine
     await engine.dispose()
 
 
-@pytest.fixture(scope="session")
-async def session_factory(test_engine):
-    """Create test session factory."""
-    return async_sessionmaker(test_engine, expire_on_commit=False)
+_current_test_schema = None
 
 
-@pytest.fixture(autouse=True, scope="session")
-async def init_rbac(session_factory):
-    """Seed RBAC data matching production permission pyramid."""
+def set_current_schema(schema_name: str) -> None:
+    global _current_test_schema
+    _current_test_schema = schema_name
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_schema(test_engine: Any) -> AsyncGenerator[str, None]:
+    schema_name = f"test_{uuid.uuid4().hex[:8]}"
+    async with test_engine.connect() as conn:
+        await conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{schema_name}"'))
+        await conn.commit()
+
+        await conn.execute(text(f"SET search_path TO {schema_name}"))
+        await conn.commit()
+
+        if not hasattr(test_schema, "_migrations_done"):
+            result = subprocess.run(
+                ["uv", "run", "alembic", "upgrade", "head"],  # noqa: S607
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                pytest.fail(...)
+            test_schema._migrations_done = True
+
+    session_factory = async_sessionmaker(test_engine, expire_on_commit=False)
     async with session_factory() as session:
+        await session.execute(text(f"SET search_path TO {schema_name}"))
+        await session.commit()
         await seed_rbac(session)
 
+    yield schema_name
 
-class MockESClient:
-    """Mock Elasticsearch client for tests."""
-
-    def __init__(self):
-        self._documents: dict = {
-            "tasks_v1": {},
-            "users_v1": {},
-            "groups_v1": {},
-            "comments_v1": {},
-            "notifications_v1": {},
-        }
-
-    async def index(self, index: str, id: int, document: dict):
-        if index not in self._documents:
-            self._documents[index] = {}
-        self._documents[index][str(id)] = document
-        return {"result": "created", "_id": str(id), "_index": index}
-
-    async def delete(self, index: str, id: int):
-        if index in self._documents and str(id) in self._documents[index]:
-            del self._documents[index][str(id)]
-        return {"result": "deleted"}
-
-    async def search(
-        self, index: str | None = None, body: dict | None = None, **kwargs
-    ):
-        hits = []
-        facets = {
-            "status": {
-                "buckets": [
-                    {"key": "pending", "doc_count": 1},
-                    {"key": "in_progress", "doc_count": 1},
-                ]
-            },
-            "priority": {
-                "buckets": [
-                    {"key": "high", "doc_count": 1},
-                    {"key": "medium", "doc_count": 1},
-                ]
-            },
-        }
-
-        target_index = index or next(iter(self._documents.keys()))
-        if "*" in target_index:
-            docs = {}
-            for idx in self._documents.items():
-                docs.update(idx.value)
-        else:
-            docs = self._documents.get(target_index, {})
-
-        query_dict = body or kwargs.get("query", {})
-
-        if query_dict and "query" in query_dict:
-            query = query_dict["query"]
-            if "bool" in query:
-                for clause in query["bool"]:
-                    if "multi_match" in clause:
-                        search_term = clause["multi_match"].get("query", "").lower()
-                        for doc in docs.values():
-                            if any(search_term in str(v).lower() for v in doc.values()):
-                                hits.append({"_source": dict(doc), "_score": 1.0})
-
-        if not hits:
-            for doc in docs.values():
-                hits.append({"_source": dict(doc), "_score": 1.0})
-
-        return {
-            "hits": {"total": {"value": len(hits)}, "hits": hits},
-            "aggregations": facets,
-            "facets": facets,
-        }
-
-    async def ping(self):
-        return True
-
-    async def close(self):
-        pass
-
-    @property
-    def indices(self):
-        return MockESClient._IndicesManager(self)
-
-    class _IndicesManager:
-        def __init__(self, client):
-            self._client = client
-
-        async def exists(self, index: str):
-            return True
-
-        async def create(self, index: str, **kwargs):
-            return {"acknowledged": True}
-
-        async def delete(self, index: str, **kwargs):
-            return {"acknowledged": True}
-
-        async def refresh(self, index: str = "*"):
-            return {"_shards": {"total": 1, "successful": 1}}
-
-
-@pytest.fixture(scope="session")
-async def test_client(session_factory):
-    """HTTP client with test DB and mocked Elasticsearch."""
-
-    original_init_cache = cache_module.init_cache
-
-    FastAPICache.init(MockRedisBackend(), prefix="fastapi-cache")
-
-    es_client = MockESClient()
-
-    test_tasks = [
-        {
-            "id": 1,
-            "title": "Fix bug",
-            "description": "Fix critical bug",
-            "status": "pending",
-            "priority": "high",
-            "group_id": 1,
-            "created_at": "2026-04-13T00:00:00Z",
-            "updated_at": "2026-04-13T00:00:00Z",
-        },
-        {
-            "id": 2,
-            "title": "Write tests",
-            "description": "Write integration tests",
-            "status": "in_progress",
-            "priority": "medium",
-            "group_id": 1,
-            "created_at": "2026-04-13T00:00:00Z",
-            "updated_at": "2026-04-13T00:00:00Z",
-        },
-    ]
-    for task in test_tasks:
-        await es_client.index(index="tasks_v1", id=task["id"], document=task)
-
-    test_users = [
-        {
-            "id": 1,
-            "username": "john",
-            "email": "john@test.com",
-            "first_name": "John",
-            "last_name": "Doe",
-            "role": "user",
-            "is_active": True,
-        },
-        {
-            "id": 2,
-            "username": "admin",
-            "email": "admin@test.com",
-            "first_name": "Admin",
-            "last_name": "User",
-            "role": "admin",
-            "is_active": True,
-        },
-    ]
-    for user in test_users:
-        await es_client.index(index="users_v1", id=user["id"], document=user)
-
-    test_groups = [
-        {
-            "id": 1,
-            "name": "Developers",
-            "description": "Dev team",
-            "admin_id": 1,
-            "visibility": "public",
-            "join_policy": "open",
-        },
-        {
-            "id": 2,
-            "name": "Admins",
-            "description": "Admin team",
-            "admin_id": 2,
-            "visibility": "private",
-            "join_policy": "request",
-        },
-    ]
-    for group in test_groups:
-        await es_client.index(index="groups_v1", id=group["id"], document=group)
-
-    test_comments = [
-        {"id": 1, "content": "Great work!", "task_id": 1, "user_id": 1},
-        {"id": 2, "content": "Need fixes", "task_id": 1, "user_id": 2},
-    ]
-    for comment in test_comments:
-        await es_client.index(index="comments_v1", id=comment["id"], document=comment)
-
-    test_notifications = [
-        {
-            "id": 1,
-            "title": "New invite",
-            "message": "You have invite",
-            "user_id": 1,
-            "type": "invite",
-        },
-    ]
-    for notif in test_notifications:
-        await es_client.index(index="notifications_v1", id=notif["id"], document=notif)
-
-    def override_get_notification_service(
-        db: AsyncSession = Depends(db_helper.get_session),
-        indexer: ElasticsearchIndexer = Depends(get_es_indexer),
-    ) -> NotificationService:
-        return NotificationService(db, indexer)
-
-    def override_get_es_indexer() -> ElasticsearchIndexer:
-        return ElasticsearchIndexer(es_client)
-
-    def override_get_es_search() -> ElasticsearchSearch:
-        return ElasticsearchSearch(es_client)
-
-    def override_es_helper_get_client():
-        return es_client
-
-    app.dependency_overrides[get_notification_service] = (
-        override_get_notification_service
-    )
-    app.dependency_overrides[get_es_indexer] = override_get_es_indexer
-    app.dependency_overrides[get_es_search] = override_get_es_search
-    app.dependency_overrides[es_helper.get_client] = override_es_helper_get_client
-
-    client = await create_test_client(session_factory)
-    async with client as c:
-        yield c
-
-    app.dependency_overrides.clear()
-    cache_module.init_cache = original_init_cache
+    async with test_engine.connect() as conn:
+        await conn.execute(text(f'DROP SCHEMA IF EXISTS "{schema_name}" CASCADE'))
+        await conn.commit()
 
 
 @pytest.fixture
-async def auth_headers(test_client: AsyncClient, session_factory):
-    """Create unique user for each test - returns auth headers."""
+def schema_session_factory(test_engine, test_schema):
+    set_current_schema(test_schema)
+    return async_sessionmaker(test_engine, expire_on_commit=False)
 
+
+@pytest_asyncio.fixture
+async def es_client(es_container):
+    """Create Elasticsearch client - one index for all tests."""
+    host = es_container.get_container_host_ip()
+    port = es_container.get_exposed_port(9200)
+
+    os.environ["ELASTICSEARCH_URL"] = f'["http://{host}:{port}"]'
+
+    client = AsyncElasticsearch(
+        hosts=[f"http://{host}:{port}"],
+        sniff_on_start=False,
+        sniff_on_node_failure=False,
+    )
+
+    index_name = "test_index"
+    await client.indices.create(index=index_name, ignore=400)
+
+    alias_names = [
+        "tasks_v1",
+        "users_v1",
+        "groups_v1",
+        "comments_v1",
+        "notifications_v1",
+    ]
+    for alias_name in alias_names:
+        try:
+            await client.indices.put_alias(index=index_name, name=alias_name)
+        except elasticsearch.exceptions.RequestError:
+            pass
+
+    yield client
+
+    await client.delete_by_query(
+        index=index_name,
+        body={"query": {"match_all": {}}},
+        refresh=True,
+    )
+    await client.close()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def isolated_es_client(es_container, request):
+    """Create isolated Elasticsearch client with per-test indexes."""
+    test_name = (
+        request.node.name[:20].replace("[", "").replace("]", "").replace("/", "_")
+    )
+    host = es_container.get_container_host_ip()
+    port = es_container.get_exposed_port(9200)
+
+    client = AsyncElasticsearch(
+        hosts=[f"http://{host}:{port}"],
+        sniff_on_start=False,
+        sniff_on_node_failure=False,
+    )
+
+    index_names = [
+        "tasks_v1",
+        "users_v1",
+        "groups_v1",
+        "comments_v1",
+        "notifications_v1",
+    ]
+    for alias_name in index_names:
+        idx = f"{test_name}_{alias_name}"
+        try:
+            await client.indices.create(index=idx, ignore=400)
+            await client.indices.put_alias(index=idx, name=alias_name)
+        except Exception:  # noqa: S110 BLE001
+            pass
+
+    yield client
+
+    for alias_name in index_names:
+        idx = f"{test_name}_{alias_name}"
+        try:
+            await client.indices.delete(index=idx, ignore=404)
+        except Exception:  # noqa: S110 BLE001
+            pass
+    await client.close()
+
+
+@pytest_asyncio.fixture(autouse=True, scope="session")
+def setup_celery():
+    """Configure Celery for synchronous execution in tests."""
+    celery_app.conf.update(task_always_eager=True, task_eager_propagates=True)
+
+
+# --- Test Client ---
+
+_test_session_factory = None
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_client(
+    schema_session_factory,
+    isolated_es_client,
+    redis_container,
+    test_schema,
+):
+    db_helper.engine = schema_session_factory.kw["bind"]
+    db_helper.session_factory = schema_session_factory
+
+    redis_host = redis_container.get_container_host_ip()
+    redis_port = redis_container.get_exposed_port(6379)
+    redis_url = f"redis://{redis_host}:{redis_port}/0"
+    os.environ["CACHE_URL"] = redis_url
+    redis_client = aioredis.from_url(redis_url, encoding="utf-8", decode_responses=True)
+    await redis_client.flushdb()
+    FastAPICache.init(RedisBackend(redis_client), prefix="fastapi-cache")
+
+    async with await create_test_client(schema_session_factory) as client:
+        yield client
+
+    FastAPICache.reset()
+    await redis_client.close()
+
+
+# --- Cleanup ---
+
+
+@pytest_asyncio.fixture(autouse=True)
+async def cleanup_schemas(test_engine, isolated_es_client, redis_container):
+    """Only Redis/ES cleanup, DB is dropped via test schema."""
+    yield
+
+    redis_host = redis_container.get_container_host_ip()
+    redis_port = redis_container.get_exposed_port(6379)
+    cleanup_redis = aioredis.from_url(
+        f"redis://{redis_host}:{redis_port}/0", encoding="utf-8", decode_responses=True
+    )
+    await cleanup_redis.flushdb()
+    await cleanup_redis.flushall()
+    FastAPICache.reset()
+    await cleanup_redis.close()
+
+    try:
+        test_name = isolated_es_client._transport.hosts[0].get("url", "").split("/")[-1]
+        if test_name:
+            for alias in [
+                "tasks_v1",
+                "users_v1",
+                "groups_v1",
+                "comments_v1",
+                "notifications_v1",
+            ]:
+                idx_name = f"{test_name}_{alias}"
+                try:
+                    await isolated_es_client.indices.delete(
+                        index=idx_name, ignore=[404]
+                    )
+                except Exception:  # noqa: S110 BLE001
+                    pass
+    except Exception:  # noqa: S110 BLE001
+        pass
+
+
+# --- Auth Fixtures ---
+
+
+@pytest_asyncio.fixture
+async def auth_headers(test_client: AsyncClient, schema_session_factory):
     uid = uuid.uuid4().hex[:8]
+    username = f"user_{uid}"
+    email = f"user_{uid}@test.com"
+
+    async with schema_session_factory() as session:
+        await session.execute(
+            text("DELETE FROM users WHERE username = :username"),
+            {"username": username},
+        )
+        await session.commit()
+
     resp = await test_client.post(
         "/auth",
         json={
-            "username": f"user_{uid}",
-            "email": f"user_{uid}@test.com",
-            "password": "Test123456789",
+            "username": username,
+            "email": email,
+            "password": "TestUser123",
             "first_name": "Test",
             "last_name": "User",
         },
     )
-    token = resp.json()["access_token"]
+    assert resp.status_code == 201
+
+    async with schema_session_factory() as session:
+        await session.execute(
+            text("UPDATE users SET role = 'USER' WHERE username = :username"),
+            {"username": username},
+        )
+        await session.commit()
+
+    login_resp = await test_client.post(
+        "/auth/token",
+        data={"username": username, "password": "TestUser123"},
+    )
+    assert login_resp.status_code == 200
+
+    token = login_resp.json()["access_token"]
     return {
         "Authorization": f"Bearer {token}",
-        "username": f"user_{uid}",
-        "email": f"user_{uid}@test.com",
+        "username": username,
+        "email": email,
     }
 
 
-@pytest.fixture
-async def admin_auth_headers(test_client: AsyncClient, session_factory):
-    """Create unique admin for each test - returns auth headers."""
-
+@pytest_asyncio.fixture
+async def admin_auth_headers(
+    test_client: AsyncClient,
+    schema_session_factory,
+):
+    """Create admin and seed RBAC (ADMIN role) for this schema."""
     uid = uuid.uuid4().hex[:8]
+    username = f"admin_{uid}"
+    email = f"admin_{uid}@test.com"
+
     resp = await test_client.post(
         "/auth",
         json={
-            "username": f"admin_{uid}",
-            "email": f"admin_{uid}@test.com",
+            "username": username,
+            "email": email,
             "password": "TestAdmin123456",
             "first_name": "Admin",
             "last_name": "Test",
         },
     )
+    assert resp.status_code == 201
 
-    token = resp.json()["access_token"]
-    payload = jwt.decode(token, options={"verify_signature": False})
-    admin_id = int(payload.get("sub"))
+    login_resp = await test_client.post(
+        "/auth/token",
+        data={"username": username, "password": "TestAdmin123456"},
+    )
+    assert login_resp.status_code == 200
 
-    async with session_factory() as session:
-        user = await session.get(User, admin_id)
-        if user:
-            user.role = GlobalUserRole.ADMIN
-            await session.commit()
+    async with schema_session_factory() as session:
+        user = await session.execute(
+            text("SELECT id FROM users WHERE username = :username"),
+            {"username": username},
+        )
+        user_id = user.scalar()
 
+        await session.execute(
+            text("UPDATE users SET role = 'ADMIN' WHERE id = :id"), {"id": user_id}
+        )
+
+        await seed_rbac(session)
+
+        await session.commit()
+
+    token = login_resp.json()["access_token"]
     return {
         "Authorization": f"Bearer {token}",
-        "username": f"admin_{uid}",
-        "email": f"admin_{uid}@test.com",
+        "username": username,
+        "email": email,
     }
 
 
-@pytest.fixture
-async def testuser_auth_headers(test_client: AsyncClient, session_factory):
-    """Fixed user 'testuser' for strict assertions."""
+@pytest_asyncio.fixture
+async def testuser_auth_headers(test_client: AsyncClient, schema_session_factory):
+    username = "testuser"
+    email = "test@test.com"
+    password = "Test123456789"  # noqa: S105
+
+    async with schema_session_factory() as session:
+        await session.execute(
+            text("DELETE FROM users WHERE username = :username"),
+            {"username": username},
+        )
+        await session.commit()
+
     resp = await test_client.post(
         "/auth",
         json={
-            "username": "testuser",
-            "email": "test@test.com",
-            "password": "Test123456789",
+            "username": username,
+            "email": email,
+            "password": password,
             "first_name": "Test",
-            "last_name": "Userov",
-            "patronymic": "Testovich",
+            "last_name": "User",
         },
     )
-    if resp.status_code == 409:
-        token_resp = await test_client.post(
-            "/auth/token",
-            data={"username": "testuser", "password": "Test123456789"},
-        )
-        token = token_resp.json()["access_token"]
-    else:
-        token = resp.json()["access_token"]
+    assert resp.status_code == 201
 
+    async with schema_session_factory() as session:
+        await session.execute(
+            text("UPDATE users SET role = 'USER' WHERE username = :username"),
+            {"username": username},
+        )
+        await session.commit()
+
+    login_resp = await test_client.post(
+        "/auth/token",
+        data={"username": username, "password": password},
+    )
+    assert login_resp.status_code == 200
+
+    token = login_resp.json()["access_token"]
     return {
         "Authorization": f"Bearer {token}",
-        "username": "testuser",
-        "email": "test@test.com",
+        "username": username,
+        "email": email,
     }
 
 
-@pytest.fixture
+@pytest_asyncio.fixture
 async def testadmin_auth_headers(test_client: AsyncClient, session_factory):
     """Fixed admin 'testadmin' for strict assertions."""
 
@@ -462,7 +523,7 @@ async def testadmin_auth_headers(test_client: AsyncClient, session_factory):
         payload = jwt.decode(token, options={"verify_signature": False})
         admin_id = int(payload.get("sub"))
 
-        async with session_factory() as session:
+        async with schema_session_factory() as session:
             user = await session.get(User, admin_id)
             if user:
                 user.role = GlobalUserRole.ADMIN
@@ -482,99 +543,33 @@ async def testadmin_auth_headers(test_client: AsyncClient, session_factory):
 
 
 @pytest.fixture(autouse=True)
-async def cleanup_test_data(session_factory):
-    """Clean up test data after each test (TRUNCATE for PostgreSQL)."""
-    yield
-    async with session_factory() as session:
-        try:
-            for table in [
-                "task_assignees",
-                "tasks",
-                "user_group_memberships",
-                "user_groups",
-                "notifications",
-                "user_roles",
-                "users",
-            ]:
-                await session.execute(text(f"TRUNCATE TABLE {table} CASCADE"))
-            await session.commit()
-        except Exception:  # noqa: BLE001
-            await session.rollback()
-
-        from fastapi_cache import FastAPICache
-
-        try:
-            backend = FastAPICache.get_backend()
-            if hasattr(backend, "_store"):
-                backend._store.clear()
-        except AssertionError:
-            pass  # Cache not initialized
-
-
-@pytest.fixture
-def mock_db():
-    """Mock session for unit tests."""
-    return create_mock_db()
-
-
-@pytest.fixture
-def mock_es():
-    """Mock Elasticsearch client for unit tests."""
-    client = MagicMock()
-    client.index = AsyncMock()
-    client.delete = AsyncMock()
-    client.search = AsyncMock()
-    client.ping = AsyncMock(return_value=True)
-    client.indices = MagicMock()
-    client.indices.refresh = AsyncMock()
-    client.indices.exists = AsyncMock(return_value=False)
-    client.indices.create = AsyncMock()
-    return client
-
-
-@pytest.fixture
-def mock_indexer(mock_es):
-    """Mock ElasticsearchIndexer for unit tests."""
-    mock_indexer_instance = MagicMock()
-    mock_indexer_instance.index_task = AsyncMock()
-    mock_indexer_instance.index_user = AsyncMock()
-    mock_indexer_instance.index_group = AsyncMock()
-    mock_indexer_instance.index_comment = AsyncMock()
-    mock_indexer_instance.index_notification = AsyncMock()
-    mock_indexer_instance.delete_task = AsyncMock(return_value=True)
-    mock_indexer_instance.delete_user = AsyncMock(return_value=True)
-    mock_indexer_instance.delete_group = AsyncMock(return_value=True)
-    mock_indexer_instance.delete_comment = AsyncMock(return_value=True)
-    mock_indexer_instance.delete_notification = AsyncMock(return_value=True)
-    return mock_indexer_instance
-
-
-@pytest.fixture(autouse=True)
 def mock_prometheus_metrics():
-    """Mock all Prometheus metrics to avoid label errors in tests."""
-    mock_metric = MagicMock()
+    """Mock Prometheus metrics."""
+
+    mock_counter = MagicMock()
     mock_labels = MagicMock()
     mock_labels.inc.return_value = None
     mock_labels.set.return_value = None
-    mock_labels.time.return_value = MagicMock()
-    mock_metric.labels.return_value = mock_labels
-    mock_metric.inc.return_value = None
-    mock_metric.set.return_value = None
+    mock_labels.observe.return_value = None
+    mock_counter.labels.return_value = mock_labels
 
-    with (
-        patch("app.service.user.USER_ACTIONS_TOTAL", mock_metric),
-        patch("app.service.admin.USER_ACTIONS_TOTAL", mock_metric),
-        patch("app.service.task.TASKS_TOTAL", mock_metric),
-        patch("app.service.task.SEARCH_QUERIES_TOTAL", mock_metric),
-        patch("app.service.group.GROUP_ACTIONS_TOTAL", mock_metric),
-        patch("app.service.comment.SOCIAL_ACTIONS_TOTAL", mock_metric),
-        patch("app.service.rating.SOCIAL_ACTIONS_TOTAL", mock_metric),
-        patch("app.service.notification.NOTIFICATION_SENT_TOTAL", mock_metric),
-        patch("app.service.xp.XP_CHANGES_TOTAL", mock_metric),
-        patch("app.service.xp.SEARCH_QUERIES_TOTAL", mock_metric),
-        patch("app.service.search.es_search.SEARCH_QUERIES_TOTAL", mock_metric),
-        patch("app.service.search.es_search.SEARCH_LATENCY_SECONDS", mock_metric),
-        patch("app.core.middleware.http_requests_total", mock_metric),
-        patch("app.core.middleware.http_request_duration_seconds", mock_metric),
-    ):
-        yield
+    mock_metrics = MagicMock()
+
+    metrics_list = [
+        "USER_ACTIONS_TOTAL",
+        "TASKS_TOTAL",
+        "SEARCH_QUERIES_TOTAL",
+        "GROUP_ACTIONS_TOTAL",
+        "SOCIAL_ACTIONS_TOTAL",
+        "NOTIFICATION_SENT_TOTAL",
+        "XP_CHANGES_TOTAL",
+        "SEARCH_LATENCY_SECONDS",
+        "http_requests_total",
+        "http_request_duration_seconds",
+    ]
+
+    for metric_name in metrics_list:
+        setattr(mock_metrics, metric_name, mock_counter)
+
+    with patch("app.core.metrics.METRICS", mock_metrics):
+        yield mock_metrics
