@@ -1,6 +1,14 @@
 # TaskFlow
 
-Task management system with RPG elements (XP, levels, ratings).
+Task management system with RPG elements: XP, levels, ratings, groups, and real-time workflows.
+
+![Python](https://img.shields.io/badge/Python-3.12+-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-336791)
+![Tests](https://img.shields.io/badge/Tests-600+-success)
+![License](https://img.shields.io/badge/License-MIT-lightgrey)
+
+> A layered FastAPI backend for task management, search, notifications, and gamification.
 
 ---
 
@@ -38,38 +46,38 @@ Task management system with RPG elements (XP, levels, ratings).
 
 The project follows a layered architecture:
 
-```
-API (app/api/) → Service (app/service/) → Repositories (app/repositories/)
-                                    ↓
-                          Transactions (app/service/transactions/) → UnitOfWork
-                                    ↓
-                          DB (app/db/, app/models/) + ES (app/es/, app/documents/)
+```mermaid
+graph LR
+    API[API Layer<br/>app/api] --> Domain[Domain Layer<br/>app/service]
+    Domain --> DataAccess[Data Access Layer<br/>app/repositories]
+    DataAccess --> DB[(PostgreSQL)]
+    Domain --> ES[(Elasticsearch)]
+    Domain --> Cache[(Redis)]
+    Domain -.-> BG[Background<br/>app/background]
 ```
 
 ### Application Layers
 
 1. **Presentation Layer** (`app/api/`) — FastAPI routers, endpoints
-2. **Business Logic Layer** (`app/service/`) — business logic, transactions
+2. **Domain Layer** (`app/service/`, `app/models/`, `app/schemas/`, `app/documents/`) — business logic + data models
+   - **Transactions** (`app/service/transactions/`) — atomic operations
+   - **Search** (`app/service/search/`) — DB + Elasticsearch
 3. **Data Access Layer** (`app/repositories/`) — repositories, UnitOfWork
-4. **Model Layer** (`app/models/`, `app/schemas/`, `app/documents/`) — data models
-5. **Infrastructure Layer** (`app/core/`, `app/background/`) — infrastructure
-6. **Caching Layer** (`app/cache/`) — Redis caching
-7. **CLI Layer** (`app/cli/`) — management commands
+4. **Infrastructure Layer** (`app/core/`, `app/db/`, `app/background/`, `app/cache/`, `app/utils/`) — infrastructure
 
 ---
 
 ## Key Features
 
 ### XP System (RPG)
-- Experience points (XP) award for task completion
-- Level system (Level 1-100+)
+- Experience points (XP) awarded for task completion
+- Level system with defined progression tiers
 - Daily XP limits (500 XP/day)
 - Ranks and titles for users
 
 ### Task Management
 - Create, edit, delete tasks
 - Task assignees (TaskAssignee)
-- Subtasks and hierarchy
 - Statuses, priorities, difficulty (TaskDifficulty)
 - Task spheres (TaskSphere)
 
@@ -101,6 +109,10 @@ API (app/api/) → Service (app/service/) → Repositories (app/repositories/)
 - Beat scheduler for periodic tasks
 - Outbox event processing
 - Elasticsearch indexing
+
+### Ratings and Leaderboard
+- User ratings and scoring system
+- Dynamic leaderboard by XP/sphere
 
 ---
 
@@ -157,13 +169,7 @@ API (app/api/) → Service (app/service/) → Repositories (app/repositories/)
 | **TaskAssignee** | Task Assignee | task_id, user_id, assigned_at |
 | **UserRole** | User Role | user_id, role, group_id (contextual role) |
 
-### Entity Relationships
-- User (1:N) → Task (creator)
-- User (N:M) → Task (assignees via TaskAssignee)
-- UserGroup (1:N) → Task (group tasks)
-- UserGroup (N:M) → User (members via UserRole)
-- Task (1:N) → Comment (comments)
-- User (1:N) → Notification (notifications)
+These are the main entities used across the system.
 
 ---
 
@@ -214,43 +220,67 @@ taskflow/
 
 ## Environment Variables
 
-| Variable | Description | Example |
-|----------|-------------|---------|
-| `TOKEN_SECRET_KEY` | JWT secret key | |
-| `TOKEN_ALGORITHM` | JWT algorithm | HS256 |
-| `DATABASE_URL` | PostgreSQL connection | postgresql+asyncpg://user:pass@db:5432/taskflow |
-| `CACHE_URL` | Redis connection | redis://cache:6379/0 |
-| `ES_URL` | Elasticsearch URLs | ["http://elasticsearch:9200"] |
-| `CELERY_BROKER_URL` | Celery broker | redis://cache:6379/0 |
-| `SECURITY_ALLOWED_ORIGINS` | CORS origins | ["http://localhost:3000"] |
+| Variable | Description |
+|----------|-------------|
+| **JWT** | |
+| `TOKEN_SECRET_KEY` | JWT secret key |
+| `TOKEN_ALGORITHM` | JWT algorithm (HS256) |
+| `TOKEN_ACCESS_TOKEN_EXPIRE_MINUTES` | Access token lifetime |
+| `TOKEN_REFRESH_TOKEN_EXPIRE_DAYS` | Refresh token lifetime |
+| **Database** | |
+| `DATABASE_URL` | PostgreSQL connection |
+| `DB_URL` | Alternative DB URL |
+| **Cache** | |
+| `CACHE_URL` | Redis connection |
+| **Elasticsearch** | |
+| `ES_URL` | Elasticsearch URLs |
+| `ELASTICSEARCH_URL` | Elasticsearch Docker URL |
+| **Celery** | |
+| `CELERY_BROKER_URL` | Celery broker |
+| `CELERY_RESULT_BACKEND` | Celery result backend |
+| `CELERY_BACKEND_URL` | Celery backend URL |
+| **Security** | |
+| `SECURITY_ALLOWED_ORIGINS` | CORS origins |
+| **Logging** | |
+| `LOG_CONSOLE_ENABLED` | Enable console logging (default: true) |
+| `LOG_CONSOLE_LEVEL` | Console logging level (default: DEBUG) |
+| `LOG_CONSOLE_FORMAT` | Console log format |
+| `LOG_CONSOLE_COLORIZE` | Colorize console logs (default: true) |
+| `LOG_FILE_ENABLED` | Enable file logging (default: true) |
+| `LOG_FILE_LEVEL` | File logging level (default: DEBUG) |
+| `LOG_FILE_PATH` | Log file path (default: logs/app.log) |
+| `LOG_FILE_ROTATION` | Log rotation time (default: 00:00) |
+| `LOG_FILE_RETENTION` | Log retention period (default: 30 days) |
+| `LOG_FILE_ENCODING` | Log encoding (default: utf-8) |
+| `LOG_FILE_ENQUEUE` | Thread-safe file writing (default: true) |
+| `LOG_FILE_JSON` | Serialize file logs as JSON (default: false) |
+| `LOG_FILE_FORMAT` | Text file log format |
+| **SSE** | |
+| `SSE_ENABLED` | SSE enabling |
+| `SSE_HEARTBEAT_INTERVAL` | SSE heartbeat interval |
+| `SSE_RECONNECT_INTERVAL` | SSE reconnect interval |
+| `SSE_MAX_CONNECTIONS_PER_USER` | Max SSE connections per user |
+| **Monitoring** | |
+| `SENTRY_DSN` | Sentry DSN |
+| **Environment** | |
+| `ENVIRONMENT` | Environment (development, production) |
 
-See `.env` file for full configuration.
+Copy .env.example to .env and fill in the values.
 
 ---
 
 ## Running the Project
 
-### Via Docker Compose
+### Quick Start
 
 ```bash
-# Clone repository
-git clone <repo-url>
-cd taskflow
-
-# Start all services
-docker-compose up -d
-```
-
-### Make (recommended)
-
-```bash
+# Clone and start
 git clone <repo-url>
 cd taskflow/backend
-
 make infra-up
 ```
 
-### Local Development
+### Manual Setup
 
 ```bash
 # Install dependencies
@@ -261,20 +291,17 @@ uv sync
 cp .env.example .env
 # Edit .env with your settings
 
-# Start database and Elasticsearch
-docker-compose up -d postgres elasticsearch redis
+# Start infrastructure
+docker-compose up -d db elasticsearch cache
 
 # Apply migrations
-uv run alembic upgrade head
+PYTHONPATH=. uv run alembic upgrade head
 
-# Run FastAPI application
-uv run uvicorn app.main:app --reload
+# Run application
+PYTHONPATH=. uv run uvicorn main:app --reload
 
 # Run Celery worker
-uv run celery -A app.background.celery worker --loglevel=info
-
-# Run Celery beat (scheduler)
-uv run celery -A app.background.celery beat --loglevel=info
+PYTHONPATH=. uv run celery -A app.background.celery worker --loglevel=info
 ```
 
 ---
@@ -284,18 +311,22 @@ uv run celery -A app.background.celery beat --loglevel=info
 ### Quick Start
 
 ```bash
-make test-unit           # Unit tests (159 tests)
-make test-integration    # Integration tests (~411 tests)
-make test-e2e            # E2E tests (30 tests)
+make test-unit           # Unit tests 
+make test-integration    # Integration tests 
+make test-e2e            # E2E tests 
+make test-backend        # All tests (unit + integration + e2e)
+# With coverage
+make test-unit-coverage            # Unit tests with coverage
+make test-integration-coverage     # Integration tests with coverage
 ```
 
 ### Test Structure
 
-| Type | Count | Description |
-|------|-------|-------------|
-| Unit | 159 | Service tests with mocked dependencies |
-| Integration | ~411 | API endpoint tests with SQLite |
-| E2E | 30 | Full stack with PostgreSQL + ES (Testcontainers) |
+| Type | Count | Time | Description |
+|------|------|------|-------------|
+| Unit | 159 | ~1s | Service tests with SQLite + mocks |
+| Integration | ~411 | ~216s | API endpoint tests with PostgreSQL + Redis + ES (Testcontainers) |
+| E2E | 30 | ~24s | Full stack tests with PostgreSQL + Redis + ES (Testcontainers) |
 
 ### Commands
 
@@ -348,6 +379,8 @@ python -m app.cli.commands reindex-users --batch-size 100
 - **Prometheus** — metrics available at `/metrics`
 - **Grafana** — dashboards available on port 3000
 - **Loki** — log aggregation
+- **Promtail** — log forwarding
+- **Flower** — Celery monitoring available on port 5555
 
 ---
 
