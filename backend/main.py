@@ -111,7 +111,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 app = FastAPI(
-    title="TaskFlow",
+    title="Miha-TaskFlow",
     version="1.0.0",
     lifespan=lifespan,
     description="TaskFlow - Advanced task management system with \
