@@ -2,8 +2,8 @@
 
 Task management system with RPG elements: XP, levels, ratings, groups, and real-time workflows.
 
-![Python](https://img.shields.io/badge/Python-3.12+-blue)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688)
+![Python](https://img.shields.io/badge/Python-3.11+-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.129+-009688)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16+-336791)
 ![Tests](https://img.shields.io/badge/Tests-600+-success)
 ![License](https://img.shields.io/badge/License-MIT-lightgrey)
