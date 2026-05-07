@@ -128,7 +128,7 @@ graph LR
 
 ## API
 
-Full API documentation is available in [app/api/api.md](app/api/api.md).
+Full API documentation is available in [backend/app/api/api.md](backend/app/api/api.md).
 
 API includes health check at `GET /health` and metrics at `GET /metrics`.
 
