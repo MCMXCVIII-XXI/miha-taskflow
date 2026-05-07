@@ -130,6 +130,8 @@ graph LR
 
 Full API documentation is available in [app/api/api.md](app/api/api.md).
 
+API includes health check at `GET /health` and metrics at `GET /metrics`.
+
 ---
 
 ## Data Models
@@ -180,6 +182,7 @@ taskflow/
 │   │   │   └── log/             # Logging
 │   │   ├── background/           # Celery tasks
 │   │   ├── cli/                  # CLI commands
+│   │   ├── examples/            # Swagger examples for API documentation
 │   │   └── utils/                # Utilities
 │   ├── migrations/versions/     # Alembic migrations
 │   ├── tests/                   # Tests
@@ -356,6 +359,7 @@ python -m app.cli.commands reindex-users --batch-size 100
 
 ## Monitoring
 
+- **Health** — health check available at `/health`
 - **Prometheus** — metrics available at `/metrics`
 - **Grafana** — dashboards available on port 3000
 - **Loki** — log aggregation
