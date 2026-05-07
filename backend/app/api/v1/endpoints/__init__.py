@@ -2,6 +2,7 @@ from .admin import router as admin_router
 from .auth import router as auth_router
 from .comment import router as comment_router
 from .group import router as groups_router
+from .main import router as main_router
 from .notification import router as notifications_router
 from .rating import router as rating_router
 from .search import router as search_router
@@ -14,6 +15,7 @@ __all__ = [
     "auth_router",
     "comment_router",
     "groups_router",
+    "main_router",
     "notifications_router",
     "rating_router",
     "search_router",

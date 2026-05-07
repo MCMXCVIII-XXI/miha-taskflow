@@ -2,11 +2,9 @@ from fastapi import APIRouter, Depends, Query, status
 from fastapi.responses import StreamingResponse
 
 from app.core.permission import require_permissions_db
+from app.examples.notification_examples import NotificationExamples, SSEExamples
 from app.models import User as UserModel
-from app.schemas import (
-    NotificationRead,
-    NotificationRespond,
-)
+from app.schemas import NotificationRead, NotificationRespond
 from app.schemas.enum import NotificationStatus, NotificationType
 from app.service import (
     NotificationService,
@@ -15,16 +13,40 @@ from app.service import (
     get_sse_service,
 )
 
-router = APIRouter()
+router = APIRouter(tags=["notifications"])
 
 
-@router.get("", response_model=list[NotificationRead], status_code=status.HTTP_200_OK)
+@router.get(
+    "",
+    response_model=list[NotificationRead],
+    status_code=status.HTTP_200_OK,
+    summary="Get notifications",
+    description="""
+    Get notifications for the current user.
+
+    **Permissions required:** AUTHENTICATED_USER
+
+    **Query parameters:**
+    - `status` (optional): Filter by READ or UNREAD
+    - `type` (optional): Filter by notification type
+    - `limit` (default: 50, max: 100): Max notifications to return
+    - `offset` (default: 0): Number of notifications to skip
+
+    **Returns:** List of notifications sorted by created_at (newest first).
+    """,
+    responses={
+        200: {
+            "description": "Notifications retrieved",
+            "content": {"application/json": {"example": NotificationExamples.GET_ALL}},
+        },
+    },
+)
 async def get_notifications(
     current_user: UserModel = Depends(require_permissions_db("notification:view:own")),
     status: NotificationStatus | None = None,
     type: NotificationType | None = None,
-    limit: int = Query(50, le=100),
-    offset: int = Query(0, ge=0),
+    limit: int = Query(50, le=100, description="Max notifications to return"),
+    offset: int = Query(0, ge=0, description="Number of notifications to skip"),
     svc: NotificationService = Depends(get_notification_service),
 ) -> list[NotificationRead]:
     """Endpoint for retrieving notifications"""
@@ -37,7 +59,33 @@ async def get_notifications(
     )
 
 
-@router.get("/stream", response_class=StreamingResponse, status_code=status.HTTP_200_OK)
+@router.get(
+    "/stream",
+    response_class=StreamingResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Subscribe to notifications (SSE)",
+    description="""
+    Open a Server-Sent Events (SSE) stream for real-time notifications.
+
+    **Permissions required:** AUTHENTICATED_USER
+
+    **Returns:** Event stream with notification events.
+
+    **Event types:**
+    - `connected`: Initial connection confirmation
+    - `notification`: New notification received
+
+    **Headers:**
+    - Cache-Control: no-cache
+    - Connection: keep-alive
+    """,
+    responses={
+        200: {
+            "description": "SSE stream connected",
+            "content": {"text/event-stream": {"example": SSEExamples.SSE_CONNECTED}},
+        },
+    },
+)
 async def notifications_stream(
     current_user: UserModel = Depends(require_permissions_db("notification:view:own")),
     svc: SSEService = Depends(get_sse_service),
@@ -53,7 +101,27 @@ async def notifications_stream(
     )
 
 
-@router.get("/unread-count", response_model=dict, status_code=status.HTTP_200_OK)
+@router.get(
+    "/unread-count",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Get unread count",
+    description="""
+    Get the count of unread notifications.
+
+    **Permissions required:** AUTHENTICATED_USER
+
+    **Returns:** Object with unread_count field.
+    """,
+    responses={
+        200: {
+            "description": "Unread count retrieved",
+            "content": {
+                "application/json": {"example": NotificationExamples.UNREAD_COUNT}
+            },
+        },
+    },
+)
 async def get_unread_count(
     current_user: UserModel = Depends(require_permissions_db("notification:view:own")),
     service: NotificationService = Depends(get_notification_service),
@@ -70,6 +138,23 @@ async def get_unread_count(
     "/{notification_id}",
     response_model=NotificationRead,
     status_code=status.HTTP_200_OK,
+    summary="Get notification",
+    description="""
+    Get a notification by ID.
+
+    **Permissions required:** AUTHENTICATED_USER (owner only)
+    """,
+    responses={
+        200: {
+            "description": "Notification retrieved",
+        },
+        404: {
+            "description": "Notification not found",
+            "content": {
+                "application/json": {"example": NotificationExamples.NOT_FOUND}
+            },
+        },
+    },
 )
 async def get_notification(
     notification_id: int,
@@ -84,6 +169,20 @@ async def get_notification(
     "/{notification_id}/read",
     response_model=NotificationRead,
     status_code=status.HTTP_200_OK,
+    summary="Mark as read",
+    description="""
+    Mark a notification as read.
+
+    **Permissions required:** AUTHENTICATED_USER (owner only)
+    """,
+    responses={
+        200: {
+            "description": "Notification marked as read",
+            "content": {
+                "application/json": {"example": NotificationExamples.MARK_READ_SUCCESS}
+            },
+        },
+    },
 )
 async def mark_notification_read(
     notification_id: int,
@@ -94,7 +193,29 @@ async def mark_notification_read(
     return await service.mark_as_read(notification_id, current_user.id)
 
 
-@router.patch("/read-all", response_model=dict, status_code=status.HTTP_200_OK)
+@router.patch(
+    "/read-all",
+    response_model=dict,
+    status_code=status.HTTP_200_OK,
+    summary="Mark all as read",
+    description="""
+    Mark all notifications as read.
+
+    **Permissions required:** AUTHENTICATED_USER
+
+    **Returns:** Object with updated_count field.
+    """,
+    responses={
+        200: {
+            "description": "All notifications marked as read",
+            "content": {
+                "application/json": {
+                    "example": NotificationExamples.MARK_ALL_READ_SUCCESS
+                }
+            },
+        },
+    },
+)
 async def mark_all_notifications_read(
     current_user: UserModel = Depends(require_permissions_db("notification:view:own")),
     service: NotificationService = Depends(get_notification_service),
@@ -108,6 +229,20 @@ async def mark_all_notifications_read(
     "/{notification_id}/respond",
     response_model=NotificationRead,
     status_code=status.HTTP_200_OK,
+    summary="Respond to notification",
+    description="""
+    Respond to a notification (accept or reject).
+
+    **Permissions required:** AUTHENTICATED_USER (owner only)
+
+    **Request body:**
+    - `response` (required): ACCEPT or REJECT
+
+    **Used for:** TASK_INVITE, GROUP_INVITE notifications
+    """,
+    responses={
+        200: {"description": "Response recorded"},
+    },
 )
 async def respond_to_notification(
     notification_id: int,

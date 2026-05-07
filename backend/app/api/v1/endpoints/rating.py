@@ -6,13 +6,34 @@ from app.schemas import RatingCreate, RatingRead, RatingStats
 from app.schemas.enum import RatingTarget
 from app.service import RatingService, get_rating_service
 
-router = APIRouter()
+router = APIRouter(tags=["ratings"])
 
 
 @router.post(
     "/tasks/{task_id}/ratings",
     response_model=RatingRead,
     status_code=status.HTTP_201_CREATED,
+    summary="Rate task",
+    description="""
+    Rate a completed task.
+
+    **Permissions required:** GROUP_MEMBER (who was not assignee)
+
+    **Request body:**
+    - `score` (required, 1-5): Rating score
+
+    **Constraints:**
+    - Task must be completed (status = DONE)
+    - User cannot rate their own task
+    - One rating per user per task
+    """,
+    responses={
+        201: {
+            "description": "Rating created",
+        },
+        400: {"description": "Already rated or invalid state"},
+        404: {"description": "Task not found"},
+    },
 )
 async def create_task_rating(
     task_id: int,
@@ -33,6 +54,19 @@ async def create_task_rating(
     "/tasks/{task_id}/ratings",
     response_model=RatingStats,
     status_code=status.HTTP_200_OK,
+    summary="Get task ratings",
+    description="""
+    Get rating statistics for a task.
+
+    **Permissions required:** GROUP_MEMBER
+
+    **Returns:** Average score, count, and user's rating if exists.
+    """,
+    responses={
+        200: {
+            "description": "Rating stats retrieved",
+        },
+    },
 )
 async def get_task_rating(
     task_id: int,
@@ -47,6 +81,25 @@ async def get_task_rating(
     "/groups/{group_id}/ratings",
     response_model=RatingRead,
     status_code=status.HTTP_201_CREATED,
+    summary="Rate group",
+    description="""
+    Rate a group.
+
+    **Permissions required:** GROUP_MEMBER
+
+    **Request body:**
+    - `score` (required, 1-5): Rating score
+
+    **Constraints:**
+    - User must be group member
+    - One rating per user per group
+    """,
+    responses={
+        201: {
+            "description": "Rating created",
+        },
+        400: {"description": "Already rated"},
+    },
 )
 async def create_group_rating(
     group_id: int,
@@ -67,6 +120,19 @@ async def create_group_rating(
     "/groups/{group_id}/ratings",
     response_model=RatingStats,
     status_code=status.HTTP_200_OK,
+    summary="Get group ratings",
+    description="""
+    Get rating statistics for a group.
+
+    **Permissions required:** GROUP_MEMBER
+
+    **Returns:** Average score, count, and user's rating if exists.
+    """,
+    responses={
+        200: {
+            "description": "Rating stats retrieved",
+        },
+    },
 )
 async def get_group_rating(
     group_id: int,
@@ -80,6 +146,15 @@ async def get_group_rating(
 @router.delete(
     "/ratings/{rating_id}",
     status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete rating",
+    description="""
+    Delete own rating.
+
+    **Permissions required:** RATING_AUTHOR only
+    """,
+    responses={
+        204: {"description": "Rating deleted"},
+    },
 )
 async def delete_rating(
     rating_id: int,
