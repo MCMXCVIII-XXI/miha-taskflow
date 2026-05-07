@@ -14,6 +14,7 @@ The `app/api/v1/endpoints/` directory serves as the HTTP endpoint implementation
 - `admin.py` - Administrative endpoint handlers (users, stats)
 - `rating.py` - Rating and feedback endpoint handlers
 - `xp.py` - Experience points and leveling endpoint handlers
+- `main.py` - Health check and Prometheus metrics endpoints
 
 ## 3. How key modules work
 - `task.py`:

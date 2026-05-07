@@ -6,6 +6,7 @@ The `app/api/v1/` directory serves as the main router assembly point for all ver
 ## 2. Typical contents
 - `__init__.py` - Creates `api_router` and includes routers from the `endpoints/` subdirectory.
 - `endpoints/` - Subdirectory containing specific endpoint files.
+  - `main.py` - Health check and Prometheus metrics endpoints
 
 ## 3. How the key module works
 - `api_router` (in `__init__.py`):
