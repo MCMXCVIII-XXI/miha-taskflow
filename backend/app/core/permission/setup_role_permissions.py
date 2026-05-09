@@ -1,6 +1,7 @@
 from collections.abc import Sequence
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import Permission, Role, RolePermission
@@ -83,8 +84,10 @@ class SetupRolePermissions:
             name = perm_name.name if isinstance(perm_name, Permission) else perm_name
             perm = await self.__get_permission(name)
             if perm and role:
-                rp = RolePermission(role_id=role.id, permission_id=perm.id)
-                self.db.add(rp)
+                stmt = insert(RolePermission).values(
+                    role_id=role.id, permission_id=perm.id
+                )
+                await self.db.execute(stmt.on_conflict_do_nothing())
 
     # A pyramid of roles is organized here ##########################################
     async def setup_user(self) -> None:
