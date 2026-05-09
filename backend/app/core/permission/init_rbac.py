@@ -1,5 +1,3 @@
-from sqlalchemy import delete
-from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import Base, db_helper
@@ -42,14 +40,6 @@ class RBAC:
         self._seed = seed
         self._setup = setup
 
-    async def _clear(self) -> None:
-        """Clear only RolePermission bindings, keep Role and Permission data."""
-        try:
-            # Role↔Permission
-            await self.db.execute(delete(RolePermission))
-        except ProgrammingError:
-            pass
-
     async def init(self) -> None:
         """
         Initial seeding of RBAC
@@ -59,9 +49,6 @@ class RBAC:
             Adding roles and permissions
             Creating many to many relationship between roles and permissions
         """
-        # Clear tables and binds ###########
-        async with self.db.begin():
-            await self._clear()
         # Adding data ######################
         async with self.db.begin():
             await self._seed.seed()
