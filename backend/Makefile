@@ -44,8 +44,7 @@ format: ## Code formatting (ruff format + check --fix)
 	uv run ruff check . --fix
 
 lint-all: ## Full linting + format (format + lint)
-	make format
-	make lint
+	make format lint
 
 test-integration: ## Integration tests (pytest tests/integration/)
 	uv sync --group test
