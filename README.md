@@ -111,8 +111,8 @@ graph LR
 ### Security and Access Control
 - JWT authentication
 - RBAC (Role-Based Access Control) system
-- Global roles (ADMIN, USER, MODERATOR)
-- Contextual roles (owner, admin, group member)
+- Global roles (USER, ADMIN) — from GlobalUserRole enum
+- Secondary roles (ASSIGNEE, MEMBER, GROUP_ADMIN) — acquired after specific actions (join group, assign to task, create group)
 
 ### Background Processing
 - Celery tasks for async operations
