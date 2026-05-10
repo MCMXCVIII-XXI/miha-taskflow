@@ -26,10 +26,11 @@ The `app/core/permission/` directory serves as the role-based access control (RB
   - How it interacts: Used by API endpoint handlers, integrates with user authentication, queries database for user roles`
 
 - `init_rbac.py`:
-  - Input: Database connection, permission configuration`
-  - Output: Initialized RBAC system with roles and permissions`
-  - What it does: Sets up the RBAC system at application startup`
-  - How it interacts: Called during application initialization, creates database records for roles and permissions`
+  - Input: Database connection, permission configuration
+  - Output: Initialized RBAC system with roles and permissions
+  - What it does: Sets up the RBAC system at application startup
+  - Idempotent: Uses INSERT ... ON CONFLICT DO NOTHING, data persists between restarts
+  - How it interacts: Called during application initialization, creates database records for roles and permissions
 
 ## 4. Request flow and integration`
 A typical permission check flows through the permission layer:

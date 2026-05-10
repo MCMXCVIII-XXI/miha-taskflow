@@ -28,10 +28,11 @@ The `app/schemas/enum/` directory serves as the standardized value definition la
   - How it interacts: Used by group schemas in `schemas/`, group services in `service/``
 
 - `role.py`:
-  - Input: Role and permission definitions`
-  - Output: Standardized role enumeration values`
-  - What it does: Defines user roles and permission levels`
-  - How it interacts: Used by RBAC system in `core/permission/`, user models from `models/``
+  - Input: Role and permission definitions
+  - Output: Standardized role enumeration values
+  - What it does: Defines GlobalUserRole enum for authentication (USER, ADMIN)
+  - Note: Secondary roles (ASSIGNEE, MEMBER, GROUP_ADMIN) are defined in `core/permission/permissions.py` and stored in database
+  - How it interacts: Used by RBAC system in `core/permission/`, user models from `models/`
 
 ## 4. Request flow and integration`
 A typical enum usage flow:
